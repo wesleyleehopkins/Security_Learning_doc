@@ -1,0 +1,62 @@
+<article class="topic">
+<h1>04 · Network Traffic Analysis — Wireshark &amp; tcpdump</h1>
+<hr class="divider">
+
+<h2>Wireshark Display Filters</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Filter</th><th>What It Shows</th></tr></thead>
+  <tbody>
+    <tr><td><code>ip.addr == 192.168.1.1</code></td><td>All traffic to/from this IP</td></tr>
+    <tr><td><code>ip.src == 10.0.0.1</code></td><td>Traffic FROM this IP only</td></tr>
+    <tr><td><code>ip.dst == 10.0.0.2</code></td><td>Traffic TO this IP only</td></tr>
+    <tr><td><code>tcp.port == 4444</code></td><td>Traffic on port 4444 (reverse shell port)</td></tr>
+    <tr><td><code>tcp.port == 80</code></td><td>HTTP traffic</td></tr>
+    <tr><td><code>http</code></td><td>All HTTP protocol traffic</td></tr>
+    <tr><td><code>dns</code></td><td>All DNS traffic</td></tr>
+    <tr><td><code>http.request.method == "POST"</code></td><td>HTTP POST requests — often creds or data</td></tr>
+    <tr><td><code>tcp.flags.syn == 1</code></td><td>TCP SYN — connection starts (scan detection)</td></tr>
+    <tr><td><code>!(arp or dns or icmp)</code></td><td>Exclude noise — see real traffic</td></tr>
+    <tr><td><code>frame contains "password"</code></td><td>Find frames with literal word password</td></tr>
+    <tr><td><code>http.response.code == 200</code></td><td>Successful responses</td></tr>
+    <tr><td><code>http.response.code == 404</code></td><td>Not found — possible enumeration</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Wireshark Tips</h2>
+<ul>
+  <li><strong>Statistics &gt; Conversations</strong> — see who is talking to whom and how much</li>
+  <li><strong>Statistics &gt; Protocol Hierarchy</strong> — breakdown of traffic types</li>
+  <li><strong>File &gt; Export Objects &gt; HTTP</strong> — extract files transferred over HTTP</li>
+  <li><strong>Follow TCP Stream</strong> — see the full conversation between two hosts</li>
+  <li><strong>Right click any packet &gt; Apply as Filter</strong> — instant filtering</li>
+  <li><strong>Edit &gt; Find Packet &gt; String</strong> — search packet contents for keywords</li>
+</ul>
+
+<h2>Wireshark — Investigation Workflow</h2>
+<ol>
+  <li>Open pcap → check <strong>Statistics &gt; Conversations</strong> to find top talkers</li>
+  <li>Check <strong>Protocol Hierarchy</strong> for unexpected protocols</li>
+  <li>Filter by suspicious IP or port</li>
+  <li>Follow TCP Stream to read content</li>
+  <li>Export HTTP objects if files were transferred</li>
+  <li>Hash any extracted files for VirusTotal lookup</li>
+</ol>
+
+<h2>tcpdump Quick Reference</h2>
+<pre><code><span class="cm"># Capture to file for later Wireshark analysis</span>
+sudo tcpdump -i eth0 -w capture.pcap
+
+<span class="cm"># Read existing capture</span>
+sudo tcpdump -r capture.pcap
+
+<span class="cm"># Combine filters with and/or</span>
+sudo tcpdump -i eth0 src 10.0.0.1 and port 443
+
+<span class="cm"># Show as ASCII (useful for HTTP)</span>
+sudo tcpdump -i eth0 -A port 80
+
+<span class="cm"># No hostname resolution (faster, cleaner)</span>
+sudo tcpdump -i eth0 -nn port 22</code></pre>
+</article>

@@ -1,0 +1,70 @@
+<article class="topic">
+<h1>09 · Threat Intelligence</h1>
+<hr class="divider">
+
+<h2>Key Concepts</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+  <tbody>
+    <tr><td>IOC</td><td>Indicator of Compromise — IP, hash, domain, URL signaling breach</td></tr>
+    <tr><td>TTP</td><td>Tactics, Techniques, Procedures — HOW attackers operate</td></tr>
+    <tr><td>MITRE ATT&amp;CK</td><td>Framework cataloging real-world attacker TTPs by ID</td></tr>
+    <tr><td>Threat Feed</td><td>Live stream of IOCs from vendors or open sources</td></tr>
+    <tr><td>OSINT</td><td>Open Source Intelligence — publicly available information</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Threat Intel Tools</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Tool</th><th>URL</th><th>Use</th></tr></thead>
+  <tbody>
+    <tr><td>VirusTotal</td><td>virustotal.com</td><td>Hash/IP/URL/domain lookup — 70+ AV engines</td></tr>
+    <tr><td>AbuseIPDB</td><td>abuseipdb.com</td><td>IP reputation database</td></tr>
+    <tr><td>URLScan.io</td><td>urlscan.io</td><td>Safe URL analysis + screenshot</td></tr>
+    <tr><td>Shodan</td><td>shodan.io</td><td>Search engine for internet devices</td></tr>
+    <tr><td>MITRE ATT&amp;CK</td><td>attack.mitre.org</td><td>TTP reference framework</td></tr>
+    <tr><td>OTX AlienVault</td><td>otx.alienvault.com</td><td>Community IOC sharing</td></tr>
+    <tr><td>ThreatFox</td><td>threatfox.abuse.ch</td><td>Free IOC database</td></tr>
+    <tr><td>MalwareBazaar</td><td>bazaar.abuse.ch</td><td>Malware sample database</td></tr>
+    <tr><td>Hybrid Analysis</td><td>hybrid-analysis.com</td><td>Free automated malware sandbox</td></tr>
+    <tr><td>Any.run</td><td>any.run</td><td>Interactive malware sandbox</td></tr>
+    <tr><td>crontab.guru</td><td>crontab.guru</td><td>Interpret cron schedules</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>MITRE ATT&amp;CK Framework</h2>
+<p>Organizes attacker behaviors into <strong>Tactics</strong> (why) and <strong>Techniques</strong> (how).</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Tactic</th><th>Example Techniques</th></tr></thead>
+  <tbody>
+    <tr><td>Initial Access</td><td>Phishing (T1566), Valid Accounts (T1078)</td></tr>
+    <tr><td>Execution</td><td>PowerShell (T1059.001), Scripting (T1059)</td></tr>
+    <tr><td>Persistence</td><td>Scheduled Task (T1053), Registry Run Keys (T1547)</td></tr>
+    <tr><td>Privilege Escalation</td><td>SUID (T1548.001), Token Impersonation (T1134)</td></tr>
+    <tr><td>Defense Evasion</td><td>Base64 Encoding (T1027), Process Injection (T1055)</td></tr>
+    <tr><td>Credential Access</td><td>OS Credential Dumping (T1003), Brute Force (T1110)</td></tr>
+    <tr><td>Discovery</td><td>Network Scan (T1046), Process Discovery (T1057)</td></tr>
+    <tr><td>Lateral Movement</td><td>Pass the Hash (T1550.002), RDP (T1021.001)</td></tr>
+    <tr><td>Collection</td><td>Email Collection (T1114), Clipboard Data (T1115)</td></tr>
+    <tr><td>Exfiltration</td><td>DNS Tunneling (T1048.003), Web Service (T1567)</td></tr>
+    <tr><td>Command &amp; Control</td><td>Web Protocols (T1071.001), Proxy (T1090)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>IOC Enrichment Workflow</h2>
+<ol>
+  <li>Collect IOC from alert (IP, hash, domain, URL)</li>
+  <li>Check <strong>VirusTotal</strong> — community detections + historical context</li>
+  <li>Check <strong>AbuseIPDB</strong> for IP reputation and abuse reports</li>
+  <li>Check <strong>URLScan.io</strong> for safe site analysis / screenshot</li>
+  <li>Search <strong>OTX AlienVault</strong> for related threat campaigns</li>
+  <li>Map to <strong>MITRE ATT&amp;CK</strong> technique if known</li>
+  <li>Document findings in incident ticket</li>
+</ol>
+</article>

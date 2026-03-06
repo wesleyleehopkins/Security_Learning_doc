@@ -1,0 +1,62 @@
+<article class="topic">
+<h1>01 · Security Onion — Overview &amp; Navigation</h1>
+<hr class="divider">
+
+<div class="callout note"><strong>In Progress</strong> — Add your Security Onion notes here. Structure is ready.</div>
+
+<h2>What is Security Onion?</h2>
+<p>Security Onion is a free, open-source Linux distribution for threat hunting, enterprise security monitoring, and log management. It bundles multiple NSM tools into a single platform.</p>
+
+<h2>Core Components</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Component</th><th>Role</th></tr></thead>
+  <tbody>
+    <tr><td>Suricata</td><td>IDS/IPS — generates alerts from rule signatures</td></tr>
+    <tr><td>Zeek (Bro)</td><td>Network analysis — generates structured connection logs</td></tr>
+    <tr><td>Elasticsearch</td><td>Log storage and indexing backend</td></tr>
+    <tr><td>Kibana</td><td>Web UI for querying and visualizing logs</td></tr>
+    <tr><td>Logstash</td><td>Log ingestion and normalization pipeline</td></tr>
+    <tr><td>Stenographer</td><td>Full packet capture (PCAP) storage</td></tr>
+    <tr><td>OSSEC/Wazuh</td><td>Host-based intrusion detection (HIDS)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Security Onion Console (SOC) — Key Sections</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Section</th><th>URL Path</th><th>What It Shows</th></tr></thead>
+  <tbody>
+    <tr><td>Alerts</td><td>/alerts</td><td>Suricata IDS alerts — primary triage view</td></tr>
+    <tr><td>Dashboards</td><td>/dashboards</td><td>Pre-built visualizations (DNS, HTTP, alerts)</td></tr>
+    <tr><td>Hunt</td><td>/hunt</td><td>Threat hunting interface — query logs</td></tr>
+    <tr><td>PCAP</td><td>/pcap</td><td>Packet capture retrieval and analysis</td></tr>
+    <tr><td>Cases</td><td>/cases</td><td>Case management for incidents</td></tr>
+    <tr><td>Grid</td><td>/grid</td><td>Node management and health status</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Deployment Types</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Type</th><th>Use Case</th></tr></thead>
+  <tbody>
+    <tr><td>Standalone</td><td>All components on one node — lab/small org</td></tr>
+    <tr><td>Manager + Sensor</td><td>Sensor captures traffic, manager holds data</td></tr>
+    <tr><td>Distributed</td><td>Multiple sensors reporting to cluster — enterprise</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Notes to Add</h2>
+<ul>
+  <li>Alert triage workflow and escalation process</li>
+  <li>Common Suricata rule categories and severity levels</li>
+  <li>Zeek log fields reference</li>
+  <li>Kibana query syntax for Security Onion</li>
+  <li>PCAP retrieval and Wireshark integration</li>
+  <li>Case creation and documentation workflow</li>
+</ul>
+</article>

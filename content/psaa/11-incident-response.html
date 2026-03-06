@@ -1,0 +1,60 @@
+<article class="topic">
+<h1>11 · Incident Response (IR)</h1>
+<hr class="divider">
+
+<h2>IR Phases — PICERL</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Phase</th><th>Key Actions</th></tr></thead>
+  <tbody>
+    <tr><td>1. Preparation</td><td>Policies, tools, playbooks ready before incident</td></tr>
+    <tr><td>2. Identification</td><td>Detect and confirm — is this real?</td></tr>
+    <tr><td>3. Containment</td><td>Stop the spread — isolate affected systems</td></tr>
+    <tr><td>4. Eradication</td><td>Remove malware, close vulnerabilities</td></tr>
+    <tr><td>5. Recovery</td><td>Restore systems to normal operation</td></tr>
+    <tr><td>6. Lessons Learned</td><td>Document what happened, prevent recurrence</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Quick Response by Scenario</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Scenario</th><th>Response Steps</th></tr></thead>
+  <tbody>
+    <tr><td>Malware on endpoint</td><td>Isolate → capture memory → hash malware → check persistence → eradicate</td></tr>
+    <tr><td>Suspicious network traffic</td><td>Capture pcap → identify source/dest → check process → block → escalate</td></tr>
+    <tr><td>Phishing email</td><td>Don't click → analyze headers → check URLs/attachments → block sender → alert</td></tr>
+    <tr><td>Brute force</td><td>Identify source IP → check success → block IP → reset affected accounts</td></tr>
+    <tr><td>Data exfiltration</td><td>Capture traffic → identify destination → block → preserve evidence → notify</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Containment Strategies</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Strategy</th><th>When to Use</th><th>Trade-off</th></tr></thead>
+  <tbody>
+    <tr><td>Network isolation</td><td>Active C2 communication</td><td>Attacker loses visibility — may trigger anti-analysis</td></tr>
+    <tr><td>Account disable</td><td>Compromised credentials</td><td>Disrupts legitimate user</td></tr>
+    <tr><td>Firewall block</td><td>Known bad IP/domain</td><td>Attacker may pivot to new infrastructure</td></tr>
+    <tr><td>Process kill</td><td>Active malware running</td><td>Lose memory evidence — capture RAM first!</td></tr>
+    <tr><td>Host isolation</td><td>Ransomware spreading</td><td>Service disruption</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>IR Report — Key Sections</h2>
+<ol>
+  <li><strong>Executive Summary</strong> — what happened, business impact, 1 paragraph</li>
+  <li><strong>Timeline</strong> — chronological sequence of events</li>
+  <li><strong>Technical Details</strong> — IOCs, TTPs, affected systems</li>
+  <li><strong>Root Cause</strong> — how did the attacker get in?</li>
+  <li><strong>Containment Actions</strong> — what was done to stop the spread</li>
+  <li><strong>Eradication Steps</strong> — what was removed/patched</li>
+  <li><strong>Recommendations</strong> — how to prevent recurrence</li>
+</ol>
+
+<div class="callout"><strong>Exam Tip:</strong> The 24-hour PSAA exam requires a written report — structure it with these sections.</div>
+</article>

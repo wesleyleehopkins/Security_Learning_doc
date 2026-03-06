@@ -1,0 +1,73 @@
+<article class="topic">
+<h1>08 · SIEM</h1>
+<hr class="divider">
+
+<h2>What a SIEM Does</h2>
+<ul>
+  <li><strong>Log Aggregation</strong> — collects logs from ALL sources into one place</li>
+  <li><strong>Normalization</strong> — converts different log formats into a standard format</li>
+  <li><strong>Correlation</strong> — links related events across systems to find attack patterns</li>
+  <li><strong>Alerting</strong> — fires when rules are matched</li>
+  <li><strong>Dashboards</strong> — visual overview of security posture</li>
+  <li><strong>Retention</strong> — stores logs for compliance and investigation</li>
+</ul>
+
+<h2>Common SIEM Platforms</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Platform</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Splunk</td><td>Industry standard — SPL query language</td></tr>
+    <tr><td>Elastic SIEM</td><td>ELK Stack — Elasticsearch, Logstash, Kibana</td></tr>
+    <tr><td>IBM QRadar</td><td>Enterprise — common in large orgs</td></tr>
+    <tr><td>Microsoft Sentinel</td><td>Cloud-native — Azure based</td></tr>
+    <tr><td>Wazuh</td><td>Free open source — popular in labs</td></tr>
+    <tr><td>Security Onion</td><td>Full NSM + SIEM platform</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>SIEM Use Cases in SOC</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Use Case</th><th>What the SIEM Detects</th></tr></thead>
+  <tbody>
+    <tr><td>Brute Force</td><td>Multiple failed logins from same IP in short window</td></tr>
+    <tr><td>Lateral Movement</td><td>Auth events across multiple hosts in sequence</td></tr>
+    <tr><td>Data Exfiltration</td><td>Large outbound transfer to external IP</td></tr>
+    <tr><td>Persistence</td><td>New scheduled task / service / registry key created</td></tr>
+    <tr><td>Privilege Escalation</td><td>Unprivileged user suddenly accessing admin resources</td></tr>
+    <tr><td>C2 Beacon</td><td>Regular outbound connections at fixed intervals</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Splunk — SPL Basics</h2>
+<pre><code><span class="cm"># Basic search</span>
+index=main sourcetype=access_combined
+
+<span class="cm"># Count events by field</span>
+index=main | stats count by src_ip
+
+<span class="cm"># Top 10 source IPs</span>
+index=main | top limit=10 src_ip
+
+<span class="cm"># Time chart of events</span>
+index=main | timechart count
+
+<span class="cm"># Search for failed logins</span>
+index=main "Failed password" | stats count by src_ip | sort -count</code></pre>
+
+<h2>Elastic KQL Basics</h2>
+<pre><code><span class="cm"># Match field value</span>
+event.action : "logon-failed"
+
+<span class="cm"># AND condition</span>
+event.action : "logon-failed" AND source.ip : "10.0.0.*"
+
+<span class="cm"># Wildcard search</span>
+process.name : "power*"
+
+<span class="cm"># Exists check</span>
+destination.port : 4444</code></pre>
+</article>

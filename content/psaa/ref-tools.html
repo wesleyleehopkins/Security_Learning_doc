@@ -1,0 +1,101 @@
+<article class="topic">
+<h1>REF · Additional Tools &amp; Resources</h1>
+<hr class="divider">
+<p><em>Tools widely used in industry that may not be covered in the course.</em></p>
+
+<h2>Network Analysis</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Tool</th><th>Purpose</th><th>Install</th></tr></thead>
+  <tbody>
+    <tr><td>nmap</td><td>Port scanning and service detection</td><td>sudo apt install nmap</td></tr>
+    <tr><td>netcat (nc)</td><td>Network swiss army knife — renamed as kitty.meow in your lab!</td><td>sudo apt install netcat</td></tr>
+    <tr><td>tshark</td><td>CLI version of Wireshark</td><td>sudo apt install tshark</td></tr>
+    <tr><td>zeek</td><td>Network monitoring framework</td><td>sudo apt install zeek</td></tr>
+    <tr><td>ngrep</td><td>Network grep — search packet contents</td><td>sudo apt install ngrep</td></tr>
+    <tr><td>iftop</td><td>Real-time bandwidth monitor</td><td>sudo apt install iftop</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Log Analysis &amp; Forensics</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td>jq</td><td>Parse and filter JSON structured logs</td></tr>
+    <tr><td>lnav</td><td>Log file navigator with syntax highlighting</td></tr>
+    <tr><td>GoAccess</td><td>Real-time Apache/Nginx log analyzer with web dashboard</td></tr>
+    <tr><td>auditd</td><td>Linux audit daemon — tracks file and syscall access</td></tr>
+    <tr><td>Chainsaw</td><td>Hunt through Windows event logs quickly</td></tr>
+    <tr><td>Hayabusa</td><td>Windows event log fast forensics and threat hunting</td></tr>
+    <tr><td>Volatility</td><td>Memory forensics framework</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Malware Analysis</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td>strings</td><td>Extract readable text from binaries (used this in your challenge!)</td></tr>
+    <tr><td>file</td><td>Identify file type regardless of extension</td></tr>
+    <tr><td>xxd</td><td>Hex dump of binary files</td></tr>
+    <tr><td>strace</td><td>Trace system calls made by a process</td></tr>
+    <tr><td>ltrace</td><td>Trace library calls</td></tr>
+    <tr><td>binwalk</td><td>Firmware and binary analysis</td></tr>
+    <tr><td>Ghidra</td><td>NSA free reverse engineering tool</td></tr>
+    <tr><td>CAPA</td><td>Identify capabilities in executables</td></tr>
+    <tr><td>YARA</td><td>Pattern matching for malware identification</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Useful One-Liners</h2>
+<pre><code><span class="cm"># Find all IPs in a log file</span>
+grep -oE '[0-9]{1,3}(\.[0-9]{1,3}){3}' file.log | sort | uniq -c | sort -rn
+
+<span class="cm"># Find all URLs in a file</span>
+grep -oP 'https?://[^\s"]+' file.log | sort -u
+
+<span class="cm"># Watch for failed SSH attempts live</span>
+sudo tail -f /var/log/auth.log | grep -i 'failed\|invalid'
+
+<span class="cm"># Count failed SSH attempts by IP</span>
+sudo grep 'Failed password' /var/log/auth.log | awk '{print $11}' | sort | uniq -c | sort -rn
+
+<span class="cm"># Find hidden files in directory</span>
+ls -la /var/www/html/
+
+<span class="cm"># Suppress permission denied errors in find</span>
+find / -type f -name '*.bak' 2>/dev/null
+
+<span class="cm"># Check who is currently logged in</span>
+w
+
+<span class="cm"># See full process tree</span>
+ps auxf
+
+<span class="cm"># Elevate to root for lab work</span>
+sudo su
+sudo -i</code></pre>
+
+<h2>Quick Reference — Analysis Services</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Service</th><th>URL</th><th>What to Submit</th></tr></thead>
+  <tbody>
+    <tr><td>VirusTotal</td><td>virustotal.com</td><td>Hash, file, URL, IP, domain</td></tr>
+    <tr><td>Hybrid Analysis</td><td>hybrid-analysis.com</td><td>Suspicious file for sandbox</td></tr>
+    <tr><td>Any.run</td><td>any.run</td><td>Interactive malware sandbox</td></tr>
+    <tr><td>URLScan.io</td><td>urlscan.io</td><td>Suspicious URL</td></tr>
+    <tr><td>AbuseIPDB</td><td>abuseipdb.com</td><td>IP address reputation</td></tr>
+    <tr><td>ThreatFox</td><td>threatfox.abuse.ch</td><td>IOC lookup</td></tr>
+    <tr><td>MalwareBazaar</td><td>bazaar.abuse.ch</td><td>Hash / malware family</td></tr>
+    <tr><td>CyberChef</td><td>gchq.github.io/CyberChef</td><td>Encoded strings to decode</td></tr>
+    <tr><td>crontab.guru</td><td>crontab.guru</td><td>Cron schedule strings</td></tr>
+  </tbody>
+</table>
+</div>
+</article>

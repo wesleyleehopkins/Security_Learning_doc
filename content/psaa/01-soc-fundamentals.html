@@ -1,0 +1,75 @@
+<article class="topic">
+<h1>01 · Security Operations Fundamentals</h1>
+<hr class="divider">
+
+<h2>SOC Analyst Tiers</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Tier</th><th>Role</th><th>Responsibilities</th></tr></thead>
+  <tbody>
+    <tr><td>Tier 1</td><td>Alert Analyst</td><td>Monitor alerts, triage, escalate</td></tr>
+    <tr><td>Tier 2</td><td>Incident Responder</td><td>Investigate escalated alerts, deeper analysis</td></tr>
+    <tr><td>Tier 3</td><td>Threat Hunter</td><td>Proactive hunting, advanced forensics</td></tr>
+    <tr><td>Lead</td><td>SOC Manager</td><td>Oversight, reporting, process management</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Essential Terms — Know These Cold</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+  <tbody>
+    <tr><td>CIA Triad</td><td>Confidentiality · Integrity · Availability</td></tr>
+    <tr><td>Alert</td><td>Notification a potential event has occurred</td></tr>
+    <tr><td>Event</td><td>Any observable occurrence in a system or network</td></tr>
+    <tr><td>Incident</td><td>Confirmed/suspected breach requiring response</td></tr>
+    <tr><td>False Positive</td><td>Alert fires but no real threat exists</td></tr>
+    <tr><td>True Positive</td><td>Alert fires and a real threat exists</td></tr>
+    <tr><td>IOC</td><td>Indicator of Compromise — IP, hash, domain, URL</td></tr>
+    <tr><td>TTPs</td><td>Tactics, Techniques, Procedures — HOW attackers operate</td></tr>
+    <tr><td>OSINT</td><td>Open Source Intelligence — publicly available info</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Cyber Kill Chain — Attacker Progression</h2>
+<p>Understanding this helps you know WHAT you are looking at in logs and alerts.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Phase</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>1. Reconnaissance</td><td>Attacker gathers info — OSINT, scanning, enumeration</td></tr>
+    <tr><td>2. Weaponization</td><td>Creates malware or exploit</td></tr>
+    <tr><td>3. Delivery</td><td>Phishing email, USB, web exploit</td></tr>
+    <tr><td>4. Exploitation</td><td>Executes code on victim system</td></tr>
+    <tr><td>5. Installation</td><td>Installs backdoor for persistent access</td></tr>
+    <tr><td>6. C2 (Command &amp; Control)</td><td>Establishes communication channel back to attacker</td></tr>
+    <tr><td>7. Actions on Objectives</td><td>Data theft, ransomware, lateral movement</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Common Ports — Memorize These</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Port</th><th>Protocol</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>21</td><td>FTP</td><td>File transfer</td></tr>
+    <tr><td>22</td><td>SSH</td><td>Secure shell — watch for brute force</td></tr>
+    <tr><td>23</td><td>Telnet</td><td>Unencrypted — red flag if active</td></tr>
+    <tr><td>25 / 465 / 587</td><td>SMTP</td><td>Email sending</td></tr>
+    <tr><td>53</td><td>DNS</td><td>Name resolution — used in data exfil tunneling</td></tr>
+    <tr><td>80</td><td>HTTP</td><td>Unencrypted web</td></tr>
+    <tr><td>110 / 995</td><td>POP3 / POP3S</td><td>Email retrieval (995=secure)</td></tr>
+    <tr><td>143 / 993</td><td>IMAP / IMAPS</td><td>Email sync (993=secure)</td></tr>
+    <tr><td>443</td><td>HTTPS</td><td>Encrypted web</td></tr>
+    <tr><td>445</td><td>SMB</td><td>Windows file sharing — EternalBlue target</td></tr>
+    <tr><td>3306</td><td>MySQL</td><td>Database — should not be public facing</td></tr>
+    <tr><td>3389</td><td>RDP</td><td>Remote desktop — brute force target</td></tr>
+    <tr><td>4444</td><td>Metasploit</td><td>Common default reverse shell port</td></tr>
+    <tr><td>31337</td><td>Elite</td><td>Classic hacker port — leet speak</td></tr>
+  </tbody>
+</table>
+</div>
+</article>

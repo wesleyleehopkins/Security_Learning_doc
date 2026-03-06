@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SOC Notes — Security Operations Reference</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="index.html" class="nav-brand">
+    <span class="icon">⬡</span> SOC Notes
+  </a>
+  <div class="nav-links">
+    <a href="index.html" class="active">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<main class="landing">
+  <div class="hero">
+    <h1>SOC <span class="hl">Notes</span></h1>
+    <p>Security Operations reference notebooks — organized by topic, open-book ready, hosted on GitHub Pages.</p>
+  </div>
+
+  <div class="notebooks">
+
+    <a href="psaa.html" class="nb-card">
+      <div class="nb-icon">📘</div>
+      <div class="nb-title">PSAA Study Guide</div>
+      <div class="nb-sub">TCM Security · SOC 101</div>
+      <div class="nb-desc">Practical SOC Analyst Associate — full reference covering SOC fundamentals, phishing, NSM, Wireshark, EDR, SIEM, threat intel, digital forensics, IR, Windows investigation &amp; encoding.</div>
+      <div class="nb-meta">
+        <span class="nb-tag blue">14 Sections</span>
+        <span class="nb-tag green">Open Book</span>
+        <span class="nb-tag">24-hr Exam</span>
+      </div>
+    </a>
+
+    <a href="security-onion.html" class="nb-card">
+      <div class="nb-icon">🧅</div>
+      <div class="nb-title">Security Onion</div>
+      <div class="nb-sub">NSM Platform Reference</div>
+      <div class="nb-desc">Security Onion navigation, alert triage, dashboards, Kibana queries, Suricata rules, Zeek log fields, PCAP workflows and investigation playbooks.</div>
+      <div class="nb-meta">
+        <span class="nb-tag">In Progress</span>
+      </div>
+    </a>
+
+    <a href="log-sources.html" class="nb-card">
+      <div class="nb-icon">📋</div>
+      <div class="nb-title">SOC Log Source Cheat Sheet</div>
+      <div class="nb-sub">Field Reference · v3</div>
+      <div class="nb-desc">Log source fields for Security Onion and Splunk — key fields, correlation hints, artifact hunting notes, and hunt scenarios across all major log types.</div>
+      <div class="nb-meta">
+        <span class="nb-tag blue">Interactive</span>
+        <span class="nb-tag">Tooltips</span>
+      </div>
+    </a>
+
+    <div class="nb-card dim">
+      <div class="nb-icon">📒</div>
+      <div class="nb-title">Add a Notebook</div>
+      <div class="nb-sub">Extend as needed</div>
+      <div class="nb-desc">Drop a new HTML page + <code>content/</code> folder. The sidebar, routing and styles are all reusable — just point <code>window.NOTEBOOK</code> at your topics.</div>
+      <div class="nb-meta">
+        <span class="nb-tag">Placeholder</span>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script src="js/app.js"></script>
+</body>
+</html>

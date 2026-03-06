@@ -1,0 +1,105 @@
+<article class="topic">
+<h1>12 · Windows Investigation — Sysmon &amp; PowerShell</h1>
+<hr class="divider">
+<div class="callout lab"><strong>From your own notes on the Windows compromise lab!</strong></div>
+
+<h2>Sysmon Event IDs — Know These</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Event ID</th><th>Name</th><th>What It Records</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Process Creation</td><td>New process started — command line, parent PID</td></tr>
+    <tr><td>3</td><td>Network Connection</td><td>Process made outbound network connection</td></tr>
+    <tr><td>5</td><td>Process Terminated</td><td>Process ended</td></tr>
+    <tr><td>7</td><td>Image Loaded</td><td>DLL loaded into process</td></tr>
+    <tr><td>10</td><td>Process Access</td><td>Process accessed another process memory</td></tr>
+    <tr><td>11</td><td>File Created</td><td>File was created or overwritten</td></tr>
+    <tr><td>13</td><td>Registry Value Set</td><td>Registry key value changed</td></tr>
+    <tr><td>22</td><td>DNS Query</td><td>Process made a DNS query</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>PowerShell Event Investigation</h2>
+<pre><code><span class="cm"># Get all Sysmon events</span>
+Get-WinEvent -LogName 'Microsoft-Windows-Sysmon/Operational'
+
+<span class="cm"># Get process creation events (ID=1)</span>
+Get-WinEvent -FilterHashtable @{logname='Microsoft-Windows-Sysmon/Operational'; id=1}
+
+<span class="cm"># Get network connection events (ID=3)</span>
+Get-WinEvent -FilterHashtable @{logname='Microsoft-Windows-Sysmon/Operational'; id=3} -MaxEvents 1 | Format-List *
+
+<span class="cm"># Find connections to port 4444</span>
+Get-WinEvent -LogName 'Microsoft-Windows-Sysmon/Operational' -FilterXPath "*[System/EventID=3 and EventData[Data[@Name='DestinationPort']='4444']]" | Format-List *
+
+<span class="cm"># Get process by PID</span>
+Get-WinEvent -LogName 'Microsoft-Windows-Sysmon/Operational' -FilterXPath "*[System/EventID=1 and EventData[Data[@Name='ProcessId']='[PID]']]" | Format-List *
+
+<span class="cm"># Get all TCP connections</span>
+Get-NetTCPConnection
+
+<span class="cm"># Find connection to specific IP</span>
+Get-NetTCPConnection | Where-Object { $_.RemoteAddress -like '192*' }
+
+<span class="cm"># Find connection to specific port</span>
+Get-NetTCPConnection | Where-Object { $_.RemotePort -eq 4444 }
+
+<span class="cm"># Get process info by name</span>
+Get-CimInstance Win32_Process | Select-Object Name, ParentProcessId, ProcessId | Where-Object { $_.Name -like '*suspicious*' }
+
+<span class="cm"># Get full command line for PID</span>
+Get-CimInstance Win32_Process -Filter 'ProcessId=6200' | Select-Object Name, ProcessId, CommandLine</code></pre>
+
+<h2>Event Viewer — XML Query</h2>
+<p>Use in Event Viewer &gt; Filter Current Log &gt; XML tab:</p>
+<pre><code>*[System[Provider[@Name='Microsoft-Windows-Sysmon']]]
+and *[EventData[Data[@Name='ProcessId'] and (Data='YOUR_PID_HERE')]]</code></pre>
+
+<h2>Windows netstat Commands</h2>
+<pre><code><span class="cm"># Show all connections with PIDs</span>
+netstat -ano
+
+<span class="cm"># Find specific port connection</span>
+netstat -an | findstr 4444
+
+<span class="cm"># Show connections with process names</span>
+netstat -anob</code></pre>
+
+<h2>Meterpreter / Metasploit Reference</h2>
+<div class="callout lab"><strong>From the Lab</strong> — remember the payload/handler distinction!</div>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Command</th><th>What It Does</th></tr></thead>
+  <tbody>
+    <tr><td>msfconsole</td><td>Start Metasploit</td></tr>
+    <tr><td>use exploit/multi/handler</td><td>Set up listener for reverse shell</td></tr>
+    <tr><td>set PAYLOAD windows/meterpreter/reverse_tcp</td><td>Set payload type</td></tr>
+    <tr><td>set LHOST [your IP]</td><td>Your listener IP</td></tr>
+    <tr><td>set LPORT 4444</td><td>Your listener port</td></tr>
+    <tr><td>exploit</td><td>Start the listener</td></tr>
+    <tr><td>sessions -l</td><td>List active sessions</td></tr>
+    <tr><td>sessions -i [ID]</td><td>Interact with session</td></tr>
+    <tr><td>shell</td><td>Drop into Windows shell from Meterpreter</td></tr>
+    <tr><td>exit</td><td>Leave session</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="callout warn"><strong>Remember:</strong> meterpreter/reverse_tcp is a PAYLOAD not an exploit module. Always use exploit/multi/handler with set PAYLOAD.</div>
+
+<h2>SMB Share Commands (Windows)</h2>
+<pre><code><span class="cm"># Create a folder</span>
+mkdir exfil
+
+<span class="cm"># Create SMB share</span>
+net share sharename=C:\path\to\folder
+
+<span class="cm"># Verify shares</span>
+net share
+
+<span class="cm"># Map share locally</span>
+net use X: \\127.0.0.1\sharename
+
+<span class="cm"># Show active connections</span>
+netstat -ano</code></pre>
+</article>

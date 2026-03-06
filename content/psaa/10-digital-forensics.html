@@ -1,0 +1,83 @@
+<article class="topic">
+<h1>10 · Digital Forensics</h1>
+<hr class="divider">
+
+<h2>Order of Volatility — Collect Most Volatile First</h2>
+<div class="callout warn"><strong>Rule:</strong> Always collect from most volatile to least volatile. Rebooting destroys RAM!</div>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Order</th><th>Source</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>CPU registers/cache</td><td>Lost immediately on shutdown</td></tr>
+    <tr><td>2</td><td>RAM/Memory</td><td>Lost on reboot</td></tr>
+    <tr><td>3</td><td>Network connections</td><td>Change constantly</td></tr>
+    <tr><td>4</td><td>Running processes</td><td>Change over time</td></tr>
+    <tr><td>5</td><td>Disk/filesystem</td><td>Persistent but can be overwritten</td></tr>
+    <tr><td>6</td><td>Logs</td><td>May be rotated</td></tr>
+    <tr><td>7</td><td>Backups/Archives</td><td>Most stable</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Forensics Commands</h2>
+<pre><code><span class="cm"># Hash file for evidence integrity</span>
+sha256sum file
+
+<span class="cm"># View file metadata</span>
+stat filename
+
+<span class="cm"># Check file type</span>
+file suspicious_binary
+
+<span class="cm"># Check last logins</span>
+last
+
+<span class="cm"># Check failed logins</span>
+sudo lastb
+
+<span class="cm"># Find recently modified files</span>
+find / -mmin -60 -type f 2>/dev/null
+
+<span class="cm"># Find .bak files anywhere on system</span>
+find / -type f -name '*.bak' 2>/dev/null
+
+<span class="cm"># Check active connections</span>
+sudo ss -anp
+
+<span class="cm"># View bash history</span>
+cat ~/.bash_history
+
+<span class="cm"># View journal logs (systemd systems)</span>
+journalctl
+
+<span class="cm"># View journal for specific service</span>
+journalctl -u apache2
+
+<span class="cm"># View journal since last boot</span>
+journalctl -b</code></pre>
+
+<h2>Chain of Custody Principles</h2>
+<ul>
+  <li><strong>Document everything</strong> — who touched evidence, when, why</li>
+  <li><strong>Hash before and after</strong> — prove evidence wasn't tampered</li>
+  <li><strong>Work on copies</strong> — never modify original evidence</li>
+  <li><strong>Write-protect</strong> — use hardware blockers when imaging drives</li>
+  <tr><td>Timeline</td><td>Reconstruct events in chronological order from multiple sources</td></tr>
+</ul>
+
+<h2>Linux Evidence Locations</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Source</th><th>What to Look For</th></tr></thead>
+  <tbody>
+    <tr><td>/var/log/auth.log</td><td>SSH logins, sudo usage, su commands</td></tr>
+    <tr><td>/var/log/syslog</td><td>System events, service starts/stops</td></tr>
+    <tr><td>~/.bash_history</td><td>Commands run by user (may be cleared by attacker)</td></tr>
+    <tr><td>/proc/[PID]/</td><td>Live process memory — survives file deletion</td></tr>
+    <tr><td>/tmp, /var/tmp</td><td>Malware drop zones — check for unusual files</td></tr>
+    <tr><td>/etc/crontab</td><td>Persistence via scheduled jobs</td></tr>
+    <tr><td>last / lastb</td><td>Login history / failed login history</td></tr>
+  </tbody>
+</table>
+</div>
+</article>

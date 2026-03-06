@@ -1,0 +1,110 @@
+<article class="topic">
+<h1>07 · Log Analysis &amp; Management</h1>
+<hr class="divider">
+
+<h2>Core Log Analysis Commands</h2>
+<pre><code><span class="cm"># Count total lines in log</span>
+wc -l logfile.log
+
+<span class="cm"># View last N lines</span>
+tail -20 logfile.log
+
+<span class="cm"># View first N lines</span>
+head -20 logfile.log
+
+<span class="cm"># Get last/latest entry (timestamp)</span>
+tail -1 logfile.log
+
+<span class="cm"># Follow log in real time</span>
+tail -f logfile.log
+
+<span class="cm"># Search for pattern</span>
+grep 'pattern' logfile.log
+
+<span class="cm"># Case insensitive search</span>
+grep -i 'pattern' logfile.log
+
+<span class="cm"># Search with line numbers</span>
+grep -n 'pattern' logfile.log
+
+<span class="cm"># Search multiple patterns (OR)</span>
+grep -i 'error\|fail\|denied' logfile.log
+
+<span class="cm"># Extract column 1 (IP addresses)</span>
+awk '{print $1}' logfile.log
+
+<span class="cm"># Extract quote-delimited field</span>
+awk -F'"' '{print $6}' logfile.log
+
+<span class="cm"># Count + sort unique values</span>
+sort | uniq -c | sort -rn
+
+<span class="cm"># Top 10 IPs from Apache log</span>
+awk '{print $1}' access.log | sort | uniq -c | sort -rn | head -10
+
+<span class="cm"># Count unique user agents</span>
+awk -F'"' '{print $6}' access.log | sort -u | wc -l
+
+<span class="cm"># List all user agents with counts</span>
+awk -F'"' '{print $6}' access.log | sort | uniq -c | sort -rn
+
+<span class="cm"># Find 404 errors with line numbers</span>
+grep -n ' 404 ' access.log
+
+<span class="cm"># Find SQL injection attempts</span>
+grep -i 'union\|select\|%27\|1=1\|--' access.log
+
+<span class="cm"># Count HTTP status codes</span>
+awk '{print $9}' access.log | sort | uniq -c | sort -rn</code></pre>
+
+<h2>Apache Log Format — Know Your Fields</h2>
+<p><code>IP - - [timestamp] "REQUEST" STATUS BYTES "REFERER" "USERAGENT"</code></p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Field</th><th>awk Column</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td>IP Address</td><td>$1</td><td>182.87.64.64</td></tr>
+    <tr><td>Timestamp</td><td>$4</td><td>[18/Jul/2024:15:59:25 -0400]</td></tr>
+    <tr><td>HTTP Request</td><td>$6 using -F'"'</td><td>GET /blog/search.php?q=test HTTP/1.1</td></tr>
+    <tr><td>Status Code</td><td>$9</td><td>200, 404, 500</td></tr>
+    <tr><td>Response Bytes</td><td>$10</td><td>246676 ← different size = different data returned!</td></tr>
+    <tr><td>User Agent</td><td>$6 using -F'"'</td><td>Mozilla/5.0 (Widows NT...) ← typo = suspicious</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>URL Encoding Cheat Sheet</h2>
+<p>Attackers encode to bypass filters — these appear in log files:</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Encoded</th><th>Decoded</th><th>What it Means</th></tr></thead>
+  <tbody>
+    <tr><td>%27</td><td>'</td><td>Single quote — starts SQL injection</td></tr>
+    <tr><td>%20</td><td>(space)</td><td>Space</td></tr>
+    <tr><td>%2D%2D</td><td>--</td><td>SQL comment — ends/terminates query</td></tr>
+    <tr><td>%3D</td><td>=</td><td>Equals sign</td></tr>
+    <tr><td>%3C</td><td>&lt;</td><td>Less than — XSS opening tag</td></tr>
+    <tr><td>%3E</td><td>&gt;</td><td>Greater than — XSS closing tag</td></tr>
+    <tr><td>%2F</td><td>/</td><td>Forward slash</td></tr>
+    <tr><td>%00</td><td>NULL</td><td>Null byte — path traversal</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>SQL Injection Attack Progression</h2>
+<div class="callout lab"><strong>From the Lab</strong> — this is exactly what you found in challenge.log</div>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Request</th><th>What Attacker Is Doing</th></tr></thead>
+  <tbody>
+    <tr><td>?q=consulting</td><td>Normal request — establishing baseline</td></tr>
+    <tr><td>?q=test</td><td>Testing the parameter</td></tr>
+    <tr><td>?q=test%27</td><td>test' — probing for SQL vulnerability with single quote</td></tr>
+    <tr><td>?q=test%27%2D%2D</td><td>test'-- — commenting out rest of SQL query</td></tr>
+    <tr><td>?q=test%27%20UNION%20SELECT%201%2C2%20FROM%20users</td><td>UNION SELECT — attempting to extract data</td></tr>
+    <tr><td>?q=test%27%20UNION%20SELECT%201%2C2%2C3%20FROM%20users</td><td>Expanding column count</td></tr>
+    <tr><td>(different response byte count!)</td><td>SUCCESS — different data returned = injection worked</td></tr>
+  </tbody>
+</table>
+</div>
+</article>

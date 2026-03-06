@@ -1,0 +1,60 @@
+<article class="topic">
+<h1>06 · Endpoint Detection &amp; Response (EDR)</h1>
+<hr class="divider">
+
+<h2>Common EDR Platforms</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Platform</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>CrowdStrike Falcon</td><td>Industry leading EDR</td></tr>
+    <tr><td>SentinelOne</td><td>AI-driven EDR</td></tr>
+    <tr><td>Microsoft Defender</td><td>Built into Windows — free baseline EDR</td></tr>
+    <tr><td>Elastic EDR</td><td>Open source — used in labs</td></tr>
+    <tr><td>LimaCharlie</td><td>Cloud-based security operations platform</td></tr>
+    <tr><td>Wazuh</td><td>Open source SIEM + EDR — common in home labs</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>What EDR Monitors</h2>
+<ul>
+  <li>Process creation and termination</li>
+  <li>Network connections initiated by processes</li>
+  <li>File creation, modification, deletion</li>
+  <li>Registry changes (Windows)</li>
+  <li>User logon/logoff events</li>
+  <li>Script execution (PowerShell, bash)</li>
+  <li>Memory injection attempts</li>
+  <li>Lateral movement indicators</li>
+</ul>
+
+<h2>EDR vs Antivirus</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Feature</th><th>Traditional AV</th><th>EDR</th></tr></thead>
+  <tbody>
+    <tr><td>Detection Method</td><td>Signature-based only</td><td>Behavior + signatures + AI</td></tr>
+    <tr><td>Response</td><td>Quarantine file</td><td>Isolate host, kill process, rollback</td></tr>
+    <tr><td>Visibility</td><td>File-level</td><td>Full process tree, network, registry, memory</td></tr>
+    <tr><td>Threat Hunting</td><td>No</td><td>Yes — query historical data</td></tr>
+    <tr><td>Forensics</td><td>Limited</td><td>Full timeline and event correlation</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Key EDR Alert Indicators</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Indicator</th><th>Why It's Suspicious</th></tr></thead>
+  <tbody>
+    <tr><td>cmd.exe spawned by Word/Excel</td><td>Macro executing shell command</td></tr>
+    <tr><td>PowerShell with -enc flag</td><td>Base64 encoded command — hiding payload</td></tr>
+    <tr><td>Process connecting to port 4444</td><td>Common Metasploit reverse shell port</td></tr>
+    <tr><td>Binary running from /tmp or AppData</td><td>Malware drops in writable dirs</td></tr>
+    <tr><td>Process with no parent PID</td><td>Orphaned — parent may have exited</td></tr>
+    <tr><td>lsass.exe accessed by unusual process</td><td>Credential dumping attempt</td></tr>
+  </tbody>
+</table>
+</div>
+</article>

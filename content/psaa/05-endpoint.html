@@ -1,0 +1,112 @@
+<article class="topic">
+<h1>05 · Endpoint Security Monitoring</h1>
+<hr class="divider">
+
+<h2>Linux Endpoint Triage — Full Command Reference</h2>
+<pre><code><span class="cm"># List all running processes</span>
+ps aux
+
+<span class="cm"># Show process tree (parent/child)</span>
+ps auxf
+
+<span class="cm"># Find process by name</span>
+sudo ps aux | grep processname
+
+<span class="cm"># Show all listening ports + PIDs</span>
+sudo ss -tlnp
+
+<span class="cm"># Show all listening ports (alt)</span>
+sudo netstat -tlnp
+
+<span class="cm"># Show all active connections</span>
+sudo ss -anp
+
+<span class="cm"># Show active connections (alt)</span>
+sudo netstat -anob
+
+<span class="cm"># Check process binary path (symlink)</span>
+sudo ls -l /proc/[PID]/exe
+
+<span class="cm"># Read process command line invocation</span>
+sudo cat /proc/[PID]/cmdline | tr '\0' ' '
+
+<span class="cm"># Run ps against specific PID</span>
+sudo ps -p [PID] -f
+
+<span class="cm"># List open files for a process</span>
+sudo lsof -p [PID]
+
+<span class="cm"># Hash file for VirusTotal</span>
+sudo sha256sum /path/to/file
+
+<span class="cm"># Hash process even if file deleted</span>
+sudo sha256sum /proc/[PID]/exe
+
+<span class="cm"># Extract strings from binary</span>
+sudo strings /proc/[PID]/exe
+
+<span class="cm"># Filter strings for useful info</span>
+sudo strings /proc/[PID]/exe | grep -i 'usage\|version\|banner'
+
+<span class="cm"># Check system-wide cron jobs</span>
+sudo cat /etc/crontab
+
+<span class="cm"># Check cron.d directory</span>
+sudo ls -la /etc/cron.d/
+
+<span class="cm"># Check user cron jobs</span>
+sudo cat /var/spool/cron/crontabs/root
+
+<span class="cm"># Check cron directory contents</span>
+sudo ls -al /var/spool/cron/crontabs/
+
+<span class="cm"># List startup services</span>
+systemctl list-units --type=service
+
+<span class="cm"># Find recently modified files (1hr)</span>
+find / -mmin -60 -type f 2>/dev/null
+
+<span class="cm"># Find SUID binaries (privesc check)</span>
+find / -perm -4000 -type f 2>/dev/null
+
+<span class="cm"># Kill process by PID</span>
+sudo kill [PID]
+
+<span class="cm"># Kill process by name</span>
+sudo pkill processname</code></pre>
+
+<h2>Key File Locations on Linux</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Path</th><th>Significance</th></tr></thead>
+  <tbody>
+    <tr><td>/tmp</td><td>World-writable — #1 malware drop location</td></tr>
+    <tr><td>/var/tmp</td><td>Persistent temp — also used by malware</td></tr>
+    <tr><td>/etc/crontab</td><td>System cron jobs — persistence mechanism</td></tr>
+    <tr><td>/etc/cron.d/</td><td>Additional cron directory — check this too</td></tr>
+    <tr><td>/var/spool/cron/crontabs/</td><td>Per-user cron jobs</td></tr>
+    <tr><td>/etc/passwd</td><td>User account list</td></tr>
+    <tr><td>/etc/shadow</td><td>Password hashes (root only)</td></tr>
+    <tr><td>/var/log/auth.log</td><td>Authentication events</td></tr>
+    <tr><td>/var/log/syslog</td><td>System events</td></tr>
+    <tr><td>/var/log/apache2/</td><td>Web server logs</td></tr>
+    <tr><td>/proc/[PID]/</td><td>Live process data — survives deletion!</td></tr>
+    <tr><td>/usr/local/bin/</td><td>Custom binaries — check for SUID abuse</td></tr>
+    <tr><td>/root/.bash_history</td><td>Root command history</td></tr>
+    <tr><td>/home/user/.bash_history</td><td>User command history</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>SUID Binary Privilege Escalation</h2>
+<div class="callout lab"><strong>From the Lab (Janus/Mercury/Pluto CTF)</strong></div>
+<pre><code><span class="cm"># Find all SUID binaries on system</span>
+find / -perm -4000 -type f 2>/dev/null
+
+<span class="cm"># Exploit SUID find binary (GTFOBins)</span>
+sys_check . -exec /bin/sh -p \; -quit
+
+<span class="cm"># Verify you escalated to root</span>
+whoami</code></pre>
+<p><strong>SUID</strong> = Set User ID. If a binary has SUID and is owned by root, running it gives root privileges. GTFOBins (<code>gtfobins.github.io</code>) lists exploitable binaries.</p>
+</article>

@@ -1,0 +1,175 @@
+<article class="topic">
+<h1>13 · Encoding Recognition &amp; CyberChef</h1>
+<hr class="divider">
+<p>The goal: look at unknown text and instantly recognize <strong>WHAT it is</strong> before you try to decode it.</p>
+<div class="callout"><strong>CyberChef</strong> — bookmark this: <code>gchq.github.io/CyberChef</code>. Use the <strong>Magic</strong> recipe when unsure!</div>
+
+<h2>Base64</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Visual Pattern</th><th>What to Look For</th></tr></thead>
+  <tbody>
+    <tr><td>Mixed UPPER and lower case</td><td>Both uppercase AND lowercase letters together</td></tr>
+    <tr><td>Numbers mixed in</td><td>0-9 appear throughout</td></tr>
+    <tr><td>Ends with = or ==</td><td>Padding at the end is the biggest giveaway</td></tr>
+    <tr><td>No spaces</td><td>One long continuous string</td></tr>
+    <tr><td>Characters used</td><td>A-Z a-z 0-9 + / = — NOTHING else</td></tr>
+  </tbody>
+</table>
+</div>
+<h3>Real attacker examples</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>What It Is</th><th>Base64 Encoded</th></tr></thead>
+  <tbody>
+    <tr><td>cmd.exe /c powershell -enc</td><td>Y21kLmV4ZSAvYyBwb3dlcnNoZWxsIC1lbmM=</td></tr>
+    <tr><td>/bin/bash reverse shell</td><td>L2Jpbi9iYXNoIC1pID4mIC9kZXYvdGNwLzE5Mi4x...</td></tr>
+  </tbody>
+</table>
+</div>
+<pre><code><span class="cm"># Decode base64</span>
+echo 'BASE64STRING' | base64 -d</code></pre>
+
+<h2>Hex (Hexadecimal)</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Visual Pattern</th><th>What to Look For</th></tr></thead>
+  <tbody>
+    <tr><td>ONLY 0-9 and a-f</td><td>No g h i j k l m etc — if you see those it's not hex</td></tr>
+    <tr><td>Comes in pairs</td><td>Always 2 characters per byte: 57 not 7</td></tr>
+    <tr><td>Often space or colon separated</td><td>57 68 61 74 OR 57:68:61:74</td></tr>
+    <tr><td>Sometimes has 0x prefix</td><td>0x576861... means hex</td></tr>
+    <tr><td>Even character count</td><td>Each byte = exactly 2 chars — never odd length</td></tr>
+  </tbody>
+</table>
+</div>
+<h3>Critical hex signatures to memorize</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Hex Value</th><th>Meaning</th><th>Why It Matters</th></tr></thead>
+  <tbody>
+    <tr><td>4d 5a (MZ)</td><td>Windows EXE header</td><td>File is a Windows executable — high risk</td></tr>
+    <tr><td>7f 45 4c 46 (ELF)</td><td>Linux binary header</td><td>File is a Linux executable</td></tr>
+    <tr><td>50 4b 03 04 (PK)</td><td>ZIP file header</td><td>Could contain malware payload</td></tr>
+    <tr><td>25 50 44 46 (%PDF)</td><td>PDF header</td><td>Malicious PDFs are common phishing attachments</td></tr>
+    <tr><td>ff d8 ff</td><td>JPEG image header</td><td>Could hide steganography</td></tr>
+  </tbody>
+</table>
+</div>
+<pre><code><span class="cm"># Decode hex</span>
+echo '57686174...' | xxd -r -p</code></pre>
+
+<h2>ASCII Decimal</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Visual Pattern</th><th>What to Look For</th></tr></thead>
+  <tbody>
+    <tr><td>Numbers only</td><td>No letters at all — pure digits</td></tr>
+    <tr><td>Values between 32 and 126</td><td>Never below 32 or above 126 for printable text</td></tr>
+    <tr><td>Space separated</td><td>Each number represents one character</td></tr>
+    <tr><td>Mix of 2 and 3 digit numbers</td><td>32=space, 65=A, 97=a, 122=z, 126=~</td></tr>
+  </tbody>
+</table>
+</div>
+<h3>ASCII values to memorize</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Range</th><th>Characters</th></tr></thead>
+  <tbody>
+    <tr><td>32</td><td>Space</td></tr>
+    <tr><td>48 - 57</td><td>0 through 9 (digits)</td></tr>
+    <tr><td>65 - 90</td><td>A through Z (uppercase)</td></tr>
+    <tr><td>97 - 122</td><td>a through z (lowercase)</td></tr>
+    <tr><td>46</td><td>. (period)</td></tr>
+    <tr><td>47</td><td>/ (forward slash)</td></tr>
+    <tr><td>58</td><td>: (colon)</td></tr>
+  </tbody>
+</table>
+</div>
+<p><em>Decode in CyberChef: From Charcode (delimiter = Space)</em></p>
+
+<h2>URL Encoding (Percent Encoding)</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Visual Pattern</th><th>What to Look For</th></tr></thead>
+  <tbody>
+    <tr><td>% signs throughout</td><td>Every encoded character starts with %</td></tr>
+    <tr><td>% followed by exactly 2 chars</td><td>%20 %27 %3D — always 2 hex chars after %</td></tr>
+    <tr><td>Mix of normal and encoded</td><td>Normal letters stay normal: SELECT%20FROM</td></tr>
+    <tr><td>Common in web logs</td><td>You already saw this in challenge.log!</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Encoded</th><th>Decoded</th><th>Significance</th></tr></thead>
+  <tbody>
+    <tr><td>%20</td><td>(space)</td><td>Space — most common</td></tr>
+    <tr><td>%27</td><td>'</td><td>Single quote — SQL injection start</td></tr>
+    <tr><td>%3D</td><td>=</td><td>Equals sign</td></tr>
+    <tr><td>%2F</td><td>/</td><td>Forward slash</td></tr>
+    <tr><td>%2C</td><td>,</td><td>Comma</td></tr>
+    <tr><td>%3F</td><td>?</td><td>Question mark</td></tr>
+    <tr><td>%21</td><td>!</td><td>Exclamation mark</td></tr>
+    <tr><td>%2D%2D</td><td>--</td><td>SQL comment — ends query</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>ROT13</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Visual Pattern</th><th>What to Look For</th></tr></thead>
+  <tbody>
+    <tr><td>Letters only — no special chars changed</td><td>Numbers and punctuation stay the same</td></tr>
+    <tr><td>Looks almost readable</td><td>Real words but wrong — brain wants to read it</td></tr>
+    <tr><td>Same length as original</td><td>ROT13 never changes the length</td></tr>
+    <tr><td>Symmetric</td><td>Encoding it again gives you back the original</td></tr>
+  </tbody>
+</table>
+</div>
+<pre><code><span class="cm"># Alphabet shift: A→N, B→O, etc.</span>
+<span class="cm"># Plain:  A B C D E F G H I J K L M N O P Q R S T U V W X Y Z</span>
+<span class="cm"># ROT13:  N O P Q R S T U V W X Y Z A B C D E F G H I J K L M</span>
+
+echo 'ROT13STRING' | tr 'A-Za-z' 'N-ZA-Mn-za-m'</code></pre>
+
+<h2>Binary</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Visual Pattern</th><th>What to Look For</th></tr></thead>
+  <tbody>
+    <tr><td>ONLY 0s and 1s</td><td>Absolutely nothing else — no letters, no other numbers</td></tr>
+    <tr><td>Groups of exactly 8</td><td>Each character = 8 bits: 01001000 not 1001000</td></tr>
+    <tr><td>Space separated groups</td><td>01010111 01101000 01100001 01110100...</td></tr>
+    <tr><td>00100000 appears often</td><td>That is the space character (32 in decimal)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Quick Visual ID Cheat Sheet</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>What You See</th><th>Encoding Type</th><th>How to Decode</th></tr></thead>
+  <tbody>
+    <tr><td>Mixed case + numbers + ends in = or ==</td><td>Base64</td><td><code>base64 -d</code> or CyberChef &gt; From Base64</td></tr>
+    <tr><td>Only 0-9 and a-f in pairs</td><td>Hex</td><td><code>xxd -r -p</code> or CyberChef &gt; From Hex</td></tr>
+    <tr><td>Numbers only, values 32-126, space separated</td><td>ASCII Decimal</td><td>CyberChef &gt; From Charcode</td></tr>
+    <tr><td>% signs before 2-char codes</td><td>URL Encoding</td><td>CyberChef &gt; URL Decode</td></tr>
+    <tr><td>Letters only, almost readable but wrong</td><td>ROT13</td><td><code>tr</code> command or CyberChef &gt; ROT13</td></tr>
+    <tr><td>Only 0s and 1s in groups of 8</td><td>Binary</td><td>CyberChef &gt; From Binary</td></tr>
+    <tr><td>No idea at all</td><td>Unknown</td><td>CyberChef &gt; Magic (auto-detect!)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>CyberChef Pro Tips</h2>
+<ul>
+  <li><strong>Magic recipe</strong> — paste ANYTHING in and CyberChef tries to auto-detect and decode</li>
+  <li><strong>Chain recipes</strong> — URL Decode THEN Base64 Decode for double-encoded payloads</li>
+  <li><strong>From Charcode</strong> — use for ASCII decimal (set delimiter to Space)</li>
+  <li><strong>Highlight text in output</strong> — CyberChef shows the decoded value inline</li>
+  <li><strong>Save recipes</strong> — build your own reusable decode chain</li>
+  <li>Bookmark: <code>gchq.github.io/CyberChef</code></li>
+</ul>
+</article>

@@ -1,0 +1,121 @@
+<article class="topic">
+<h1>02 · Phishing Analysis</h1>
+<hr class="divider">
+
+<h2>Social Engineering Tactics</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Tactic</th><th>How Attackers Use It</th></tr></thead>
+  <tbody>
+    <tr><td>AUTHORITY</td><td>Spoofing executives, managers, IT staff</td></tr>
+    <tr><td>TRUST</td><td>Spoofing customers, banks, partners</td></tr>
+    <tr><td>INTIMIDATION</td><td>Instill fear of consequences</td></tr>
+    <tr><td>SOCIAL PROOF</td><td>Validate legitimacy through consensus</td></tr>
+    <tr><td>URGENCY</td><td>"ACT NOW!!! or it's too late"</td></tr>
+    <tr><td>SCARCITY</td><td>Fear of missing out</td></tr>
+    <tr><td>FAMILIARITY</td><td>Establish credibility through recognition</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Email Protocol Stack</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Protocol</th><th>Purpose</th><th>Ports</th></tr></thead>
+  <tbody>
+    <tr><td>SMTP</td><td>Send outgoing mail</td><td>25, 465, 587</td></tr>
+    <tr><td>POP3</td><td>Retrieve email (downloads)</td><td>110, 995 (secure)</td></tr>
+    <tr><td>IMAP</td><td>Advanced email sync (server-side)</td><td>143, 993 (secure)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Mail Agents</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Agent</th><th>Full Name</th><th>Role</th></tr></thead>
+  <tbody>
+    <tr><td>MTA</td><td>Mail Transfer Agent</td><td>Determines route and relays email</td></tr>
+    <tr><td>MUA</td><td>Mail User Agent</td><td>Gmail, Outlook, Thunderbird — compose/send/receive</td></tr>
+    <tr><td>MDA</td><td>Mail Delivery Agent</td><td>Accepts incoming mail, places in recipient inbox</td></tr>
+    <tr><td>MSA</td><td>Mail Submission Agent</td><td>Accepts mail from MUA, passes to MTA</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Email Address Anatomy</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Part</th><th>Example</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Local Part</td><td>bob.smith</td><td>Username or mailbox</td></tr>
+    <tr><td>Domain Part</td><td>example</td><td>Organization name</td></tr>
+    <tr><td>TLD</td><td>.com</td><td>.com .org .gov .edu etc</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Phishing Analysis Methodology</h2>
+<ol>
+  <li><strong>Initial Triage</strong> — quickly assess and prioritize severity</li>
+  <li><strong>Header &amp; Sender Examination</strong> — investigate MTA addresses, IPs, true origin</li>
+  <li><strong>Context Examination</strong> — analyze language, formatting, social engineering red flags</li>
+  <li><strong>Web &amp; URL Examination</strong> — collect artifacts, use tools to inspect URLs/domains</li>
+  <li><strong>Attachment Examination</strong> — securely extract and analyze attachments</li>
+</ol>
+
+<h2>Email Authentication — DKIM, SPF, DMARC</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Method</th><th>What It Does</th><th>Red Flag</th></tr></thead>
+  <tbody>
+    <tr><td>SPF</td><td>Lists authorized sending IPs for a domain</td><td>SPF fail = not sent from legit server</td></tr>
+    <tr><td>DKIM</td><td>Cryptographic signature proving email wasn't tampered</td><td>Invalid sig = modified in transit</td></tr>
+    <tr><td>DMARC</td><td>Policy telling receivers what to do on SPF/DKIM fail</td><td>"none" = not enforced</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Linux Phishing Analysis Commands</h2>
+<pre><code><span class="cm"># Hash attachment for VirusTotal lookup</span>
+sha256sum file.iso &amp;&amp; sha1sum file.iso &amp;&amp; md5sum file.iso
+
+<span class="cm"># Decode base64 encoded content</span>
+echo 'BASE64STRING' | base64 -d
+
+<span class="cm"># Extract URLs from email file</span>
+grep -oP 'https?://[^"]+' email.eml | sort -u
+
+<span class="cm"># View raw email headers</span>
+cat email.eml | head -60
+
+<span class="cm"># Check file type regardless of extension</span>
+file suspicious_attachment</code></pre>
+
+<h2>Phishing Analysis Tools</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Tool</th><th>Use</th></tr></thead>
+  <tbody>
+    <tr><td>MXToolbox</td><td>Analyze email headers — mxtoolbox.com/EmailHeaders</td></tr>
+    <tr><td>VirusTotal</td><td>Hash/URL/IP/domain lookup — virustotal.com</td></tr>
+    <tr><td>URLScan.io</td><td>Safe URL scanning with screenshot — urlscan.io</td></tr>
+    <tr><td>AbuseIPDB</td><td>IP reputation check — abuseipdb.com</td></tr>
+    <tr><td>PhishTool</td><td>Phishing analysis platform — phishtool.com</td></tr>
+    <tr><td>Google Admin Toolbox</td><td>Header analyzer — toolbox.googleapps.com</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Phishing Attack Types</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Type</th><th>Goal</th><th>Method</th></tr></thead>
+  <tbody>
+    <tr><td>Information Gathering</td><td>Collect data via recon</td><td>Verify accounts, craft credible phishes</td></tr>
+    <tr><td>Credential Harvesting</td><td>Obtain login credentials</td><td>Fake login pages, deceptive URLs</td></tr>
+    <tr><td>Malicious Delivery</td><td>Install malware</td><td>Malicious attachments, drive-by downloads</td></tr>
+  </tbody>
+</table>
+</div>
+</article>

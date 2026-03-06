@@ -1,0 +1,85 @@
+<article class="topic">
+<h1>03 · Network Security Monitoring (NSM)</h1>
+<hr class="divider">
+
+<h2>Packet / Frame Structure</h2>
+<p>Every packet travels through layers — <strong>FRAME → IP → TCP → DATA</strong></p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Layer</th><th>Header Contains</th><th>Focus On</th></tr></thead>
+  <tbody>
+    <tr><td>FRAME (Layer 2)</td><td>Source MAC, Destination MAC</td><td>Who is on the local network</td></tr>
+    <tr><td>IP (Layer 3)</td><td>Source IP, Destination IP</td><td>Where packet is going</td></tr>
+    <tr><td>TCP/UDP (Layer 4)</td><td>Source Port, Destination Port</td><td>What service/application</td></tr>
+    <tr><td>Data (Layer 7)</td><td>Payload (index.html, etc)</td><td>What was actually sent</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="callout"><strong>KEY:</strong> Always focus on SOURCE ADDRESS and DESTINATION ADDRESS first.</div>
+
+<h2>TCP vs UDP</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Feature</th><th>TCP</th><th>UDP</th></tr></thead>
+  <tbody>
+    <tr><td>Connection</td><td>3-way handshake (SYN / SYN-ACK / ACK)</td><td>Connectionless</td></tr>
+    <tr><td>Reliability</td><td>Guaranteed delivery</td><td>Best effort — no guarantee</td></tr>
+    <tr><td>Speed</td><td>Slower (overhead)</td><td>Faster (no overhead)</td></tr>
+    <tr><td>Use Cases</td><td>HTTP, SSH, FTP, email</td><td>DNS, streaming, VoIP</td></tr>
+    <tr><td>Header Fields</td><td>Seq#, Ack#, Flags, Window</td><td>Length, Checksum only</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>NSM Tools</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td>tcpdump</td><td>CLI packet capture — lightweight, scriptable</td></tr>
+    <tr><td>Wireshark</td><td>GUI deep packet inspection</td></tr>
+    <tr><td>Zeek (Bro)</td><td>Network analysis framework — generates structured logs</td></tr>
+    <tr><td>Suricata</td><td>IDS/IPS — signature + anomaly detection</td></tr>
+    <tr><td>Snort</td><td>IDS/IPS — industry standard rules</td></tr>
+    <tr><td>Security Onion</td><td>Full NSM platform</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>tcpdump — Essential Commands</h2>
+<pre><code><span class="cm"># Capture all traffic on interface</span>
+sudo tcpdump -i eth0
+
+<span class="cm"># Save capture to file</span>
+sudo tcpdump -i eth0 -w capture.pcap
+
+<span class="cm"># Read saved pcap file</span>
+sudo tcpdump -r capture.pcap
+
+<span class="cm"># Filter by host IP</span>
+sudo tcpdump -i eth0 host 192.168.1.1
+
+<span class="cm"># Filter by port</span>
+sudo tcpdump -i eth0 port 80
+
+<span class="cm"># Filter by source IP</span>
+sudo tcpdump -i eth0 src 10.0.0.1
+
+<span class="cm"># Filter by destination IP</span>
+sudo tcpdump -i eth0 dst 10.0.0.2
+
+<span class="cm"># Show ASCII readable output</span>
+sudo tcpdump -i eth0 -A
+
+<span class="cm"># Show hex and ASCII</span>
+sudo tcpdump -i eth0 -XX
+
+<span class="cm"># Capture only N packets</span>
+sudo tcpdump -i eth0 -c 100
+
+<span class="cm"># Capture HTTP and HTTPS</span>
+sudo tcpdump -i eth0 port 80 or port 443
+
+<span class="cm"># Don't resolve hostnames (faster)</span>
+sudo tcpdump -i eth0 -n</code></pre>
+</article>

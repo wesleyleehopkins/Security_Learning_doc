@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security Onion — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Notebook</div>
+      <div class="sidebar-title">Security Onion</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">🧅</div>
+          <h2>Security Onion</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Security Onion',
+  topics: [
+    { id: 'overview',    badge: '01', label: 'Overview & Navigation'         },
+    { id: 'alerts',      badge: '02', label: 'Alert Triage'                  },
+    { id: 'dashboards',  badge: '03', label: 'Dashboards'                    },
+    { id: 'kibana',      badge: '04', label: 'Kibana / ELK Queries'          },
+    { id: 'suricata',    badge: '05', label: 'Suricata IDS Rules'            },
+    { id: 'zeek',        badge: '06', label: 'Zeek Log Fields'               },
+    { id: 'pcap',        badge: '07', label: 'PCAP Analysis'                 },
+    { id: 'workflows',   badge: '08', label: 'Investigation Workflows'       },
+  ]
+};
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EMBEDDED CONTENT TEMPLATES — no server required
+     Content is invisible until loadTopic() reads tpl.innerHTML
+     ═══════════════════════════════════════════════════════════════ -->
+
+<template id="tpl-overview">
+<article class="topic">
+<h1>01 · Security Onion — Overview &amp; Navigation</h1>
+<hr class="divider">
+
+<h2>What is Security Onion?</h2>
+<p>Security Onion is a free, open-source Linux distribution for threat hunting, enterprise security monitoring, and log management. It bundles multiple NSM tools into a single platform.</p>
+
+<h2>Core Components</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Component</th><th>Role</th></tr></thead>
+  <tbody>
+    <tr><td>Suricata</td><td>IDS/IPS — generates alerts from rule signatures</td></tr>
+    <tr><td>Zeek (Bro)</td><td>Network analysis — generates structured connection logs</td></tr>
+    <tr><td>Elasticsearch</td><td>Log storage and indexing backend</td></tr>
+    <tr><td>Kibana</td><td>Web UI for querying and visualizing logs</td></tr>
+    <tr><td>Logstash</td><td>Log ingestion and normalization pipeline</td></tr>
+    <tr><td>Stenographer</td><td>Full packet capture (PCAP) storage</td></tr>
+    <tr><td>OSSEC/Wazuh</td><td>Host-based intrusion detection (HIDS)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Security Onion Console (SOC) — Key Sections</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Section</th><th>URL Path</th><th>What It Shows</th></tr></thead>
+  <tbody>
+    <tr><td>Alerts</td><td>/alerts</td><td>Suricata IDS alerts — primary triage view</td></tr>
+    <tr><td>Dashboards</td><td>/dashboards</td><td>Pre-built visualizations (DNS, HTTP, alerts)</td></tr>
+    <tr><td>Hunt</td><td>/hunt</td><td>Threat hunting interface — query logs</td></tr>
+    <tr><td>PCAP</td><td>/pcap</td><td>Packet capture retrieval and analysis</td></tr>
+    <tr><td>Cases</td><td>/cases</td><td>Case management for incidents</td></tr>
+    <tr><td>Grid</td><td>/grid</td><td>Node management and health status</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Deployment Types</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Type</th><th>Use Case</th></tr></thead>
+  <tbody>
+    <tr><td>Standalone</td><td>All components on one node — lab/small org</td></tr>
+    <tr><td>Manager + Sensor</td><td>Sensor captures traffic, manager holds data</td></tr>
+    <tr><td>Distributed</td><td>Multiple sensors reporting to cluster — enterprise</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Notes to Add</h2>
+<ul>
+  <li>Alert triage workflow and escalation process</li>
+  <li>Common Suricata rule categories and severity levels</li>
+  <li>Zeek log fields reference</li>
+  <li>Kibana query syntax for Security Onion</li>
+  <li>PCAP retrieval and Wireshark integration</li>
+  <li>Case creation and documentation workflow</li>
+</ul>
+</article>
+</template>
+
+<template id="tpl-alerts">
+<article class="topic">
+<h1>02 · Security Onion — Alert Triage</h1>
+<hr class="divider">
+<div class="callout note"><strong>In Progress</strong> — Add your Alert Triage notes here.</div>
+<p>This section is ready for your notes. Use the PSAA sections as a template for tables, code blocks, and callouts.</p>
+<h2>Quick Structure Guide</h2>
+<pre><code><span class="cm"># Table example</span>
+&lt;h2&gt;Section Title&lt;/h2&gt;
+&lt;div class="table-wrap"&gt;
+&lt;table&gt;
+  &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Col 1&lt;/th&gt;&lt;th&gt;Col 2&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;&lt;td&gt;Value&lt;/td&gt;&lt;td&gt;Description&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+
+<span class="cm"># Code block example</span>
+&lt;pre&gt;&lt;code&gt;&lt;span class="cm"&gt;# comment&lt;/span&gt;
+command here&lt;/code&gt;&lt;/pre&gt;</code></pre>
+</article>
+</template>
+
+<template id="tpl-dashboards">
+<article class="topic">
+<h1>03 · Security Onion — Dashboards</h1>
+<hr class="divider">
+<div class="callout note"><strong>In Progress</strong> — Add your Dashboards notes here.</div>
+<p>This section is ready for your notes. Use the PSAA sections as a template for tables, code blocks, and callouts.</p>
+<h2>Quick Structure Guide</h2>
+<pre><code><span class="cm"># Table example</span>
+&lt;h2&gt;Section Title&lt;/h2&gt;
+&lt;div class="table-wrap"&gt;
+&lt;table&gt;
+  &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Col 1&lt;/th&gt;&lt;th&gt;Col 2&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;&lt;td&gt;Value&lt;/td&gt;&lt;td&gt;Description&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+
+<span class="cm"># Code block example</span>
+&lt;pre&gt;&lt;code&gt;&lt;span class="cm"&gt;# comment&lt;/span&gt;
+command here&lt;/code&gt;&lt;/pre&gt;</code></pre>
+</article>
+</template>
+
+<template id="tpl-kibana">
+<article class="topic">
+<h1>04 · Security Onion — Kibana / ELK Queries</h1>
+<hr class="divider">
+<div class="callout note"><strong>In Progress</strong> — Add your Kibana / ELK Queries notes here.</div>
+<p>This section is ready for your notes. Use the PSAA sections as a template for tables, code blocks, and callouts.</p>
+<h2>Quick Structure Guide</h2>
+<pre><code><span class="cm"># Table example</span>
+&lt;h2&gt;Section Title&lt;/h2&gt;
+&lt;div class="table-wrap"&gt;
+&lt;table&gt;
+  &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Col 1&lt;/th&gt;&lt;th&gt;Col 2&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;&lt;td&gt;Value&lt;/td&gt;&lt;td&gt;Description&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+
+<span class="cm"># Code block example</span>
+&lt;pre&gt;&lt;code&gt;&lt;span class="cm"&gt;# comment&lt;/span&gt;
+command here&lt;/code&gt;&lt;/pre&gt;</code></pre>
+</article>
+</template>
+
+<template id="tpl-suricata">
+<article class="topic">
+<h1>05 · Security Onion — Suricata IDS Rules</h1>
+<hr class="divider">
+<div class="callout note"><strong>In Progress</strong> — Add your Suricata IDS Rules notes here.</div>
+<p>This section is ready for your notes. Use the PSAA sections as a template for tables, code blocks, and callouts.</p>
+<h2>Quick Structure Guide</h2>
+<pre><code><span class="cm"># Table example</span>
+&lt;h2&gt;Section Title&lt;/h2&gt;
+&lt;div class="table-wrap"&gt;
+&lt;table&gt;
+  &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Col 1&lt;/th&gt;&lt;th&gt;Col 2&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;&lt;td&gt;Value&lt;/td&gt;&lt;td&gt;Description&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+
+<span class="cm"># Code block example</span>
+&lt;pre&gt;&lt;code&gt;&lt;span class="cm"&gt;# comment&lt;/span&gt;
+command here&lt;/code&gt;&lt;/pre&gt;</code></pre>
+</article>
+</template>
+
+<template id="tpl-zeek">
+<article class="topic">
+<h1>06 · Security Onion — Zeek Log Fields</h1>
+<hr class="divider">
+<div class="callout note"><strong>In Progress</strong> — Add your Zeek Log Fields notes here.</div>
+<p>This section is ready for your notes. Use the PSAA sections as a template for tables, code blocks, and callouts.</p>
+<h2>Quick Structure Guide</h2>
+<pre><code><span class="cm"># Table example</span>
+&lt;h2&gt;Section Title&lt;/h2&gt;
+&lt;div class="table-wrap"&gt;
+&lt;table&gt;
+  &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Col 1&lt;/th&gt;&lt;th&gt;Col 2&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;&lt;td&gt;Value&lt;/td&gt;&lt;td&gt;Description&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+
+<span class="cm"># Code block example</span>
+&lt;pre&gt;&lt;code&gt;&lt;span class="cm"&gt;# comment&lt;/span&gt;
+command here&lt;/code&gt;&lt;/pre&gt;</code></pre>
+</article>
+</template>
+
+<template id="tpl-pcap">
+<article class="topic">
+<h1>07 · Security Onion — PCAP Analysis</h1>
+<hr class="divider">
+<div class="callout note"><strong>In Progress</strong> — Add your PCAP Analysis notes here.</div>
+<p>This section is ready for your notes. Use the PSAA sections as a template for tables, code blocks, and callouts.</p>
+<h2>Quick Structure Guide</h2>
+<pre><code><span class="cm"># Table example</span>
+&lt;h2&gt;Section Title&lt;/h2&gt;
+&lt;div class="table-wrap"&gt;
+&lt;table&gt;
+  &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Col 1&lt;/th&gt;&lt;th&gt;Col 2&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;&lt;td&gt;Value&lt;/td&gt;&lt;td&gt;Description&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+
+<span class="cm"># Code block example</span>
+&lt;pre&gt;&lt;code&gt;&lt;span class="cm"&gt;# comment&lt;/span&gt;
+command here&lt;/code&gt;&lt;/pre&gt;</code></pre>
+</article>
+</template>
+
+<template id="tpl-workflows">
+<article class="topic">
+<h1>08 · Security Onion — Investigation Workflows</h1>
+<hr class="divider">
+<div class="callout note"><strong>In Progress</strong> — Add your Investigation Workflows notes here.</div>
+<p>This section is ready for your notes. Use the PSAA sections as a template for tables, code blocks, and callouts.</p>
+<h2>Quick Structure Guide</h2>
+<pre><code><span class="cm"># Table example</span>
+&lt;h2&gt;Section Title&lt;/h2&gt;
+&lt;div class="table-wrap"&gt;
+&lt;table&gt;
+  &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Col 1&lt;/th&gt;&lt;th&gt;Col 2&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;&lt;td&gt;Value&lt;/td&gt;&lt;td&gt;Description&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+
+<span class="cm"># Code block example</span>
+&lt;pre&gt;&lt;code&gt;&lt;span class="cm"&gt;# comment&lt;/span&gt;
+command here&lt;/code&gt;&lt;/pre&gt;</code></pre>
+</article>
+</template>
+
+<script src="js/app.js"></script>
+</body>
+</html>

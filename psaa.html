@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PSAA Study Guide — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Notebook</div>
+      <div class="sidebar-title">PSAA Study Guide</div>
+    </div>
+    <!-- Nav items injected by app.js -->
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">📘</div>
+          <h2>PSAA Study Guide</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<script>
+window.NOTEBOOK = {
+  title: 'PSAA Study Guide',
+  contentPath: 'content/psaa/',
+  topics: [
+    { id: '01-soc-fundamentals',  badge: '01',  label: 'SOC Fundamentals'              },
+    { id: '02-phishing',          badge: '02',  label: 'Phishing Analysis'             },
+    { id: '03-nsm',               badge: '03',  label: 'Network Security Monitoring'   },
+    { id: '04-wireshark',         badge: '04',  label: 'Wireshark & tcpdump'           },
+    { id: '05-endpoint',          badge: '05',  label: 'Endpoint Security Monitoring'  },
+    { id: '06-edr',               badge: '06',  label: 'Endpoint Detection & Response' },
+    { id: '07-log-analysis',      badge: '07',  label: 'Log Analysis & Management'     },
+    { id: '08-siem',              badge: '08',  label: 'SIEM'                          },
+    { id: '09-threat-intel',      badge: '09',  label: 'Threat Intelligence'           },
+    { id: '10-digital-forensics', badge: '10',  label: 'Digital Forensics'             },
+    { id: '11-incident-response', badge: '11',  label: 'Incident Response'             },
+    { id: '12-windows',           badge: '12',  label: 'Windows Investigation'         },
+    { id: '13-encoding',          badge: '13',  label: 'Encoding & CyberChef'          },
+    { id: 'ref-tools',            badge: 'REF', label: 'Additional Tools & Resources'  },
+  ]
+};
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     EMBEDDED CONTENT — all topic HTML stored in <template>
+     elements so the site works with file:// (no server needed).
+     app.js reads these via document.getElementById('tpl-[id]').
+     ═══════════════════════════════════════════════════════════ -->
+
+<template id="tpl-01-soc-fundamentals">
+<article class="topic">
+<h1>01 · Security Operations Fundamentals</h1>
+<hr class="divider">
+<h2>SOC Analyst Tiers</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Tier</th><th>Role</th><th>Responsibilities</th></tr></thead>
+  <tbody>
+    <tr><td>Tier 1</td><td>Alert Analyst</td><td>Monitor alerts, triage, escalate</td></tr>
+    <tr><td>Tier 2</td><td>Incident Responder</td><td>Investigate escalated alerts, deeper analysis</td></tr>
+    <tr><td>Tier 3</td><td>Threat Hunter</td><td>Proactive hunting, advanced forensics</td></tr>
+    <tr><td>Lead</td><td>SOC Manager</td><td>Oversight, reporting, process management</td></tr>
+  </tbody>
+</table></div>
+<h2>Essential Terms — Know These Cold</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+  <tbody>
+    <tr><td>CIA Triad</td><td>Confidentiality · Integrity · Availability</td></tr>
+    <tr><td>Alert</td><td>Notification a potential event has occurred</td></tr>
+    <tr><td>Event</td><td>Any observable occurrence in a system or network</td></tr>
+    <tr><td>Incident</td><td>Confirmed/suspected breach requiring response</td></tr>
+    <tr><td>False Positive</td><td>Alert fires but no real threat exists</td></tr>
+    <tr><td>True Positive</td><td>Alert fires and a real threat exists</td></tr>
+    <tr><td>IOC</td><td>Indicator of Compromise — IP, hash, domain, URL</td></tr>
+    <tr><td>TTPs</td><td>Tactics, Techniques, Procedures — HOW attackers operate</td></tr>
+    <tr><td>OSINT</td><td>Open Source Intelligence — publicly available info</td></tr>
+  </tbody>
+</table></div>
+<h2>Cyber Kill Chain — Attacker Progression</h2>
+<p>Understanding this helps you know WHAT you are looking at in logs and alerts.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Phase</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>1. Reconnaissance</td><td>Attacker gathers info — OSINT, scanning, enumeration</td></tr>
+    <tr><td>2. Weaponization</td><td>Creates malware or exploit</td></tr>
+    <tr><td>3. Delivery</td><td>Phishing email, USB, web exploit</td></tr>
+    <tr><td>4. Exploitation</td><td>Executes code on victim system</td></tr>
+    <tr><td>5. Installation</td><td>Installs backdoor for persistent access</td></tr>
+    <tr><td>6. C2 (Command &amp; Control)</td><td>Establishes communication channel back to attacker</td></tr>
+    <tr><td>7. Actions on Objectives</td><td>Data theft, ransomware, lateral movement</td></tr>
+  </tbody>
+</table></div>
+<h2>Common Ports — Memorize These</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Port</th><th>Protocol</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>21</td><td>FTP</td><td>File transfer</td></tr>
+    <tr><td>22</td><td>SSH</td><td>Secure shell — watch for brute force</td></tr>
+    <tr><td>23</td><td>Telnet</td><td>Unencrypted — red flag if active</td></tr>
+    <tr><td>25 / 465 / 587</td><td>SMTP</td><td>Email sending</td></tr>
+    <tr><td>53</td><td>DNS</td><td>Name resolution — used in data exfil tunneling</td></tr>
+    <tr><td>80</td><td>HTTP</td><td>Unencrypted web</td></tr>
+    <tr><td>110 / 995</td><td>POP3 / POP3S</td><td>Email retrieval (995=secure)</td></tr>
+    <tr><td>143 / 993</td><td>IMAP / IMAPS</td><td>Email sync (993=secure)</td></tr>
+    <tr><td>443</td><td>HTTPS</td><td>Encrypted web</td></tr>
+    <tr><td>445</td><td>SMB</td><td>Windows file sharing — EternalBlue target</td></tr>
+    <tr><td>3306</td><td>MySQL</td><td>Database — should not be public facing</td></tr>
+    <tr><td>3389</td><td>RDP</td><td>Remote desktop — brute force target</td></tr>
+    <tr><td>4444</td><td>Metasploit</td><td>Common default reverse shell port</td></tr>
+    <tr><td>31337</td><td>Elite</td><td>Classic hacker port — leet speak</td></tr>
+  </tbody>
+</table></div>
+</article>
+</template>
+
+<template id="tpl-02-phishing">
+<article class="topic">
+<h1>02 · Phishing Analysis</h1>
+<hr class="divider">
+<h2>Social Engineering Tactics</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Tactic</th><th>How Attackers Use It</th></tr></thead>
+  <tbody>
+    <tr><td>AUTHORITY</td><td>Spoofing executives, managers, IT staff</td></tr>
+    <tr><td>TRUST</td><td>Spoofing customers, banks, partners</td></tr>
+    <tr><td>INTIMIDATION</td><td>Instill fear of consequences</td></tr>
+    <tr><td>SOCIAL PROOF</td><td>Validate legitimacy through consensus</td></tr>
+    <tr><td>URGENCY</td><td>"ACT NOW!!! or it's too late"</td></tr>
+    <tr><td>SCARCITY</td><td>Fear of missing out</td></tr>
+    <tr><td>FAMILIARITY</td><td>Establish credibility through recognition</td></tr>
+  </tbody>
+</table></div>
+<h2>Email Protocol Stack</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Protocol</th><th>Purpose</th><th>Ports</th></tr></thead>
+  <tbody>
+    <tr><td>SMTP</td><td>Send outgoing mail</td><td>25, 465, 587</td></tr>
+    <tr><td>POP3</td><td>Retrieve email (downloads)</td><td>110, 995 (secure)</td></tr>
+    <tr><td>IMAP</td><td>Advanced email sync (server-side)</td><td>143, 993 (secure)</td></tr>
+  </tbody>
+</table></div>
+<h2>Mail Agents</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Agent</th><th>Full Name</th><th>Role</th></tr></thead>
+  <tbody>
+    <tr><td>MTA</td><td>Mail Transfer Agent</td><td>Determines route and relays email</td></tr>
+    <tr><td>MUA</td><td>Mail User Agent</td><td>Gmail, Outlook, Thunderbird — compose/send/receive</td></tr>
+    <tr><td>MDA</td><td>Mail Delivery Agent</td><td>Accepts incoming mail, places in recipient inbox</td></tr>
+    <tr><td>MSA</td><td>Mail Submission Agent</td><td>Accepts mail from MUA, passes to MTA</td></tr>
+  </tbody>
+</table></div>
+<h2>Phishing Analysis Methodology</h2>
+<ol>
+  <li><strong>Initial Triage</strong> — quickly assess and prioritize severity</li>
+  <li><strong>Header &amp; Sender Examination</strong> — investigate MTA addresses, IPs, true origin</li>
+  <li><strong>Context Examination</strong> — analyze language, formatting, social engineering red flags</li>
+  <li><strong>Web &amp; URL Examination</strong> — collect artifacts, use tools to inspect URLs/domains</li>
+  <li><strong>Attachment Examination</strong> — securely extract and analyze attachments</li>
+</ol>
+<h2>Email Authentication — DKIM, SPF, DMARC</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Method</th><th>What It Does</th><th>Red Flag</th></tr></thead>
+  <tbody>
+    <tr><td>SPF</td><td>Lists authorized sending IPs for a domain</td><td>SPF fail = not sent from legit server</td></tr>
+    <tr><td>DKIM</td><td>Cryptographic signature proving email wasn't tampered</td><td>Invalid sig = modified in transit</td></tr>
+    <tr><td>DMARC</td><td>Policy telling receivers what to do on SPF/DKIM fail</td><td>"none" = not enforced</td></tr>
+  </tbody>
+</table></div>
+<h2>Linux Phishing Analysis Commands</h2>
+<pre><code><span class="cm"># Hash attachment for VirusTotal lookup</span>
+sha256sum file.iso &amp;&amp; sha1sum file.iso &amp;&amp; md5sum file.iso
+
+<span class="cm"># Decode base64 encoded content</span>
+echo 'BASE64STRING' | base64 -d
+
+<span class="cm"># Extract URLs from email file</span>
+grep -oP 'https?://[^"]+' email.eml | sort -u
+
+<span class="cm"># View raw email headers</span>
+cat email.eml | head -60
+
+<span class="cm"># Check file type regardless of extension</span>
+file suspicious_attachment</code></pre>
+<h2>Phishing Analysis Tools</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Tool</th><th>Use</th></tr></thead>
+  <tbody>
+    <tr><td>MXToolbox</td><td>Analyze email headers — mxtoolbox.com/EmailHeaders</td></tr>
+    <tr><td>VirusTotal</td><td>Hash/URL/IP/domain lookup — virustotal.com</td></tr>
+    <tr><td>URLScan.io</td><td>Safe URL scanning with screenshot — urlscan.io</td></tr>
+    <tr><td>AbuseIPDB</td><td>IP reputation check — abuseipdb.com</td></tr>
+    <tr><td>PhishTool</td><td>Phishing analysis platform — phishtool.com</td></tr>
+    <tr><td>Google Admin Toolbox</td><td>Header analyzer — toolbox.googleapps.com</td></tr>
+  </tbody>
+</table></div>
+<h2>Phishing Attack Types</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Type</th><th>Goal</th><th>Method</th></tr></thead>
+  <tbody>
+    <tr><td>Information Gathering</td><td>Collect data via recon</td><td>Verify accounts, craft credible phishes</td></tr>
+    <tr><td>Credential Harvesting</td><td>Obtain login credentials</td><td>Fake login pages, deceptive URLs</td></tr>
+    <tr><td>Malicious Delivery</td><td>Install malware</td><td>Malicious attachments, drive-by downloads</td></tr>
+  </tbody>
+</table></div>
+</article>
+</template>
+
+<template id="tpl-03-nsm">
+<article class="topic">
+<h1>03 · Network Security Monitoring (NSM)</h1>
+<hr class="divider">
+<h2>Packet / Frame Structure</h2>
+<p>Every packet travels through layers — <strong>FRAME → IP → TCP → DATA</strong></p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Layer</th><th>Header Contains</th><th>Focus On</th></tr></thead>
+  <tbody>
+    <tr><td>FRAME (Layer 2)</td><td>Source MAC, Destination MAC</td><td>Who is on the local network</td></tr>
+    <tr><td>IP (Layer 3)</td><td>Source IP, Destination IP</td><td>Where packet is going</td></tr>
+    <tr><td>TCP/UDP (Layer 4)</td><td>Source Port, Destination Port</td><td>What service/application</td></tr>
+    <tr><td>Data (Layer 7)</td><td>Payload (index.html, etc)</td><td>What was actually sent</td></tr>
+  </tbody>
+</table></div>
+<div class="callout"><strong>KEY:</strong> Always focus on SOURCE ADDRESS and DESTINATION ADDRESS first.</div>
+<h2>TCP vs UDP</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Feature</th><th>TCP</th><th>UDP</th></tr></thead>
+  <tbody>
+    <tr><td>Connection</td><td>3-way handshake (SYN / SYN-ACK / ACK)</td><td>Connectionless</td></tr>
+    <tr><td>Reliability</td><td>Guaranteed delivery</td><td>Best effort — no guarantee</td></tr>
+    <tr><td>Speed</td><td>Slower (overhead)</td><td>Faster (no overhead)</td></tr>
+    <tr><td>Use Cases</td><td>HTTP, SSH, FTP, email</td><td>DNS, streaming, VoIP</td></tr>
+    <tr><td>Header Fields</td><td>Seq#, Ack#, Flags, Window</td><td>Length, Checksum only</td></tr>
+  </tbody>
+</table></div>
+<h2>NSM Tools</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td>tcpdump</td><td>CLI packet capture — lightweight, scriptable</td></tr>
+    <tr><td>Wireshark</td><td>GUI deep packet inspection</td></tr>
+    <tr><td>Zeek (Bro)</td><td>Network analysis framework — generates structured logs</td></tr>
+    <tr><td>Suricata</td><td>IDS/IPS — signature + anomaly detection</td></tr>
+    <tr><td>Snort</td><td>IDS/IPS — industry standard rules</td></tr>
+    <tr><td>Security Onion</td><td>Full NSM platform</td></tr>
+  </tbody>
+</table></div>
+<h2>tcpdump — Essential Commands</h2>
+<pre><code><span class="cm"># Capture all traffic on interface</span>
+sudo tcpdump -i eth0
+<span class="cm"># Save capture to file</span>
+sudo tcpdump -i eth0 -w capture.pcap
+<span class="cm"># Read saved pcap file</span>
+sudo tcpdump -r capture.pcap
+<span class="cm"># Filter by host IP</span>
+sudo tcpdump -i eth0 host 192.168.1.1
+<span class="cm"># Filter by port</span>
+sudo tcpdump -i eth0 port 80
+<span class="cm"># Filter by source IP</span>
+sudo tcpdump -i eth0 src 10.0.0.1
+<span class="cm"># Filter by destination IP</span>
+sudo tcpdump -i eth0 dst 10.0.0.2
+<span class="cm"># Show ASCII readable output</span>
+sudo tcpdump -i eth0 -A
+<span class="cm"># Show hex and ASCII</span>
+sudo tcpdump -i eth0 -XX
+<span class="cm"># Capture only N packets</span>
+sudo tcpdump -i eth0 -c 100
+<span class="cm"># Capture HTTP and HTTPS</span>
+sudo tcpdump -i eth0 port 80 or port 443
+<span class="cm"># Don't resolve hostnames (faster)</span>
+sudo tcpdump -i eth0 -n</code></pre>
+</article>
+</template>
+
+<template id="tpl-04-wireshark">
+<article class="topic">
+<h1>04 · Network Traffic Analysis — Wireshark &amp; tcpdump</h1>
+<hr class="divider">
+<h2>Wireshark Display Filters</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Filter</th><th>What It Shows</th></tr></thead>
+  <tbody>
+    <tr><td><code>ip.addr == 192.168.1.1</code></td><td>All traffic to/from this IP</td></tr>
+    <tr><td><code>ip.src == 10.0.0.1</code></td><td>Traffic FROM this IP only</td></tr>
+    <tr><td><code>ip.dst == 10.0.0.2</code></td><td>Traffic TO this IP only</td></tr>
+    <tr><td><code>tcp.port == 4444</code></td><td>Traffic on port 4444 (reverse shell port)</td></tr>
+    <tr><td><code>tcp.port == 80</code></td><td>HTTP traffic</td></tr>
+    <tr><td><code>http</code></td><td>All HTTP protocol traffic</td></tr>
+    <tr><td><code>dns</code></td><td>All DNS traffic</td></tr>
+    <tr><td><code>http.request.method == "POST"</code></td><td>HTTP POST requests — often creds or data</td></tr>
+    <tr><td><code>tcp.flags.syn == 1</code></td><td>TCP SYN — connection starts (scan detection)</td></tr>
+    <tr><td><code>!(arp or dns or icmp)</code></td><td>Exclude noise — see real traffic</td></tr>
+    <tr><td><code>frame contains "password"</code></td><td>Find frames with literal word password</td></tr>
+    <tr><td><code>http.response.code == 200</code></td><td>Successful responses</td></tr>
+    <tr><td><code>http.response.code == 404</code></td><td>Not found — possible enumeration</td></tr>
+  </tbody>
+</table></div>
+<h2>Wireshark Tips</h2>
+<ul>
+  <li><strong>Statistics &gt; Conversations</strong> — see who is talking to whom and how much</li>
+  <li><strong>Statistics &gt; Protocol Hierarchy</strong> — breakdown of traffic types</li>
+  <li><strong>File &gt; Export Objects &gt; HTTP</strong> — extract files transferred over HTTP</li>
+  <li><strong>Follow TCP Stream</strong> — see the full conversation between two hosts</li>
+  <li><strong>Right click packet &gt; Apply as Filter</strong> — instant filtering</li>
+  <li><strong>Edit &gt; Find Packet &gt; String</strong> — search packet contents for keywords</li>
+</ul>
+<h2>Investigation Workflow</h2>
+<ol>
+  <li>Open pcap → check <strong>Statistics &gt; Conversations</strong> to find top talkers</li>
+  <li>Check <strong>Protocol Hierarchy</strong> for unexpected protocols</li>
+  <li>Filter by suspicious IP or port</li>
+  <li>Follow TCP Stream to read content</li>
+  <li>Export HTTP objects if files were transferred</li>
+  <li>Hash any extracted files for VirusTotal lookup</li>
+</ol>
+</article>
+</template>
+
+<template id="tpl-05-endpoint">
+<article class="topic">
+<h1>05 · Endpoint Security Monitoring</h1>
+<hr class="divider">
+<h2>Linux Endpoint Triage — Full Command Reference</h2>
+<pre><code><span class="cm"># List all running processes</span>
+ps aux
+<span class="cm"># Show process tree (parent/child)</span>
+ps auxf
+<span class="cm"># Find process by name</span>
+sudo ps aux | grep processname
+<span class="cm"># Show all listening ports + PIDs</span>
+sudo ss -tlnp
+<span class="cm"># Show all listening ports (alt)</span>
+sudo netstat -tlnp
+<span class="cm"># Show all active connections</span>
+sudo ss -anp
+<span class="cm"># Check process binary path (symlink)</span>
+sudo ls -l /proc/[PID]/exe
+<span class="cm"># Read process command line invocation</span>
+sudo cat /proc/[PID]/cmdline | tr '\0' ' '
+<span class="cm"># List open files for a process</span>
+sudo lsof -p [PID]
+<span class="cm"># Hash file for VirusTotal</span>
+sudo sha256sum /path/to/file
+<span class="cm"># Hash process even if file deleted</span>
+sudo sha256sum /proc/[PID]/exe
+<span class="cm"># Extract strings from binary</span>
+sudo strings /proc/[PID]/exe
+<span class="cm"># Filter strings for useful info</span>
+sudo strings /proc/[PID]/exe | grep -i 'usage\|version\|banner'
+<span class="cm"># Check system-wide cron jobs</span>
+sudo cat /etc/crontab
+<span class="cm"># Check cron.d directory</span>
+sudo ls -la /etc/cron.d/
+<span class="cm"># Check user cron jobs</span>
+sudo cat /var/spool/cron/crontabs/root
+<span class="cm"># List startup services</span>
+systemctl list-units --type=service
+<span class="cm"># Find recently modified files (1hr)</span>
+find / -mmin -60 -type f 2>/dev/null
+<span class="cm"># Find SUID binaries (privesc check)</span>
+find / -perm -4000 -type f 2>/dev/null
+<span class="cm"># Kill process by PID</span>
+sudo kill [PID]</code></pre>
+<h2>Key File Locations on Linux</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Path</th><th>Significance</th></tr></thead>
+  <tbody>
+    <tr><td>/tmp</td><td>World-writable — #1 malware drop location</td></tr>
+    <tr><td>/var/tmp</td><td>Persistent temp — also used by malware</td></tr>
+    <tr><td>/etc/crontab</td><td>System cron jobs — persistence mechanism</td></tr>
+    <tr><td>/etc/cron.d/</td><td>Additional cron directory — check this too</td></tr>
+    <tr><td>/var/spool/cron/crontabs/</td><td>Per-user cron jobs</td></tr>
+    <tr><td>/etc/passwd</td><td>User account list</td></tr>
+    <tr><td>/etc/shadow</td><td>Password hashes (root only)</td></tr>
+    <tr><td>/var/log/auth.log</td><td>Authentication events</td></tr>
+    <tr><td>/var/log/syslog</td><td>System events</td></tr>
+    <tr><td>/var/log/apache2/</td><td>Web server logs</td></tr>
+    <tr><td>/proc/[PID]/</td><td>Live process data — survives deletion!</td></tr>
+    <tr><td>/root/.bash_history</td><td>Root command history</td></tr>
+    <tr><td>/home/user/.bash_history</td><td>User command history</td></tr>
+  </tbody>
+</table></div>
+<h2>SUID Binary Privilege Escalation</h2>
+<div class="callout lab"><strong>From the Lab (Janus/Mercury/Pluto CTF)</strong></div>
+<pre><code><span class="cm"># Find all SUID binaries on system</span>
+find / -perm -4000 -type f 2>/dev/null
+<span class="cm"># Exploit SUID find binary (GTFOBins)</span>
+sys_check . -exec /bin/sh -p \; -quit
+<span class="cm"># Verify you escalated to root</span>
+whoami</code></pre>
+<p><strong>SUID</strong> = Set User ID. If a binary has SUID and is owned by root, running it gives root privileges. Check <code>gtfobins.github.io</code> for exploitable binaries.</p>
+</article>
+</template>
+
+<template id="tpl-06-edr">
+<article class="topic">
+<h1>06 · Endpoint Detection &amp; Response (EDR)</h1>
+<hr class="divider">
+<h2>Common EDR Platforms</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Platform</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>CrowdStrike Falcon</td><td>Industry leading EDR</td></tr>
+    <tr><td>SentinelOne</td><td>AI-driven EDR</td></tr>
+    <tr><td>Microsoft Defender</td><td>Built into Windows — free baseline EDR</td></tr>
+    <tr><td>Elastic EDR</td><td>Open source — used in labs</td></tr>
+    <tr><td>LimaCharlie</td><td>Cloud-based security operations platform</td></tr>
+    <tr><td>Wazuh</td><td>Open source SIEM + EDR — common in home labs</td></tr>
+  </tbody>
+</table></div>
+<h2>What EDR Monitors</h2>
+<ul>
+  <li>Process creation and termination</li>
+  <li>Network connections initiated by processes</li>
+  <li>File creation, modification, deletion</li>
+  <li>Registry changes (Windows)</li>
+  <li>User logon/logoff events</li>
+  <li>Script execution (PowerShell, bash)</li>
+  <li>Memory injection attempts</li>
+  <li>Lateral movement indicators</li>
+</ul>
+<h2>Key EDR Alert Indicators</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Indicator</th><th>Why It's Suspicious</th></tr></thead>
+  <tbody>
+    <tr><td>cmd.exe spawned by Word/Excel</td><td>Macro executing shell command</td></tr>
+    <tr><td>PowerShell with -enc flag</td><td>Base64 encoded command — hiding payload</td></tr>
+    <tr><td>Process connecting to port 4444</td><td>Common Metasploit reverse shell port</td></tr>
+    <tr><td>Binary running from /tmp or AppData</td><td>Malware drops in writable dirs</td></tr>
+    <tr><td>lsass.exe accessed by unusual process</td><td>Credential dumping attempt</td></tr>
+  </tbody>
+</table></div>
+</article>
+</template>
+
+<template id="tpl-07-log-analysis">
+<article class="topic">
+<h1>07 · Log Analysis &amp; Management</h1>
+<hr class="divider">
+<h2>Core Log Analysis Commands</h2>
+<pre><code><span class="cm"># Count total lines in log</span>
+wc -l logfile.log
+<span class="cm"># View last N lines</span>
+tail -20 logfile.log
+<span class="cm"># Follow log in real time</span>
+tail -f logfile.log
+<span class="cm"># Search for pattern</span>
+grep 'pattern' logfile.log
+<span class="cm"># Case insensitive search</span>
+grep -i 'pattern' logfile.log
+<span class="cm"># Search with line numbers</span>
+grep -n 'pattern' logfile.log
+<span class="cm"># Search multiple patterns (OR)</span>
+grep -i 'error\|fail\|denied' logfile.log
+<span class="cm"># Extract column 1 (IP addresses)</span>
+awk '{print $1}' logfile.log
+<span class="cm"># Extract quote-delimited field</span>
+awk -F'"' '{print $6}' logfile.log
+<span class="cm"># Count + sort unique values</span>
+sort | uniq -c | sort -rn
+<span class="cm"># Top 10 IPs from Apache log</span>
+awk '{print $1}' access.log | sort | uniq -c | sort -rn | head -10
+<span class="cm"># Count unique user agents</span>
+awk -F'"' '{print $6}' access.log | sort -u | wc -l
+<span class="cm"># Find 404 errors</span>
+grep -n ' 404 ' access.log
+<span class="cm"># Find SQL injection attempts</span>
+grep -i 'union\|select\|%27\|1=1\|--' access.log
+<span class="cm"># Count HTTP status codes</span>
+awk '{print $9}' access.log | sort | uniq -c | sort -rn</code></pre>
+<h2>Apache Log Format</h2>
+<p><code>IP - - [timestamp] "REQUEST" STATUS BYTES "REFERER" "USERAGENT"</code></p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Field</th><th>awk Column</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td>IP Address</td><td>$1</td><td>182.87.64.64</td></tr>
+    <tr><td>Timestamp</td><td>$4</td><td>[18/Jul/2024:15:59:25 -0400]</td></tr>
+    <tr><td>HTTP Request</td><td>$6 using -F'"'</td><td>GET /blog/search.php?q=test HTTP/1.1</td></tr>
+    <tr><td>Status Code</td><td>$9</td><td>200, 404, 500</td></tr>
+    <tr><td>Response Bytes</td><td>$10</td><td>246676 ← different size = different data!</td></tr>
+    <tr><td>User Agent</td><td>$6 using -F'"'</td><td>Mozilla/5.0 (Widows NT...) ← typo = suspicious</td></tr>
+  </tbody>
+</table></div>
+<h2>URL Encoding Cheat Sheet</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Encoded</th><th>Decoded</th><th>What it Means</th></tr></thead>
+  <tbody>
+    <tr><td>%27</td><td>'</td><td>Single quote — starts SQL injection</td></tr>
+    <tr><td>%20</td><td>(space)</td><td>Space</td></tr>
+    <tr><td>%2D%2D</td><td>--</td><td>SQL comment — ends/terminates query</td></tr>
+    <tr><td>%3D</td><td>=</td><td>Equals sign</td></tr>
+    <tr><td>%3C</td><td>&lt;</td><td>Less than — XSS opening tag</td></tr>
+    <tr><td>%3E</td><td>&gt;</td><td>Greater than — XSS closing tag</td></tr>
+    <tr><td>%2F</td><td>/</td><td>Forward slash</td></tr>
+    <tr><td>%00</td><td>NULL</td><td>Null byte — path traversal</td></tr>
+  </tbody>
+</table></div>
+<h2>SQL Injection Attack Progression</h2>
+<div class="callout lab"><strong>From the Lab</strong> — this is exactly what you found in challenge.log</div>
+<div class="table-wrap"><table>
+  <thead><tr><th>Request</th><th>What Attacker Is Doing</th></tr></thead>
+  <tbody>
+    <tr><td>?q=consulting</td><td>Normal request — establishing baseline</td></tr>
+    <tr><td>?q=test</td><td>Testing the parameter</td></tr>
+    <tr><td>?q=test%27</td><td>test' — probing for SQL vulnerability with single quote</td></tr>
+    <tr><td>?q=test%27%2D%2D</td><td>test'-- — commenting out rest of SQL query</td></tr>
+    <tr><td>?q=...UNION%20SELECT...</td><td>UNION SELECT — attempting to extract data</td></tr>
+    <tr><td>(different response byte count!)</td><td>SUCCESS — different data returned = injection worked</td></tr>
+  </tbody>
+</table></div>
+</article>
+</template>
+
+<template id="tpl-08-siem">
+<article class="topic">
+<h1>08 · SIEM</h1>
+<hr class="divider">
+<h2>What a SIEM Does</h2>
+<ul>
+  <li><strong>Log Aggregation</strong> — collects logs from ALL sources into one place</li>
+  <li><strong>Normalization</strong> — converts different log formats into a standard format</li>
+  <li><strong>Correlation</strong> — links related events across systems to find attack patterns</li>
+  <li><strong>Alerting</strong> — fires when rules are matched</li>
+  <li><strong>Dashboards</strong> — visual overview of security posture</li>
+  <li><strong>Retention</strong> — stores logs for compliance and investigation</li>
+</ul>
+<h2>Common SIEM Platforms</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Platform</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Splunk</td><td>Industry standard — SPL query language</td></tr>
+    <tr><td>Elastic SIEM</td><td>ELK Stack — Elasticsearch, Logstash, Kibana</td></tr>
+    <tr><td>IBM QRadar</td><td>Enterprise — common in large orgs</td></tr>
+    <tr><td>Microsoft Sentinel</td><td>Cloud-native — Azure based</td></tr>
+    <tr><td>Wazuh</td><td>Free open source — popular in labs</td></tr>
+    <tr><td>Security Onion</td><td>Full NSM + SIEM platform</td></tr>
+  </tbody>
+</table></div>
+<h2>SIEM Use Cases</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Use Case</th><th>What the SIEM Detects</th></tr></thead>
+  <tbody>
+    <tr><td>Brute Force</td><td>Multiple failed logins from same IP in short window</td></tr>
+    <tr><td>Lateral Movement</td><td>Auth events across multiple hosts in sequence</td></tr>
+    <tr><td>Data Exfiltration</td><td>Large outbound transfer to external IP</td></tr>
+    <tr><td>Persistence</td><td>New scheduled task / service / registry key created</td></tr>
+    <tr><td>Privilege Escalation</td><td>Unprivileged user suddenly accessing admin resources</td></tr>
+    <tr><td>C2 Beacon</td><td>Regular outbound connections at fixed intervals</td></tr>
+  </tbody>
+</table></div>
+<h2>Splunk — SPL Basics</h2>
+<pre><code><span class="cm"># Basic search</span>
+index=main sourcetype=access_combined
+<span class="cm"># Count events by field</span>
+index=main | stats count by src_ip
+<span class="cm"># Top 10 source IPs</span>
+index=main | top limit=10 src_ip
+<span class="cm"># Search for failed logins</span>
+index=main "Failed password" | stats count by src_ip | sort -count</code></pre>
+<h2>Elastic KQL Basics</h2>
+<pre><code><span class="cm"># Match field value</span>
+event.action : "logon-failed"
+<span class="cm"># AND condition</span>
+event.action : "logon-failed" AND source.ip : "10.0.0.*"
+<span class="cm"># Wildcard search</span>
+process.name : "power*"
+<span class="cm"># Port check</span>
+destination.port : 4444</code></pre>
+</article>
+</template>
+
+<template id="tpl-09-threat-intel">
+<article class="topic">
+<h1>09 · Threat Intelligence</h1>
+<hr class="divider">
+<h2>Key Concepts</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+  <tbody>
+    <tr><td>IOC</td><td>Indicator of Compromise — IP, hash, domain, URL signaling breach</td></tr>
+    <tr><td>TTP</td><td>Tactics, Techniques, Procedures — HOW attackers operate</td></tr>
+    <tr><td>MITRE ATT&amp;CK</td><td>Framework cataloging real-world attacker TTPs by ID</td></tr>
+    <tr><td>Threat Feed</td><td>Live stream of IOCs from vendors or open sources</td></tr>
+    <tr><td>OSINT</td><td>Open Source Intelligence — publicly available information</td></tr>
+  </tbody>
+</table></div>
+<h2>Threat Intel Tools</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Tool</th><th>URL</th><th>Use</th></tr></thead>
+  <tbody>
+    <tr><td>VirusTotal</td><td>virustotal.com</td><td>Hash/IP/URL/domain lookup — 70+ AV engines</td></tr>
+    <tr><td>AbuseIPDB</td><td>abuseipdb.com</td><td>IP reputation database</td></tr>
+    <tr><td>URLScan.io</td><td>urlscan.io</td><td>Safe URL analysis + screenshot</td></tr>
+    <tr><td>Shodan</td><td>shodan.io</td><td>Search engine for internet devices</td></tr>
+    <tr><td>MITRE ATT&amp;CK</td><td>attack.mitre.org</td><td>TTP reference framework</td></tr>
+    <tr><td>OTX AlienVault</td><td>otx.alienvault.com</td><td>Community IOC sharing</td></tr>
+    <tr><td>ThreatFox</td><td>threatfox.abuse.ch</td><td>Free IOC database</td></tr>
+    <tr><td>MalwareBazaar</td><td>bazaar.abuse.ch</td><td>Malware sample database</td></tr>
+    <tr><td>Hybrid Analysis</td><td>hybrid-analysis.com</td><td>Free automated malware sandbox</td></tr>
+    <tr><td>Any.run</td><td>any.run</td><td>Interactive malware sandbox</td></tr>
+    <tr><td>crontab.guru</td><td>crontab.guru</td><td>Interpret cron schedules</td></tr>
+  </tbody>
+</table></div>
+<h2>MITRE ATT&amp;CK — Key Tactics</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Tactic</th><th>Example Techniques</th></tr></thead>
+  <tbody>
+    <tr><td>Initial Access</td><td>Phishing (T1566), Valid Accounts (T1078)</td></tr>
+    <tr><td>Execution</td><td>PowerShell (T1059.001), Scripting (T1059)</td></tr>
+    <tr><td>Persistence</td><td>Scheduled Task (T1053), Registry Run Keys (T1547)</td></tr>
+    <tr><td>Privilege Escalation</td><td>SUID (T1548.001), Token Impersonation (T1134)</td></tr>
+    <tr><td>Defense Evasion</td><td>Base64 Encoding (T1027), Process Injection (T1055)</td></tr>
+    <tr><td>Credential Access</td><td>OS Credential Dumping (T1003), Brute Force (T1110)</td></tr>
+    <tr><td>Lateral Movement</td><td>Pass the Hash (T1550.002), RDP (T1021.001)</td></tr>
+    <tr><td>Exfiltration</td><td>DNS Tunneling (T1048.003), Web Service (T1567)</td></tr>
+    <tr><td>Command &amp; Control</td><td>Web Protocols (T1071.001), Proxy (T1090)</td></tr>
+  </tbody>
+</table></div>
+</article>
+</template>
+
+<template id="tpl-10-digital-forensics">
+<article class="topic">
+<h1>10 · Digital Forensics</h1>
+<hr class="divider">
+<h2>Order of Volatility — Collect Most Volatile First</h2>
+<div class="callout warn"><strong>Rule:</strong> Always collect from most volatile to least. Rebooting destroys RAM!</div>
+<div class="table-wrap"><table>
+  <thead><tr><th>Order</th><th>Source</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>CPU registers/cache</td><td>Lost immediately on shutdown</td></tr>
+    <tr><td>2</td><td>RAM/Memory</td><td>Lost on reboot</td></tr>
+    <tr><td>3</td><td>Network connections</td><td>Change constantly</td></tr>
+    <tr><td>4</td><td>Running processes</td><td>Change over time</td></tr>
+    <tr><td>5</td><td>Disk/filesystem</td><td>Persistent but can be overwritten</td></tr>
+    <tr><td>6</td><td>Logs</td><td>May be rotated</td></tr>
+    <tr><td>7</td><td>Backups/Archives</td><td>Most stable</td></tr>
+  </tbody>
+</table></div>
+<h2>Forensics Commands</h2>
+<pre><code><span class="cm"># Hash file for evidence integrity</span>
+sha256sum file
+<span class="cm"># View file metadata</span>
+stat filename
+<span class="cm"># Check file type</span>
+file suspicious_binary
+<span class="cm"># Check last logins</span>
+last
+<span class="cm"># Check failed logins</span>
+sudo lastb
+<span class="cm"># Find recently modified files</span>
+find / -mmin -60 -type f 2>/dev/null
+<span class="cm"># Find .bak files anywhere on system</span>
+find / -type f -name '*.bak' 2>/dev/null
+<span class="cm"># Check active connections</span>
+sudo ss -anp
+<span class="cm"># View bash history</span>
+cat ~/.bash_history
+<span class="cm"># View journal logs</span>
+journalctl
+<span class="cm"># View journal for specific service</span>
+journalctl -u apache2
+<span class="cm"># View journal since last boot</span>
+journalctl -b</code></pre>
+<h2>Linux Evidence Locations</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Source</th><th>What to Look For</th></tr></thead>
+  <tbody>
+    <tr><td>/var/log/auth.log</td><td>SSH logins, sudo usage, su commands</td></tr>
+    <tr><td>/var/log/syslog</td><td>System events, service starts/stops</td></tr>
+    <tr><td>~/.bash_history</td><td>Commands run by user (may be cleared by attacker)</td></tr>
+    <tr><td>/proc/[PID]/</td><td>Live process memory — survives file deletion</td></tr>
+    <tr><td>/tmp, /var/tmp</td><td>Malware drop zones — check for unusual files</td></tr>
+    <tr><td>/etc/crontab</td><td>Persistence via scheduled jobs</td></tr>
+  </tbody>
+</table></div>
+</article>
+</template>
+
+<template id="tpl-11-incident-response">
+<article class="topic">
+<h1>11 · Incident Response (IR)</h1>
+<hr class="divider">
+<h2>IR Phases — PICERL</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Phase</th><th>Key Actions</th></tr></thead>
+  <tbody>
+    <tr><td>1. Preparation</td><td>Policies, tools, playbooks ready before incident</td></tr>
+    <tr><td>2. Identification</td><td>Detect and confirm — is this real?</td></tr>
+    <tr><td>3. Containment</td><td>Stop the spread — isolate affected systems</td></tr>
+    <tr><td>4. Eradication</td><td>Remove malware, close vulnerabilities</td></tr>
+    <tr><td>5. Recovery</td><td>Restore systems to normal operation</td></tr>
+    <tr><td>6. Lessons Learned</td><td>Document what happened, prevent recurrence</td></tr>
+  </tbody>
+</table></div>
+<h2>Quick Response by Scenario</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Scenario</th><th>Response Steps</th></tr></thead>
+  <tbody>
+    <tr><td>Malware on endpoint</td><td>Isolate → capture memory → hash malware → check persistence → eradicate</td></tr>
+    <tr><td>Suspicious network traffic</td><td>Capture pcap → identify source/dest → check process → block → escalate</td></tr>
+    <tr><td>Phishing email</td><td>Don't click → analyze headers → check URLs/attachments → block sender → alert</td></tr>
+    <tr><td>Brute force</td><td>Identify source IP → check success → block IP → reset affected accounts</td></tr>
+    <tr><td>Data exfiltration</td><td>Capture traffic → identify destination → block → preserve evidence → notify</td></tr>
+  </tbody>
+</table></div>
+<h2>IR Report — Key Sections</h2>
+<ol>
+  <li><strong>Executive Summary</strong> — what happened, business impact, 1 paragraph</li>
+  <li><strong>Timeline</strong> — chronological sequence of events</li>
+  <li><strong>Technical Details</strong> — IOCs, TTPs, affected systems</li>
+  <li><strong>Root Cause</strong> — how did the attacker get in?</li>
+  <li><strong>Containment Actions</strong> — what was done to stop the spread</li>
+  <li><strong>Eradication Steps</strong> — what was removed/patched</li>
+  <li><strong>Recommendations</strong> — how to prevent recurrence</li>
+</ol>
+<div class="callout"><strong>Exam Tip:</strong> The 24-hour PSAA exam requires a written report — use these sections.</div>
+</article>
+</template>
+
+<template id="tpl-12-windows">
+<article class="topic">
+<h1>12 · Windows Investigation — Sysmon &amp; PowerShell</h1>
+<hr class="divider">
+<div class="callout lab"><strong>From your own notes on the Windows compromise lab!</strong></div>
+<h2>Sysmon Event IDs — Know These</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Event ID</th><th>Name</th><th>What It Records</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Process Creation</td><td>New process started — command line, parent PID</td></tr>
+    <tr><td>3</td><td>Network Connection</td><td>Process made outbound network connection</td></tr>
+    <tr><td>5</td><td>Process Terminated</td><td>Process ended</td></tr>
+    <tr><td>7</td><td>Image Loaded</td><td>DLL loaded into process</td></tr>
+    <tr><td>10</td><td>Process Access</td><td>Process accessed another process memory</td></tr>
+    <tr><td>11</td><td>File Created</td><td>File was created or overwritten</td></tr>
+    <tr><td>13</td><td>Registry Value Set</td><td>Registry key value changed</td></tr>
+    <tr><td>22</td><td>DNS Query</td><td>Process made a DNS query</td></tr>
+  </tbody>
+</table></div>
+<h2>PowerShell Event Investigation</h2>
+<pre><code><span class="cm"># Get all Sysmon events</span>
+Get-WinEvent -LogName 'Microsoft-Windows-Sysmon/Operational'
+<span class="cm"># Get process creation events (ID=1)</span>
+Get-WinEvent -FilterHashtable @{logname='Microsoft-Windows-Sysmon/Operational'; id=1}
+<span class="cm"># Get network connection events (ID=3)</span>
+Get-WinEvent -FilterHashtable @{logname='Microsoft-Windows-Sysmon/Operational'; id=3} -MaxEvents 1 | Format-List *
+<span class="cm"># Find connections to port 4444</span>
+Get-WinEvent -LogName 'Microsoft-Windows-Sysmon/Operational' -FilterXPath "*[System/EventID=3 and EventData[Data[@Name='DestinationPort']='4444']]" | Format-List *
+<span class="cm"># Get all TCP connections</span>
+Get-NetTCPConnection
+<span class="cm"># Find connection to specific IP</span>
+Get-NetTCPConnection | Where-Object { $_.RemoteAddress -like '192*' }
+<span class="cm"># Get full command line for PID</span>
+Get-CimInstance Win32_Process -Filter 'ProcessId=6200' | Select-Object Name, ProcessId, CommandLine</code></pre>
+<h2>Event Viewer — XML Query</h2>
+<p>Use in Event Viewer &gt; Filter Current Log &gt; XML tab:</p>
+<pre><code>*[System[Provider[@Name='Microsoft-Windows-Sysmon']]]
+and *[EventData[Data[@Name='ProcessId'] and (Data='YOUR_PID_HERE')]]</code></pre>
+<h2>Windows netstat Commands</h2>
+<pre><code><span class="cm"># Show all connections with PIDs</span>
+netstat -ano
+<span class="cm"># Find specific port connection</span>
+netstat -an | findstr 4444
+<span class="cm"># Show connections with process names</span>
+netstat -anob</code></pre>
+<h2>Meterpreter / Metasploit Reference</h2>
+<div class="callout warn"><strong>Remember:</strong> meterpreter/reverse_tcp is a PAYLOAD not an exploit. Always use exploit/multi/handler with set PAYLOAD.</div>
+<div class="table-wrap"><table>
+  <thead><tr><th>Command</th><th>What It Does</th></tr></thead>
+  <tbody>
+    <tr><td>msfconsole</td><td>Start Metasploit</td></tr>
+    <tr><td>use exploit/multi/handler</td><td>Set up listener for reverse shell</td></tr>
+    <tr><td>set PAYLOAD windows/meterpreter/reverse_tcp</td><td>Set payload type</td></tr>
+    <tr><td>set LHOST [your IP]</td><td>Your listener IP</td></tr>
+    <tr><td>set LPORT 4444</td><td>Your listener port</td></tr>
+    <tr><td>exploit</td><td>Start the listener</td></tr>
+    <tr><td>sessions -l</td><td>List active sessions</td></tr>
+    <tr><td>sessions -i [ID]</td><td>Interact with session</td></tr>
+    <tr><td>shell</td><td>Drop into Windows shell from Meterpreter</td></tr>
+  </tbody>
+</table></div>
+</article>
+</template>
+
+<template id="tpl-13-encoding">
+<article class="topic">
+<h1>13 · Encoding Recognition &amp; CyberChef</h1>
+<hr class="divider">
+<p>The goal: look at unknown text and instantly recognize <strong>WHAT it is</strong> before you try to decode it.</p>
+<div class="callout"><strong>CyberChef</strong> — bookmark: <code>gchq.github.io/CyberChef</code> · Use <strong>Magic</strong> recipe when unsure!</div>
+<h2>Base64</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Visual Pattern</th><th>What to Look For</th></tr></thead>
+  <tbody>
+    <tr><td>Mixed UPPER and lower case</td><td>Both uppercase AND lowercase letters together</td></tr>
+    <tr><td>Numbers mixed in</td><td>0-9 appear throughout</td></tr>
+    <tr><td>Ends with = or ==</td><td>Padding at the end is the biggest giveaway</td></tr>
+    <tr><td>No spaces</td><td>One long continuous string</td></tr>
+    <tr><td>Characters used</td><td>A-Z a-z 0-9 + / = — NOTHING else</td></tr>
+  </tbody>
+</table></div>
+<pre><code><span class="cm"># Decode base64</span>
+echo 'BASE64STRING' | base64 -d</code></pre>
+<h2>Hex (Hexadecimal)</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Visual Pattern</th><th>What to Look For</th></tr></thead>
+  <tbody>
+    <tr><td>ONLY 0-9 and a-f</td><td>No g h i j k l m etc — if you see those it's not hex</td></tr>
+    <tr><td>Comes in pairs</td><td>Always 2 characters per byte: 57 not 7</td></tr>
+    <tr><td>Often space or colon separated</td><td>57 68 61 74 OR 57:68:61:74</td></tr>
+    <tr><td>Sometimes has 0x prefix</td><td>0x576861... means hex</td></tr>
+  </tbody>
+</table></div>
+<h3>Critical hex signatures to memorize</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Hex Value</th><th>Meaning</th><th>Why It Matters</th></tr></thead>
+  <tbody>
+    <tr><td>4d 5a (MZ)</td><td>Windows EXE header</td><td>File is a Windows executable — high risk</td></tr>
+    <tr><td>7f 45 4c 46 (ELF)</td><td>Linux binary header</td><td>File is a Linux executable</td></tr>
+    <tr><td>50 4b 03 04 (PK)</td><td>ZIP file header</td><td>Could contain malware payload</td></tr>
+    <tr><td>25 50 44 46 (%PDF)</td><td>PDF header</td><td>Malicious PDFs are common phishing attachments</td></tr>
+    <tr><td>ff d8 ff</td><td>JPEG image header</td><td>Could hide steganography</td></tr>
+  </tbody>
+</table></div>
+<pre><code><span class="cm"># Decode hex</span>
+echo '57686174...' | xxd -r -p</code></pre>
+<h2>URL Encoding (Percent Encoding)</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Encoded</th><th>Decoded</th><th>Significance</th></tr></thead>
+  <tbody>
+    <tr><td>%20</td><td>(space)</td><td>Space — most common</td></tr>
+    <tr><td>%27</td><td>'</td><td>Single quote — SQL injection start</td></tr>
+    <tr><td>%3D</td><td>=</td><td>Equals sign</td></tr>
+    <tr><td>%2F</td><td>/</td><td>Forward slash</td></tr>
+    <tr><td>%2C</td><td>,</td><td>Comma</td></tr>
+    <tr><td>%3F</td><td>?</td><td>Question mark</td></tr>
+    <tr><td>%21</td><td>!</td><td>Exclamation mark</td></tr>
+    <tr><td>%2D%2D</td><td>--</td><td>SQL comment — ends query</td></tr>
+  </tbody>
+</table></div>
+<h2>ROT13</h2>
+<pre><code><span class="cm"># Plain:  A B C D E F G H I J K L M N O P Q R S T U V W X Y Z</span>
+<span class="cm"># ROT13:  N O P Q R S T U V W X Y Z A B C D E F G H I J K L M</span>
+echo 'ROT13STRING' | tr 'A-Za-z' 'N-ZA-Mn-za-m'</code></pre>
+<h2>Binary</h2>
+<p>ONLY 0s and 1s · Groups of exactly 8 · <code>00100000</code> = space character (32)</p>
+<h2>Quick Visual ID Cheat Sheet</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>What You See</th><th>Encoding</th><th>How to Decode</th></tr></thead>
+  <tbody>
+    <tr><td>Mixed case + numbers + ends in = or ==</td><td>Base64</td><td><code>base64 -d</code> or CyberChef &gt; From Base64</td></tr>
+    <tr><td>Only 0-9 and a-f in pairs</td><td>Hex</td><td><code>xxd -r -p</code> or CyberChef &gt; From Hex</td></tr>
+    <tr><td>Numbers only, values 32-126, space separated</td><td>ASCII Decimal</td><td>CyberChef &gt; From Charcode</td></tr>
+    <tr><td>% signs before 2-char codes</td><td>URL Encoding</td><td>CyberChef &gt; URL Decode</td></tr>
+    <tr><td>Letters only, almost readable but wrong</td><td>ROT13</td><td><code>tr</code> or CyberChef &gt; ROT13</td></tr>
+    <tr><td>Only 0s and 1s in groups of 8</td><td>Binary</td><td>CyberChef &gt; From Binary</td></tr>
+    <tr><td>No idea at all</td><td>Unknown</td><td>CyberChef &gt; Magic (auto-detect!)</td></tr>
+  </tbody>
+</table></div>
+<h2>CyberChef Pro Tips</h2>
+<ul>
+  <li><strong>Magic recipe</strong> — paste ANYTHING in and CyberChef tries to auto-detect and decode</li>
+  <li><strong>Chain recipes</strong> — URL Decode THEN Base64 Decode for double-encoded payloads</li>
+  <li><strong>From Charcode</strong> — use for ASCII decimal (set delimiter to Space)</li>
+  <li><strong>Save recipes</strong> — build your own reusable decode chain</li>
+</ul>
+</article>
+</template>
+
+<template id="tpl-ref-tools">
+<article class="topic">
+<h1>REF · Additional Tools &amp; Resources</h1>
+<hr class="divider">
+<p><em>Tools widely used in industry that may not be covered in the course.</em></p>
+<h2>Network Analysis</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Tool</th><th>Purpose</th><th>Install</th></tr></thead>
+  <tbody>
+    <tr><td>nmap</td><td>Port scanning and service detection</td><td>sudo apt install nmap</td></tr>
+    <tr><td>netcat (nc)</td><td>Network swiss army knife</td><td>sudo apt install netcat</td></tr>
+    <tr><td>tshark</td><td>CLI version of Wireshark</td><td>sudo apt install tshark</td></tr>
+    <tr><td>zeek</td><td>Network monitoring framework</td><td>sudo apt install zeek</td></tr>
+    <tr><td>ngrep</td><td>Network grep — search packet contents</td><td>sudo apt install ngrep</td></tr>
+    <tr><td>iftop</td><td>Real-time bandwidth monitor</td><td>sudo apt install iftop</td></tr>
+  </tbody>
+</table></div>
+<h2>Log Analysis &amp; Forensics</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td>jq</td><td>Parse and filter JSON structured logs</td></tr>
+    <tr><td>lnav</td><td>Log file navigator with syntax highlighting</td></tr>
+    <tr><td>GoAccess</td><td>Real-time Apache/Nginx log analyzer with web dashboard</td></tr>
+    <tr><td>auditd</td><td>Linux audit daemon — tracks file and syscall access</td></tr>
+    <tr><td>Chainsaw</td><td>Hunt through Windows event logs quickly</td></tr>
+    <tr><td>Hayabusa</td><td>Windows event log fast forensics and threat hunting</td></tr>
+    <tr><td>Volatility</td><td>Memory forensics framework</td></tr>
+  </tbody>
+</table></div>
+<h2>Malware Analysis</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td>strings</td><td>Extract readable text from binaries</td></tr>
+    <tr><td>file</td><td>Identify file type regardless of extension</td></tr>
+    <tr><td>xxd</td><td>Hex dump of binary files</td></tr>
+    <tr><td>strace</td><td>Trace system calls made by a process</td></tr>
+    <tr><td>binwalk</td><td>Firmware and binary analysis</td></tr>
+    <tr><td>Ghidra</td><td>NSA free reverse engineering tool</td></tr>
+    <tr><td>CAPA</td><td>Identify capabilities in executables</td></tr>
+    <tr><td>YARA</td><td>Pattern matching for malware identification</td></tr>
+  </tbody>
+</table></div>
+<h2>Useful One-Liners</h2>
+<pre><code><span class="cm"># Find all IPs in a log file</span>
+grep -oE '[0-9]{1,3}(\.[0-9]{1,3}){3}' file.log | sort | uniq -c | sort -rn
+<span class="cm"># Find all URLs in a file</span>
+grep -oP 'https?://[^\s"]+' file.log | sort -u
+<span class="cm"># Watch for failed SSH attempts live</span>
+sudo tail -f /var/log/auth.log | grep -i 'failed\|invalid'
+<span class="cm"># Count failed SSH attempts by IP</span>
+sudo grep 'Failed password' /var/log/auth.log | awk '{print $11}' | sort | uniq -c | sort -rn
+<span class="cm"># Find hidden files in web dir</span>
+ls -la /var/www/html/
+<span class="cm"># Check who is currently logged in</span>
+w
+<span class="cm"># See full process tree</span>
+ps auxf</code></pre>
+<h2>Quick Reference — Analysis Services</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Service</th><th>URL</th><th>What to Submit</th></tr></thead>
+  <tbody>
+    <tr><td>VirusTotal</td><td>virustotal.com</td><td>Hash, file, URL, IP, domain</td></tr>
+    <tr><td>Hybrid Analysis</td><td>hybrid-analysis.com</td><td>Suspicious file for sandbox</td></tr>
+    <tr><td>Any.run</td><td>any.run</td><td>Interactive malware sandbox</td></tr>
+    <tr><td>URLScan.io</td><td>urlscan.io</td><td>Suspicious URL</td></tr>
+    <tr><td>AbuseIPDB</td><td>abuseipdb.com</td><td>IP address reputation</td></tr>
+    <tr><td>ThreatFox</td><td>threatfox.abuse.ch</td><td>IOC lookup</td></tr>
+    <tr><td>MalwareBazaar</td><td>bazaar.abuse.ch</td><td>Hash / malware family</td></tr>
+    <tr><td>CyberChef</td><td>gchq.github.io/CyberChef</td><td>Encoded strings to decode</td></tr>
+    <tr><td>crontab.guru</td><td>crontab.guru</td><td>Cron schedule strings</td></tr>
+  </tbody>
+</table></div>
+</article>
+</template>
+
+<script src="js/app.js"></script>
+</body>
+</html>
