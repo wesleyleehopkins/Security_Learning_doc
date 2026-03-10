@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nmap — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Notebook</div>
+      <div class="sidebar-title">Nmap</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">🔭</div>
+          <h2>Nmap</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Nmap',
+  topics: [
+    { id: 'overview',       badge: '01', label: 'Overview & Syntax'     },
+    { id: 'flag-reference', badge: '02', label: 'Flag Reference Table'  },
+    { id: 'timing',         badge: '03', label: 'Timing & Performance'  },
+    { id: 'sub-pages',      badge: '→',  label: 'Sub-Notebooks'         },
+  ]
+};
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EMBEDDED CONTENT TEMPLATES — no server required
+     ═══════════════════════════════════════════════════════════════ -->
+
+<template id="tpl-overview">
+<article class="topic">
+<h1>01 · Nmap — Overview &amp; Syntax</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-note">Nmap primarily operates at L3 (IP routing, ICMP) and L4 (TCP/UDP port enumeration) to discover hosts and map open ports across networks.</span>
+</div>
+<hr class="divider">
+
+<h2>What is Nmap?</h2>
+<p>Nmap (Network Mapper) is an open-source tool for network discovery and security auditing. It uses raw IP packets to determine which hosts are on a network, what services those hosts are running, operating systems and versions, firewall/filter types, and dozens of other characteristics. In a SOC context it is used for asset inventory, firewall rule validation, vulnerability surface mapping, and baseline comparisons.</p>
+
+<div class="callout warn"><strong>Authorization Required</strong> — Always obtain written authorization before scanning. Unauthorized port scanning may violate computer crime laws (CFAA, Computer Misuse Act) and organizational policy.</div>
+
+<h2>Basic Syntax</h2>
+<pre><code>nmap [Scan Type] [Options] {target specification}
+
+<span class="cm"># Target formats</span>
+nmap 192.168.1.1                  <span class="cm"># single host</span>
+nmap 192.168.1.0/24               <span class="cm"># CIDR subnet</span>
+nmap 192.168.1-5.1-254            <span class="cm"># octet ranges</span>
+nmap 192.168.1.1,5,10             <span class="cm"># comma list</span>
+nmap -iL targets.txt              <span class="cm"># read from file</span>
+nmap --exclude 192.168.1.1        <span class="cm"># exclude host</span>
+nmap --excludefile exclude.txt    <span class="cm"># exclude from file</span></code></pre>
+
+<h2>Port States</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>State</th><th>Meaning</th><th>Packet Behavior</th></tr></thead>
+  <tbody>
+    <tr><td><strong>open</strong></td><td>Application actively accepting connections</td><td>SYN/ACK received; service is listening</td></tr>
+    <tr><td><strong>closed</strong></td><td>Accessible but no application listening</td><td>RST received; host reachable, no service</td></tr>
+    <tr><td><strong>filtered</strong></td><td>Firewall/filter prevents probe from reaching port</td><td>No response, or ICMP unreachable type 3 received</td></tr>
+    <tr><td><strong>unfiltered</strong></td><td>Accessible, but Nmap cannot determine open or closed</td><td>ACK scan only — RST received but state unknown</td></tr>
+    <tr><td><strong>open|filtered</strong></td><td>Cannot distinguish open from filtered</td><td>UDP, NULL, FIN, Xmas — no response received</td></tr>
+    <tr><td><strong>closed|filtered</strong></td><td>Cannot distinguish closed from filtered</td><td>IP ID idle scan only</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Common One-Liners</h2>
+<pre><code><span class="cm"># Host discovery only — no port scan</span>
+nmap -sn 192.168.1.0/24
+
+<span class="cm"># Default scan — top 1000 TCP ports, SYN if root/admin</span>
+nmap 192.168.1.10
+
+<span class="cm"># Full port scan with service version detection</span>
+nmap -sS -sV -p- 192.168.1.10
+
+<span class="cm"># Aggressive scan — sV + default scripts + OS + traceroute</span>
+nmap -A 192.168.1.10
+
+<span class="cm"># UDP top 100 ports (combine with TCP)</span>
+nmap -sS -sU --top-ports 100 192.168.1.10
+
+<span class="cm"># Default scripts + vuln category</span>
+nmap -sV --script=default,vuln 192.168.1.10
+
+<span class="cm"># Save all output formats at once</span>
+nmap -sS -sV -oA scan_results 192.168.1.10
+
+<span class="cm"># Stealth: slow timing, only show open ports</span>
+nmap -sS -T1 --open 192.168.1.0/24
+
+<span class="cm"># Check firewall rules (ACK scan)</span>
+nmap -sA -p 22,80,443,3389 192.168.1.10</code></pre>
+
+<h2>SOC Use Cases</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Use Case</th><th>Command</th></tr></thead>
+  <tbody>
+    <tr><td>Asset inventory / host discovery</td><td><code>nmap -sn 10.0.0.0/8 -oA hosts</code></td></tr>
+    <tr><td>Verify firewall rules (ACK scan)</td><td><code>nmap -sA -p 22,80,443,3389 target</code></td></tr>
+    <tr><td>Identify exposed management ports</td><td><code>nmap -p 22,23,3389,5900,8080,8443 subnet</code></td></tr>
+    <tr><td>Vulnerability scan via NSE</td><td><code>nmap --script=vuln target</code></td></tr>
+    <tr><td>Detect EternalBlue (MS17-010)</td><td><code>nmap --script=smb-vuln-ms17-010 -p 445 target</code></td></tr>
+    <tr><td>Service version baseline / change detection</td><td><code>nmap -sV --version-all -oX baseline.xml subnet</code></td></tr>
+    <tr><td>Detect default credentials</td><td><code>nmap --script=http-default-accounts target</code></td></tr>
+    <tr><td>SSL/TLS certificate inspection</td><td><code>nmap --script=ssl-cert,ssl-enum-ciphers -p 443 target</code></td></tr>
+    <tr><td>Compare two scan results (change detection)</td><td><code>ndiff baseline.xml newscan.xml</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Nmap Output — Reading Results</h2>
+<pre><code>Starting Nmap 7.94 ( https://nmap.org ) at 2024-03-07 14:22 UTC
+Nmap scan report for 192.168.1.10
+Host is up (0.0045s latency).
+Not shown: 995 closed tcp ports (reset)
+PORT     STATE    SERVICE      VERSION
+22/tcp   open     ssh          OpenSSH 8.9p1 Ubuntu 3ubuntu0.6
+80/tcp   open     http         Apache httpd 2.4.52
+443/tcp  open     ssl/http     Apache httpd 2.4.52
+3306/tcp filtered mysql
+8080/tcp open     http-proxy   Squid http proxy 5.2
+
+OS details: Linux 5.0 - 5.4
+Network Distance: 2 hops
+
+Nmap done: 1 IP address (1 host up) scanned in 12.34 seconds
+<span class="cm"># filtered = firewall blocking probe (no RST, no SYN/ACK)</span>
+<span class="cm"># STATE=closed ports omitted from output by default</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Understanding what Nmap does and basic syntax</h4>
+    <ul>
+      <li>Nmap sends L3 IP packets and reads L4 TCP/UDP responses to determine which ports are open</li>
+      <li>Port states: <code>open</code> (SYN/ACK), <code>closed</code> (RST), <code>filtered</code> (no response or ICMP unreachable)</li>
+      <li>Always scan with written authorization — unauthorized scanning may violate CFAA/Computer Misuse Act</li>
+      <li>Use CIDR notation to scan a subnet: <code>192.168.56.0/24</code> covers all 256 addresses</li>
+    </ul>
+    <pre><code>sudo nmap -sS 192.168.56.30  <span class="cm"># basic SYN scan of Windows target (requires root)</span>
+sudo nmap -sn 192.168.56.0/24  <span class="cm"># host discovery only, no port scan</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Combining flags for efficient, complete scans</h4>
+    <ul>
+      <li>Combine <code>-sS -sV -O</code> to get port state (L4), service version (L7), and OS fingerprint (L3/L4) in one pass</li>
+      <li>Use <code>-oA</code> to save all three output formats simultaneously for documentation and later parsing</li>
+      <li>Use <code>--open</code> to suppress closed/filtered ports and focus on actionable results</li>
+    </ul>
+    <pre><code>sudo nmap -sS -sV -O -p 1-1000 --open -oA scan_results 192.168.56.30
+<span class="cm"># SYN scan + version detection + OS fingerprint on top 1000 ports</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Full recon pipeline with NSE and change detection</h4>
+    <ul>
+      <li>Chain <code>-sS -sV -O --script=default,vuln</code> for comprehensive enumeration including L7 application vulnerabilities</li>
+      <li>Use <code>ndiff</code> against XML baselines to detect network changes between scans</li>
+      <li>Combine timing evasion (<code>-T1 --scan-delay</code>) with decoys (<code>-D RND:5,ME</code>) to reduce IDS detection probability</li>
+    </ul>
+    <pre><code>sudo nmap -sS -sV -O --script=default,vuln -p- -T4 --open -oA full_recon 192.168.56.30
+<span class="cm"># All ports + version + OS + default and vuln scripts combined</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-flag-reference">
+<article class="topic">
+<h1>02 · Nmap — Flag Reference Table</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l2">L2 Data Link</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Flags span all layers: ARP discovery (L2), IP/ICMP probes (L3), TCP/UDP scan types (L4), and NSE/version scripts (L7).</span>
+</div>
+<hr class="divider">
+
+<h2>Scan Types</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Flag</th><th>Scan Type</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>-sS</code></td><td>TCP SYN (Stealth / Half-open)</td><td>Default with root. Sends SYN; never completes handshake. Fastest &amp; stealthiest TCP scan.</td></tr>
+    <tr><td><code>-sT</code></td><td>TCP Connect</td><td>Full 3-way handshake via OS. Used without root/admin. Logged by target applications.</td></tr>
+    <tr><td><code>-sU</code></td><td>UDP</td><td>Slow — retransmits on no response. ICMP port unreachable = closed; no response = open|filtered.</td></tr>
+    <tr><td><code>-sA</code></td><td>TCP ACK</td><td>Maps firewall rules, NOT open/closed. RST = unfiltered; no response = filtered.</td></tr>
+    <tr><td><code>-sW</code></td><td>TCP Window</td><td>Like ACK but examines TCP window size in RST. May differentiate open/closed on some OS.</td></tr>
+    <tr><td><code>-sM</code></td><td>TCP Maimon</td><td>FIN+ACK probe. BSD systems drop if open, RST if closed.</td></tr>
+    <tr><td><code>-sN</code></td><td>TCP NULL</td><td>No flags set (0x000). RFC: closed → RST, open → nothing. Fails on Windows.</td></tr>
+    <tr><td><code>-sF</code></td><td>TCP FIN</td><td>FIN flag only. Same RFC logic as NULL. Evades some stateless firewalls. Fails on Windows.</td></tr>
+    <tr><td><code>-sX</code></td><td>TCP Xmas</td><td>FIN+PSH+URG. Same RFC logic. Named for blinking lights pattern. Fails on Windows.</td></tr>
+    <tr><td><code>-sI &lt;zombie&gt;</code></td><td>Idle (Zombie)</td><td>Blind scan using idle host IP ID. Source IP appears as zombie, not attacker.</td></tr>
+    <tr><td><code>-sO</code></td><td>IP Protocol</td><td>Determines which IP protocols (TCP, UDP, ICMP, etc.) target supports at layer 3.</td></tr>
+    <tr><td><code>-b &lt;FTP relay&gt;</code></td><td>FTP Bounce</td><td>Uses FTP PORT command to scan via relay host. Largely patched on modern servers.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Host Discovery</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Flag</th><th>Description</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><code>-sn</code></td><td>Ping scan only — host discovery, no port scan</td><td><code>nmap -sn 192.168.1.0/24</code></td></tr>
+    <tr><td><code>-sL</code></td><td>List scan — enumerate targets, no packets sent</td><td><code>nmap -sL 192.168.1.0/24</code></td></tr>
+    <tr><td><code>-Pn</code></td><td>Skip discovery — treat all hosts as online</td><td><code>nmap -Pn 10.10.10.5</code></td></tr>
+    <tr><td><code>-PS[ports]</code></td><td>TCP SYN ping to specified ports</td><td><code>nmap -PS22,80,443 target</code></td></tr>
+    <tr><td><code>-PA[ports]</code></td><td>TCP ACK ping — penetrates some stateless firewalls</td><td><code>nmap -PA80,443 target</code></td></tr>
+    <tr><td><code>-PU[ports]</code></td><td>UDP ping to specified ports</td><td><code>nmap -PU53,161 target</code></td></tr>
+    <tr><td><code>-PE</code></td><td>ICMP echo request (ping)</td><td><code>nmap -PE 192.168.1.0/24</code></td></tr>
+    <tr><td><code>-PP</code></td><td>ICMP timestamp request</td><td><code>nmap -PP target</code></td></tr>
+    <tr><td><code>-PM</code></td><td>ICMP address mask request</td><td><code>nmap -PM target</code></td></tr>
+    <tr><td><code>-PR</code></td><td>ARP scan — default on local Ethernet; fastest, most reliable</td><td><code>nmap -PR 192.168.1.0/24</code></td></tr>
+    <tr><td><code>-n</code></td><td>No DNS resolution — faster scans</td><td><code>nmap -n -sn 10.0.0.0/8</code></td></tr>
+    <tr><td><code>-R</code></td><td>Always resolve DNS (even offline hosts)</td><td><code>nmap -R target</code></td></tr>
+    <tr><td><code>--traceroute</code></td><td>Trace path to each host after scan</td><td><code>nmap -A --traceroute target</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Port Specification</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Flag</th><th>Description</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><code>-p &lt;ports&gt;</code></td><td>Specify ports — single, range, list, or all</td><td><code>-p 22</code> &nbsp; <code>-p 1-1024</code> &nbsp; <code>-p 22,80,443</code> &nbsp; <code>-p-</code></td></tr>
+    <tr><td><code>-p U:,T:</code></td><td>Specify UDP and TCP ports separately</td><td><code>-p U:53,T:22,80,443</code></td></tr>
+    <tr><td><code>--top-ports &lt;n&gt;</code></td><td>Scan n most common ports (from nmap-services)</td><td><code>--top-ports 1000</code></td></tr>
+    <tr><td><code>-F</code></td><td>Fast mode — top 100 ports only</td><td><code>nmap -F target</code></td></tr>
+    <tr><td><code>-r</code></td><td>Scan ports sequentially (not randomized)</td><td><code>nmap -r target</code></td></tr>
+    <tr><td><code>--exclude-ports</code></td><td>Exclude specific ports from scan</td><td><code>--exclude-ports 9100</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Service &amp; Version Detection</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Flag</th><th>Description</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>-sV</code></td><td>Service/version detection</td><td>Probes open ports to determine service name, version, and protocol</td></tr>
+    <tr><td><code>--version-intensity 0-9</code></td><td>Probe intensity (0=lightest, 9=all probes)</td><td>Default: 7. Higher = more accurate but slower.</td></tr>
+    <tr><td><code>--version-light</code></td><td>Intensity 2 — fastest version detection</td><td>Misses obscure services; use for broad scans</td></tr>
+    <tr><td><code>--version-all</code></td><td>Intensity 9 — try every probe</td><td>Very slow; use on individual hosts</td></tr>
+    <tr><td><code>--version-trace</code></td><td>Show detailed version scan activity</td><td>For debugging version probe issues</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>OS Detection</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Flag</th><th>Description</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>-O</code></td><td>Enable OS detection</td><td>Requires root/admin. Needs ≥1 open + ≥1 closed TCP port.</td></tr>
+    <tr><td><code>--osscan-limit</code></td><td>Only attempt OS detection on promising hosts</td><td>Reduces false guesses on large subnet scans</td></tr>
+    <tr><td><code>--osscan-guess</code></td><td>Guess OS more aggressively</td><td>Prints best guess even when confidence is low</td></tr>
+    <tr><td><code>--max-os-tries</code></td><td>Max retries for OS detection</td><td>Default: 5</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Script Engine (NSE)</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Flag</th><th>Description</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><code>-sC</code></td><td>Run default scripts (= <code>--script=default</code>)</td><td><code>nmap -sC target</code></td></tr>
+    <tr><td><code>--script=&lt;name&gt;</code></td><td>Run specific script or comma-separated list</td><td><code>--script=smb-vuln-ms17-010</code></td></tr>
+    <tr><td><code>--script=&lt;category&gt;</code></td><td>Run all scripts in a category</td><td><code>--script=vuln</code> &nbsp; <code>--script=auth</code></td></tr>
+    <tr><td><code>--script-args=&lt;args&gt;</code></td><td>Pass key=value arguments to scripts</td><td><code>--script-args userdb=/tmp/u.txt,passdb=/tmp/p.txt</code></td></tr>
+    <tr><td><code>--script-args-file=&lt;f&gt;</code></td><td>Load script args from file (one key=value per line)</td><td><code>--script-args-file args.txt</code></td></tr>
+    <tr><td><code>--script-trace</code></td><td>Show all data sent/received by scripts</td><td>Verbose NSE debugging</td></tr>
+    <tr><td><code>--script-updatedb</code></td><td>Update script database after adding new scripts</td><td></td></tr>
+    <tr><td><code>--script-help=&lt;name&gt;</code></td><td>Show script documentation and arguments</td><td><code>--script-help=http-title</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Output</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Flag</th><th>Description</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>-oN &lt;file&gt;</code></td><td>Normal output — human-readable text</td><td>Same as console display; good for documentation</td></tr>
+    <tr><td><code>-oX &lt;file&gt;</code></td><td>XML output — machine-parsable</td><td>Use with ndiff, xsltproc, Metasploit, and custom scripts</td></tr>
+    <tr><td><code>-oG &lt;file&gt;</code></td><td>Grepable output — one line per host</td><td>Easy to parse with grep/awk; deprecated but still useful</td></tr>
+    <tr><td><code>-oS &lt;file&gt;</code></td><td>Script kiddie output</td><td>lEEt speak format; not useful operationally</td></tr>
+    <tr><td><code>-oA &lt;basename&gt;</code></td><td>All three formats simultaneously</td><td><code>-oA scan</code> → scan.nmap + scan.xml + scan.gnmap</td></tr>
+    <tr><td><code>-v</code> / <code>-vv</code></td><td>Verbose — show open ports as discovered</td><td>-vv for extra verbosity including closed ports</td></tr>
+    <tr><td><code>-d</code> / <code>-dd</code></td><td>Debug output — extremely detailed</td><td>For troubleshooting scan issues</td></tr>
+    <tr><td><code>--reason</code></td><td>Show reason for each port state</td><td>syn-ack, rst, no-response, admin-prohibited, etc.</td></tr>
+    <tr><td><code>--open</code></td><td>Only show open (or open|filtered) ports</td><td>Cleaner output when scanning large subnets</td></tr>
+    <tr><td><code>--packet-trace</code></td><td>Show every packet sent and received</td><td>Low-level debugging; very verbose</td></tr>
+    <tr><td><code>--iflist</code></td><td>Print host interfaces and routes, then exit</td><td>Useful for verifying source interface</td></tr>
+    <tr><td><code>--append-output</code></td><td>Append to output files instead of overwriting</td><td>Useful for incremental scans</td></tr>
+    <tr><td><code>--resume &lt;file&gt;</code></td><td>Resume an aborted scan from .nmap or .gnmap file</td><td></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Miscellaneous</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Flag</th><th>Description</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>-A</code></td><td>Aggressive — enables -sV -sC -O --traceroute</td><td>Noisy; only use when speed &gt; stealth</td></tr>
+    <tr><td><code>-6</code></td><td>Enable IPv6 scanning</td><td>Target must be IPv6 address or dual-stack hostname</td></tr>
+    <tr><td><code>-S &lt;IP&gt;</code></td><td>Spoof source IP address</td><td>Usually requires --send-eth; responses go to spoofed IP</td></tr>
+    <tr><td><code>-e &lt;iface&gt;</code></td><td>Specify network interface</td><td><code>-e eth0</code></td></tr>
+    <tr><td><code>-D &lt;decoys&gt;</code></td><td>Decoy scan — mix real source with fake IPs</td><td><code>-D RND:10,ME</code> — 10 random + your real IP</td></tr>
+    <tr><td><code>-f</code> / <code>--mtu &lt;n&gt;</code></td><td>Fragment packets / set MTU for fragmentation</td><td>IDS evasion — may confuse simple packet filters</td></tr>
+    <tr><td><code>--data-length &lt;n&gt;</code></td><td>Append n bytes of random data to packets</td><td>Changes packet fingerprint for IDS evasion</td></tr>
+    <tr><td><code>--ttl &lt;n&gt;</code></td><td>Set IP TTL value in sent packets</td><td></td></tr>
+    <tr><td><code>--randomize-hosts</code></td><td>Scan targets in random order</td><td>Reduces sequential pattern in IDS logs</td></tr>
+    <tr><td><code>--send-eth</code></td><td>Send raw Ethernet frames</td><td>Default when on local network segment</td></tr>
+    <tr><td><code>--send-ip</code></td><td>Send raw IP packets</td><td>Default when routing through gateway</td></tr>
+    <tr><td><code>--privileged</code></td><td>Assume raw socket privileges</td><td></td></tr>
+    <tr><td><code>--unprivileged</code></td><td>Assume no raw sockets — fall back to connect()</td><td></td></tr>
+    <tr><td><code>-V</code></td><td>Print Nmap version and exit</td><td></td></tr>
+    <tr><td><code>-h</code></td><td>Print help summary</td><td></td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>The essential flag combinations for daily use</h4>
+    <ul>
+      <li><code>-sS</code> is the default TCP scan (L4 SYN probe) when running as root — fastest and most common</li>
+      <li><code>-sV</code> upgrades from L4 port detection to L7 version identification by probing open ports</li>
+      <li><code>-p-</code> scans all 65535 ports; omitting it scans only the top 1000 most common</li>
+      <li><code>-Pn</code> skips host discovery — needed when targets block all ping probes</li>
+    </ul>
+    <pre><code>sudo nmap -sS -p 22,80,443,3389 192.168.56.30  <span class="cm"># scan key ports on Windows target</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Layered flag combinations for complete recon</h4>
+    <ul>
+      <li>Pair <code>-sS -sU</code> to cover both TCP (L4) and UDP (L4) surfaces simultaneously</li>
+      <li><code>-O</code> fingerprints at L3/L4 (TTL, TCP window, ISN); requires at least 1 open + 1 closed port</li>
+      <li><code>--reason</code> shows why each port received its state — invaluable for firewall analysis</li>
+    </ul>
+    <pre><code>sudo nmap -sS -sV -O -p 1-1000 --open --reason 192.168.56.30
+<span class="cm"># SYN scan + service version + OS detect on top 1000 ports with state reasons</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Evasion and comprehensive coverage</h4>
+    <ul>
+      <li>Use <code>-D RND:10,ME</code> to mix decoy IPs at L3 — obscures scanner's real IP in firewall logs</li>
+      <li><code>-f</code> or <code>--mtu 16</code> fragments L3 packets to evade simple stateless packet inspection</li>
+      <li>Combine <code>-sS -sU -sV -O --script=vuln</code> for a full multi-layer enumeration pass</li>
+    </ul>
+    <pre><code>sudo nmap -sS -sV -O --script=vuln -p- -T4 --open -D RND:5,ME -oA evasive_scan 192.168.56.30
+<span class="cm"># Full scan with decoy IPs to reduce attribution in target logs</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-timing">
+<article class="topic">
+<h1>03 · Nmap — Timing &amp; Performance</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-note">Timing controls govern how quickly L3/L4 probe packets are sent and retransmitted — directly affecting IDS detection probability and scan completeness.</span>
+</div>
+<hr class="divider">
+
+<h2>Timing Templates</h2>
+<div class="callout"><strong>Rule of thumb:</strong> -T3 is the default. Use -T4 on fast trusted networks. Use -T1 or -T2 for IDS evasion. Never use -T5 in production — it sacrifices accuracy.</div>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Template</th><th>Name</th><th>RTT Timeout</th><th>Parallelism</th><th>Scan Delay</th><th>Use Case</th></tr></thead>
+  <tbody>
+    <tr><td><code>-T0</code></td><td>Paranoid</td><td>5 min</td><td>Serial (1 at a time)</td><td>5 min</td><td>Max IDS evasion; extremely slow; CTF/targeted attacks</td></tr>
+    <tr><td><code>-T1</code></td><td>Sneaky</td><td>15 sec</td><td>Serial (1 at a time)</td><td>15 sec</td><td>IDS evasion; covert pentest; time allows</td></tr>
+    <tr><td><code>-T2</code></td><td>Polite</td><td>10 sec</td><td>Serial (1 at a time)</td><td>400 ms</td><td>Reduce bandwidth impact; avoid overwhelming target</td></tr>
+    <tr><td><code>-T3</code></td><td>Normal</td><td>Dynamic</td><td>Dynamic</td><td>Dynamic</td><td>Default; balanced speed and reliability</td></tr>
+    <tr><td><code>-T4</code></td><td>Aggressive</td><td>1.25 sec</td><td>Aggressive</td><td>10 ms max</td><td>Fast LANs and modern internet connections</td></tr>
+    <tr><td><code>-T5</code></td><td>Insane</td><td>300 ms</td><td>Maximum</td><td>5 ms max</td><td>LAN only; sacrifices accuracy; not for production</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Fine-Grained Timing Options</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Option</th><th>Description</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><code>--min-rtt-timeout &lt;time&gt;</code></td><td>Minimum RTT for probe response wait</td><td><code>--min-rtt-timeout 100ms</code></td></tr>
+    <tr><td><code>--max-rtt-timeout &lt;time&gt;</code></td><td>Maximum RTT before probe is considered lost</td><td><code>--max-rtt-timeout 500ms</code></td></tr>
+    <tr><td><code>--initial-rtt-timeout &lt;time&gt;</code></td><td>Starting RTT estimate (before adaptive algorithm kicks in)</td><td><code>--initial-rtt-timeout 200ms</code></td></tr>
+    <tr><td><code>--max-retries &lt;n&gt;</code></td><td>Cap on probe retransmissions per port</td><td><code>--max-retries 2</code></td></tr>
+    <tr><td><code>--host-timeout &lt;time&gt;</code></td><td>Give up on host after this much time</td><td><code>--host-timeout 30m</code></td></tr>
+    <tr><td><code>--scan-delay &lt;time&gt;</code></td><td>Minimum delay between probes to one host</td><td><code>--scan-delay 1s</code></td></tr>
+    <tr><td><code>--max-scan-delay &lt;time&gt;</code></td><td>Maximum scan delay (caps adaptive increases)</td><td><code>--max-scan-delay 10s</code></td></tr>
+    <tr><td><code>--min-rate &lt;n&gt;</code></td><td>Send at least N packets per second</td><td><code>--min-rate 100</code></td></tr>
+    <tr><td><code>--max-rate &lt;n&gt;</code></td><td>Send no more than N packets per second</td><td><code>--max-rate 500</code></td></tr>
+    <tr><td><code>--min-parallelism &lt;n&gt;</code></td><td>Minimum simultaneous probes</td><td><code>--min-parallelism 10</code></td></tr>
+    <tr><td><code>--max-parallelism &lt;n&gt;</code></td><td>Maximum simultaneous probes</td><td><code>--max-parallelism 100</code></td></tr>
+    <tr><td><code>--min-hostgroup &lt;n&gt;</code></td><td>Minimum hosts scanned in parallel</td><td><code>--min-hostgroup 5</code></td></tr>
+    <tr><td><code>--max-hostgroup &lt;n&gt;</code></td><td>Maximum hosts scanned in parallel</td><td><code>--max-hostgroup 50</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Time Unit Suffixes</h2>
+<pre><code><span class="cm"># Nmap time units — default is milliseconds</span>
+ms    <span class="cm"># milliseconds  e.g. --scan-delay 500ms</span>
+s     <span class="cm"># seconds       e.g. --host-timeout 30s</span>
+m     <span class="cm"># minutes       e.g. --host-timeout 5m</span>
+h     <span class="cm"># hours         e.g. --host-timeout 1h</span></code></pre>
+
+<h2>Performance Tuning Examples</h2>
+<pre><code><span class="cm"># Fast internal network — top ports, aggressive timing</span>
+nmap -T4 -F 192.168.0.0/16
+
+<span class="cm"># Full port scan with rate cap (avoid IDS detection)</span>
+nmap -sS -p- -T2 --max-rate 200 10.10.10.5
+
+<span class="cm"># Large subnet host discovery — maximize parallelism</span>
+nmap -sn -T4 --min-hostgroup 64 10.0.0.0/8 -oA host_discovery
+
+<span class="cm"># Pentest: all ports + version + only open — fast LAN</span>
+nmap -sS -sV -p- -T4 --open -oA full_scan 10.10.10.5
+
+<span class="cm"># Quiet scan: T1 with forced scan delay</span>
+nmap -sS -T1 --scan-delay 5s --max-retries 1 10.10.10.5
+
+<span class="cm"># UDP scan with rate cap (UDP is naturally slow)</span>
+nmap -sU --top-ports 200 --max-rate 100 10.10.10.5</code></pre>
+
+<h2>IDS Evasion Timing Techniques</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Technique</th><th>Flag</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td>Slow timing</td><td><code>-T0</code> or <code>-T1</code></td><td>Spreads probes over time; avoids threshold-based IDS alerts</td></tr>
+    <tr><td>Hard rate cap</td><td><code>--max-rate 10</code></td><td>Absolute limit on packets/sec regardless of timing template</td></tr>
+    <tr><td>Per-host delay</td><td><code>--scan-delay 2s</code></td><td>Enforces minimum wait between each probe to the same host</td></tr>
+    <tr><td>Randomize targets</td><td><code>--randomize-hosts</code></td><td>Scans targets in random order — avoids sequential sweep pattern</td></tr>
+    <tr><td>Decoy IPs</td><td><code>-D RND:5,ME</code></td><td>Mixes 5 random decoy IPs with real source — obscures origin</td></tr>
+    <tr><td>Fragment packets</td><td><code>-f</code> or <code>--mtu 16</code></td><td>Splits TCP headers across fragments — evades simple packet filters</td></tr>
+    <tr><td>Append data</td><td><code>--data-length 25</code></td><td>Adds random bytes to packets — changes signature</td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Choosing the right timing template</h4>
+    <ul>
+      <li><code>-T3</code> is the default — balanced for most L3/L4 probe/response cycles</li>
+      <li><code>-T4</code> is safe on internal LANs (like 192.168.56.0/24) — aggressive but accurate</li>
+      <li><code>-T1</code> or <code>-T2</code> for covert scans — delays L4 probes to stay under IDS rate thresholds</li>
+      <li>Never use <code>-T5</code> in production — sacrifices accuracy to maximize raw packet rate</li>
+    </ul>
+    <pre><code>sudo nmap -sS -T4 192.168.56.30  <span class="cm"># fast scan on trusted internal LAN</span>
+sudo nmap -sS -T1 192.168.56.30  <span class="cm"># slow covert scan for IDS evasion</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Fine-grained timing for large subnets and evasion</h4>
+    <ul>
+      <li><code>--max-rate</code> caps packets/second regardless of timing template — useful for not overwhelming IDS</li>
+      <li><code>--min-hostgroup 64</code> parallelizes host scanning for faster large-subnet sweeps</li>
+      <li><code>--host-timeout</code> prevents slow/unresponsive hosts from stalling full subnet scans</li>
+    </ul>
+    <pre><code>sudo nmap -sS -sV -p 1-1000 -T4 --max-rate 500 --open -oA timed_scan 192.168.56.30
+<span class="cm"># Rate-capped version + service detection for controlled scanning</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Precision timing for IDS evasion and accuracy control</h4>
+    <ul>
+      <li>Set <code>--scan-delay 5s</code> with <code>--max-retries 1</code> for minimal-footprint scans that bypass rate-based IDS rules</li>
+      <li>Combine <code>--randomize-hosts</code> with slow timing to eliminate sequential sweep signatures in SIEM logs</li>
+      <li>Use <code>--min-rtt-timeout</code> and <code>--max-rtt-timeout</code> to tune for high-latency WAN targets without false filtered results</li>
+    </ul>
+    <pre><code>sudo nmap -sS -sV -O -p- -T1 --scan-delay 5s --max-retries 1 --randomize-hosts -oA stealth 192.168.56.30
+<span class="cm"># Maximum stealth: slow timing + per-probe delay + randomized order</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-sub-pages">
+<article class="topic">
+<h1>→ · Nmap Sub-Notebooks</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l2">L2 Data Link</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Sub-notebooks cover all OSI layers — from L2 ARP discovery through L3/L4 scanning to L7 NSE application-layer scripting.</span>
+</div>
+<hr class="divider">
+<p>The Nmap section is split into focused notebooks. Each is a standalone page with its own sidebar.</p>
+
+<h2>Available Sub-Notebooks</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Notebook</th><th>Topics Covered</th></tr></thead>
+  <tbody>
+    <tr><td><a href="nmap-scan-types.html" style="color:var(--accent-h)">Scan Types</a></td><td>SYN, TCP connect, UDP, NULL/FIN/Xmas, ACK/Window, Idle zombie — packet-level behavior for each</td></tr>
+    <tr><td><a href="nmap-host-discovery.html" style="color:var(--accent-h)">Host Discovery</a></td><td>Ping sweep methods, ARP scan, -Pn, target spec syntax, reading discovery output</td></tr>
+    <tr><td><a href="nmap-service-detection.html" style="color:var(--accent-h)">Service Detection</a></td><td>-sV intensity levels, OS detection requirements, banner grabbing, -A aggressive flag</td></tr>
+    <tr><td><a href="nmap-nse.html" style="color:var(--accent-h)">NSE Scripts</a></td><td>Script categories, default/vuln/auth/discovery/brute scripts, --script-args, realistic output</td></tr>
+    <tr><td><a href="nmap-output.html" style="color:var(--accent-h)">Output &amp; Parsing</a></td><td>-oN, -oX, -oG, -oA formats, grep/awk parsing, ndiff change detection, verbosity flags</td></tr>
+    <tr><td><a href="nmap-lab.html" style="color:var(--accent-h)">Lab: Full Recon</a></td><td>Full recon walkthrough — host discovery → port scan → service detection → NSE vuln scan with realistic output</td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Start with the right sub-notebook for your task</h4>
+    <ul>
+      <li>Begin with Host Discovery (L2/L3 ARP and ICMP) before any port scanning</li>
+      <li>Scan Types covers the L4 TCP/UDP probe mechanics — understanding these prevents misinterpreting results</li>
+      <li>Read Output & Parsing first if you need to understand existing scan results from a colleague</li>
+    </ul>
+    <pre><code>sudo nmap -sn 192.168.56.0/24  <span class="cm"># start here: host discovery before any port scanning</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Chaining sub-notebooks into a complete workflow</h4>
+    <ul>
+      <li>Host Discovery → Scan Types → Service Detection is the standard recon pipeline</li>
+      <li>NSE Scripts extend L7 coverage — run after service detection to target scripts to confirmed services</li>
+      <li>Use the Lab walkthrough to see how all phases integrate against a realistic target</li>
+    </ul>
+    <pre><code>sudo nmap -sS -sV -O -p 1-1000 --open --script=default 192.168.56.30
+<span class="cm"># Combines scan type + service detect + OS + default NSE in single pass</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Integrating output into automated SOC workflows</h4>
+    <ul>
+      <li>XML output from all sub-notebook scans feeds ndiff for automated change detection alerting</li>
+      <li>Import Nmap XML into Metasploit's database with <code>db_import</code> for unified asset tracking</li>
+      <li>Automate the full pipeline: discovery → port scan → service detect → NSE → ndiff diff report</li>
+    </ul>
+    <pre><code>sudo nmap -sS -sV -O --script=vuln -p- -T4 --open -oA full_recon 192.168.56.30
+ndiff baselines/192.168.56.30_prev.xml full_recon.xml  <span class="cm"># detect changes vs baseline</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<script src="js/app.js"></script>
+</body>
+</html>

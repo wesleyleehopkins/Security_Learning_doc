@@ -5,6 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Security Onion — SOC Notes</title>
   <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* Cross-reference links — click to jump to another section */
+    .xref {
+      display: inline;
+      color: var(--accent, #3b82f6);
+      font-size: 0.75em;
+      font-weight: 600;
+      border: 1px solid var(--accent, #3b82f6);
+      border-radius: 3px;
+      padding: 1px 5px;
+      margin-left: 4px;
+      text-decoration: none;
+      cursor: pointer;
+      white-space: nowrap;
+      opacity: 0.85;
+    }
+    .xref:hover { background: rgba(59,130,246,0.15); opacity: 1; }
+    .xref-group { color: #8b949e; font-size: 0.82em; margin-left: 2px; }
+    td .xref-group { display: block; margin-top: 3px; }
+  </style>
 </head>
 <body>
 
@@ -20,7 +40,13 @@
   <div class="nav-links">
     <a href="index.html">Home</a>
     <a href="psaa.html">PSAA</a>
-    <a href="security-onion.html">Security Onion</a>
+    <a href="security-onion.html" class="active">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
     <a href="log-sources.html">Log Sources</a>
   </div>
 </nav>
@@ -32,6 +58,7 @@
       <div class="sidebar-label">Notebook</div>
       <div class="sidebar-title">Security Onion</div>
     </div>
+    <!-- Nav items injected by app.js -->
   </aside>
 
   <main id="main" class="main">
@@ -48,258 +75,2056 @@
 
 </div>
 
+<!-- ═══════════════════════════════════════════════════
+     01 · Overview & Tool Stack
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-overview">
+<article class="topic">
+<h1>01 · Security Onion — Overview &amp; Tool Stack</h1>
+<hr class="divider">
+
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l2">L2 Data Link</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Security Onion passively monitors all layers — Zeek captures from L2 frames through L7 application content; Suricata matches signatures at L3–L7.</span>
+</div>
+
+<h2>What is Security Onion?</h2>
+<p>Security Onion is a free, open-source Linux distribution for threat hunting, enterprise security monitoring, and log management. It bundles a full NSM (Network Security Monitoring) tool stack into a single platform with one unified web interface — the <strong>Security Onion Console (SOC)</strong>.</p>
+<div class="callout"><strong>KEY:</strong> Security Onion is a platform, not a single tool. It orchestrates Suricata, Zeek, Elasticsearch, Kibana, and Stenographer together — one alert in the SOC links back to Zeek logs and raw PCAPs automatically.</div>
+
+<h2>Bundled Tool Stack</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Tool</th><th>Role</th><th>What It Produces</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Suricata</strong></td><td>Network IDS/IPS — signature-based detection</td><td>Alerts (EVE JSON events), protocol logs</td></tr>
+    <tr><td><strong>Zeek (Bro)</strong></td><td>Network analysis framework — stateful traffic inspection</td><td>Structured logs: conn.log, dns.log, http.log, ssl.log, files.log, etc.</td></tr>
+    <tr><td><strong>Elasticsearch</strong></td><td>Log storage, indexing, and full-text search backend</td><td>Searchable indices for all log data</td></tr>
+    <tr><td><strong>Logstash</strong></td><td>Log ingestion pipeline — parses and normalizes raw logs</td><td>Normalized ECS-format documents in Elasticsearch</td></tr>
+    <tr><td><strong>Kibana</strong></td><td>Web query and visualization UI (accessed via Hunt/Dashboards)</td><td>Dashboards, visual queries, KQL search</td></tr>
+    <tr><td><strong>Stenographer</strong></td><td>Full-packet capture storage (ring buffer)</td><td>Raw PCAP files indexed by IP/port/time</td></tr>
+    <tr><td><strong>Strelka</strong></td><td>File scanning / static malware analysis</td><td>File metadata, extracted IOCs, YARA hits</td></tr>
+    <tr><td><strong>CyberChef</strong></td><td>Data transformation and decoding (embedded in SOC)</td><td>Decoded/transformed data on demand</td></tr>
+    <tr><td><strong>Fleet / osquery</strong></td><td>Endpoint visibility — optional agent-based telemetry</td><td>Process, network, file queries from endpoints</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>SOC Web Interface — Sections</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Section</th><th>URL Path</th><th>Purpose</th><th>When to Use</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Alerts</strong></td><td>/alerts</td><td>Suricata IDS alerts — primary triage queue</td><td>Start every shift here; triage new alerts</td></tr>
+    <tr><td><strong>Hunt</strong></td><td>/hunt</td><td>KQL query interface for all log data (Zeek + Suricata)</td><td>Pivot from alert to investigate context</td></tr>
+    <tr><td><strong>Dashboards</strong></td><td>/dashboards</td><td>Pre-built Kibana visualizations for traffic patterns</td><td>Spot anomalies, baseline normal traffic</td></tr>
+    <tr><td><strong>PCAP</strong></td><td>/pcap</td><td>Retrieve raw packet captures from Stenographer</td><td>Get packet evidence for confirmed incidents</td></tr>
+    <tr><td><strong>Cases</strong></td><td>/cases</td><td>Incident case management, IOC tracking, evidence storage</td><td>Document TP alerts, track active incidents</td></tr>
+    <tr><td><strong>Grid</strong></td><td>/grid</td><td>Node health, service status, disk/CPU/memory monitoring</td><td>Check SO health, verify services are running</td></tr>
+    <tr><td><strong>Admin</strong></td><td>/admin</td><td>Configuration, user management, rule management UI</td><td>Configure rulesets, add users, tune settings</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>How Data Flows</h2>
+<pre><code>Traffic on wire (SPAN port / tap)
+         ↓
+  Monitoring interface (eth1 — no IP, promiscuous mode)
+         ↓
+   ┌─────┴─────┐
+   │           │
+Suricata     Zeek          ← Both read from eth1 simultaneously
+   │           │
+Alerts      Structured logs (conn/dns/http/ssl/files/etc.)
+   │           │
+   └─────┬─────┘
+         ↓
+     Logstash               ← Normalizes logs → ECS format
+         ↓
+   Elasticsearch            ← Indexes and stores everything
+         ↓
+   SOC Web Interface        ← Analyst queries via Alerts/Hunt/Dashboards
+         ↓
+   Stenographer             ← Separately stores raw PCAPs (ring buffer)</code></pre>
+
+<h2>Network Positioning</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Interface</th><th>Has IP?</th><th>Connected To</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td>eth0 (Management)</td><td>Yes — 192.168.56.20</td><td>Management network / host-only</td><td>Web UI access, SSH, updates, agent communication</td></tr>
+    <tr><td>eth1 (Monitoring)</td><td>No — promiscuous mode</td><td>SPAN port, network tap, or same segment as targets</td><td>Passive traffic capture — Suricata and Zeek read this</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="callout warn"><strong>Important:</strong> The monitoring interface must see all traffic you want to monitor. In a virtual lab, connect it to the same internal network as your attacker and victim VMs.</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Getting Oriented</summary>
+  <div class="tier-body">
+    <h4>First things to do</h4>
+    <ul>
+      <li>Open <code>https://192.168.56.20</code> and log in — this is the Security Onion Console (SOC)</li>
+      <li>Click <strong>Alerts</strong> — this is your primary triage queue for Suricata IDS events</li>
+      <li>Click <strong>Dashboards</strong> — get the big picture: traffic volume, top alert types, DNS activity</li>
+      <li>Understand which tool does what: Suricata = alerts, Zeek = logs, Stenographer = raw PCAPs</li>
+    </ul>
+    <h4>Key concept</h4>
+    <ul>
+      <li>Security Onion is a <em>platform</em> — it orchestrates many tools under one interface. You don't need to SSH in for normal analysis.</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Pivoting Between Tools</summary>
+  <div class="tier-body">
+    <h4>The community_id pivot (most important skill)</h4>
+    <ul>
+      <li><code>network.community_id</code> is a hash of the 5-tuple that appears identically in Suricata alerts, Zeek conn.log, http.log, dns.log, and the PCAP metadata</li>
+      <li>Copy the community_id from an alert → go to <strong>Hunt</strong> → search that value → see all log data for the same connection</li>
+    </ul>
+    <h4>Data flow awareness</h4>
+    <ul>
+      <li>Traffic enters eth1 → Suricata and Zeek read simultaneously → Logstash normalizes → Elasticsearch stores → SOC displays</li>
+      <li>Stenographer stores full PCAPs separately and serves them on demand via the PCAP interface</li>
+    </ul>
+    <pre><code>network.community_id: "1:abc123=="   <span class="cm"># Hunt query linking alert ↔ Zeek ↔ PCAP</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Architecture &amp; Tuning</summary>
+  <div class="tier-body">
+    <h4>Elasticsearch index management</h4>
+    <ul>
+      <li>Indices rotate daily — configure ILM (Index Lifecycle Management) for retention vs. storage tradeoffs</li>
+      <li>Check index health: <strong>Grid</strong> → Elasticsearch status, or use <code>so-elastic-status</code></li>
+    </ul>
+    <h4>Distributed deployment</h4>
+    <ul>
+      <li>Add remote sensors: install SO on additional machines → register as sensor nodes pointing at manager</li>
+      <li>Manager holds Elasticsearch; sensors run Suricata and Zeek, forwarding to manager</li>
+      <li>Strelka (static file analysis) runs on manager — configure file extraction thresholds in Zeek to control what gets sent</li>
+    </ul>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     02 · Setup & Deployment
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-setup">
+<article class="topic">
+<h1>02 · Security Onion — Setup &amp; Deployment</h1>
+<hr class="divider">
+
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l2">L2 Data Link</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Proper interface placement determines which OSI layers are visible — a promiscuous NIC on a SPAN port captures all frames from L2 up.</span>
+</div>
+
+<h2>Deployment Modes</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Mode</th><th>Use Case</th><th>Min CPU</th><th>Min RAM</th><th>Min Disk</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Eval</strong></td><td>Lab/testing only — all-in-one, not for production</td><td>4 cores</td><td>8 GB</td><td>200 GB</td></tr>
+    <tr><td><strong>Standalone</strong></td><td>Single production node — small office/network segment</td><td>8 cores</td><td>16 GB</td><td>1 TB</td></tr>
+    <tr><td><strong>Manager + Sensor</strong></td><td>Dedicated sensor captures traffic, manager stores data</td><td>4+8 cores</td><td>8+16 GB</td><td>varies</td></tr>
+    <tr><td><strong>Distributed</strong></td><td>Enterprise — multiple sensors, manager, receiver, search nodes</td><td>varies</td><td>varies</td><td>varies</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="callout lab"><strong>Lab Recommendation:</strong> Use <strong>Eval</strong> mode for the 3-VM setup. It skips certificate complexity and gets you running in minutes.</div>
+
+<h2>3-VM Lab Setup (VirtualBox)</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>VM</th><th>OS</th><th>IP Address</th><th>Network Adapters</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Security Onion</strong></td><td>Security Onion 2.4 ISO</td><td>192.168.56.20 (eth0)</td><td>NIC1: Host-only (mgmt) · NIC2: Internal Network (monitoring — no IP)</td></tr>
+    <tr><td><strong>Kali Linux</strong></td><td>Kali Latest</td><td>192.168.56.10</td><td>NIC1: Internal Network (same segment as SO NIC2)</td></tr>
+    <tr><td><strong>Windows 10</strong></td><td>Windows 10</td><td>192.168.56.30</td><td>NIC1: Internal Network (same segment as SO NIC2)</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="callout note"><strong>Key:</strong> SO's NIC2 must be on the same Internal Network as Kali and Windows so it captures their traffic. NIC2 has NO IP — it just listens in promiscuous mode.</div>
+
+<h2>SO Setup Wizard Steps</h2>
+<pre><code><span class="cm"># Boot Security Onion ISO, complete OS install, then run:</span>
+sudo SecurityOnion/setup/so-setup network
+
+<span class="cm"># Wizard prompts (for eval/lab):</span>
+<span class="cm"># 1. Installation type  → EVAL</span>
+<span class="cm"># 2. Management NIC     → eth0 (the one with your IP)</span>
+<span class="cm"># 3. IP address         → 192.168.56.20 / 24 / gateway 192.168.56.1</span>
+<span class="cm"># 4. DNS server         → 8.8.8.8</span>
+<span class="cm"># 5. Monitoring NIC     → eth1 (connected to the internal lab network)</span>
+<span class="cm"># 6. SOC admin email    → admin@lab.local</span>
+<span class="cm"># 7. SOC admin password → (set a strong password)</span>
+<span class="cm"># 8. Confirm → install takes 15–30 min</span></code></pre>
+
+<h2>Verifying the Install</h2>
+<pre><code><span class="cm"># Check all services are running</span>
+sudo so-status
+<span class="cm"># Expected: all services show "running"</span>
+<span class="cm"># so-suricata / so-zeek / so-elasticsearch / so-logstash</span>
+<span class="cm"># so-kibana / so-stenographer / so-nginx</span>
+
+<span class="cm"># Confirm monitoring interface is capturing traffic</span>
+sudo so-tcpdump -i eth1 -n -c 10
+
+<span class="cm"># Access the web interface from host or Kali</span>
+<span class="cm"># URL: https://192.168.56.20</span>
+<span class="cm"># Login: admin@lab.local + your password</span></code></pre>
+
+<h2>Allow Lab Machines to Access the Web UI</h2>
+<pre><code><span class="cm"># SO has a built-in firewall — allow your host and Kali</span>
+sudo so-firewall-allow-ip 192.168.56.1    <span class="cm"># Host machine</span>
+sudo so-firewall-allow-ip 192.168.56.10   <span class="cm"># Kali</span>
+sudo so-firewall-apply
+
+<span class="cm"># Or allow the entire lab subnet at once</span>
+sudo so-firewall-allow-ip 192.168.56.0/24 &amp;&amp; sudo so-firewall-apply</code></pre>
+
+<h2>Common Post-Install Tasks</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Task</th><th>Command / Location</th></tr></thead>
+  <tbody>
+    <tr><td>Add a web UI user</td><td><code>sudo so-user-add analyst@lab.local</code></td></tr>
+    <tr><td>Update Suricata rules</td><td><code>sudo so-rule-update</code></td></tr>
+    <tr><td>Import PCAP for offline analysis</td><td><code>sudo so-import-pcap /path/to/file.pcap</code></td></tr>
+    <tr><td>Check disk (PCAP storage)</td><td><code>df -h /nsm &amp;&amp; du -sh /nsm/stenographer/</code></td></tr>
+    <tr><td>SO config directory</td><td><code>/opt/so/conf/</code></td></tr>
+    <tr><td>Live Zeek logs</td><td><code>/nsm/zeek/logs/current/</code></td></tr>
+    <tr><td>Custom Suricata rules</td><td><code>/opt/so/conf/suricata/rules/local.rules</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — First-Time Setup</summary>
+  <div class="tier-body">
+    <h4>Lab setup steps</h4>
+    <ul>
+      <li>Boot SO ISO in VirtualBox — give it 2 NICs: Host-Only (management) + Internal Network (monitoring)</li>
+      <li>Run <code>sudo SecurityOnion/setup/so-setup network</code> → choose <strong>EVAL</strong> mode</li>
+      <li>Access the web UI at <code>https://192.168.56.20</code> — accept the self-signed cert warning</li>
+      <li>Allow your Kali and host IPs through the firewall before you can access the UI</li>
+    </ul>
+    <pre><code>sudo so-firewall-allow-ip 192.168.56.0/24 &amp;&amp; sudo so-firewall-apply</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Verification &amp; Testing</summary>
+  <div class="tier-body">
+    <h4>Confirm everything is working</h4>
+    <ul>
+      <li>Run <code>sudo so-status</code> — all services should show <strong>running</strong></li>
+      <li>From Kali, run a quick Nmap scan against Windows 10 — check if alerts appear in SOC within 30 seconds</li>
+      <li>Import a test PCAP to confirm Zeek and Suricata process it: <code>sudo so-import-pcap /path/to/test.pcap</code></li>
+    </ul>
+    <pre><code>sudo so-status                    <span class="cm"># All services running?</span>
+sudo so-tcpdump -i eth1 -n -c 5  <span class="cm"># Is monitoring interface capturing?</span>
+sudo so-rule-update               <span class="cm"># Pull latest ET rules</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Manager + Sensor Architecture</summary>
+  <div class="tier-body">
+    <h4>Scaling beyond a single node</h4>
+    <ul>
+      <li><strong>Manager node</strong>: runs Elasticsearch, Kibana, Logstash, web UI — needs storage (1+ TB)</li>
+      <li><strong>Sensor node</strong>: runs Suricata, Zeek, Stenographer — needs processing (8+ cores) and tap access</li>
+      <li>During sensor setup wizard: choose <strong>Sensor</strong> mode → enter manager IP → sensor registers automatically</li>
+      <li>Multiple sensors send all data to the single Elasticsearch cluster on the manager</li>
+    </ul>
+    <h4>Tuning Elasticsearch retention</h4>
+    <ul>
+      <li>Edit ILM policies via Kibana: Stack Management → Index Lifecycle Policies</li>
+      <li>Default: hot (7 days) → delete. Increase warm phase for longer retention.</li>
+    </ul>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     03 · Alert Triage
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-alerts">
+<article class="topic">
+<h1>03 · Security Onion — Alert Triage</h1>
+<hr class="divider">
+
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Suricata alert fields directly map to OSI — source/dest IPs (L3), ports &amp; protocol (L4), and HTTP/DNS/TLS content that triggered the rule (L7).</span>
+</div>
+
+<h2>The Alerts Interface</h2>
+<p>Navigate to <strong>https://192.168.56.20/alerts</strong>. This is your primary triage queue — all Suricata IDS events appear here. Start every session filtering by <code>status: new</code>, sorted by <code>@timestamp</code> descending.</p>
+
+<h2>Alert Fields — What Each Means</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Field</th><th>Meaning &amp; Values</th><th>What to Check / Cross-References</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>@timestamp</code></td>
+      <td>UTC time the Suricata rule matched the packet. Millisecond precision.</td>
+      <td>Look at the sequence relative to surrounding events — chains of alerts within seconds suggest automated tooling (scanner, exploit kit, worm).</td>
+    </tr>
+    <tr>
+      <td><code>event.severity_label</code></td>
+      <td><strong>high</strong> / <strong>medium</strong> / <strong>low</strong> / <strong>informational</strong> — mapped from Suricata priority field (1–4)</td>
+      <td>High = immediate triage required. Informational = lowest priority, often useful only in bulk-pattern analysis.
+        <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('alerts'); return false;">Severity guide ↗</a>)</span>
+      </td>
+    </tr>
+    <tr>
+      <td><code>rule.name</code></td>
+      <td>The full Suricata rule <code>msg:</code> string — e.g. "ET EXPLOIT EternalBlue SMB MS17-010"</td>
+      <td>Search the rule message on ET Intelligence portal or Google for full threat context. The prefix tells you the rule feed: ET = Emerging Threats, LOCAL = your custom rules.
+        <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('suricata'); return false;">Suricata rules ↗</a>)</span>
+      </td>
+    </tr>
+    <tr>
+      <td><code>source.ip</code></td>
+      <td>IP address that <em>sent</em> the triggering packet. May be internal or external.</td>
+      <td>Internal IP = lateral movement or rogue asset. External = inbound attack or C2 callback. Cross-reference against threat intel feeds and your asset inventory.</td>
+    </tr>
+    <tr>
+      <td><code>source.port</code></td>
+      <td>Source TCP/UDP port number (0–65535)</td>
+      <td>Ephemeral port (1024+) = connection initiated by that host (client role). Low/well-known port initiating = unusual, service masquerading or pivoting.</td>
+    </tr>
+    <tr>
+      <td><code>destination.ip</code></td>
+      <td>IP address that <em>received</em> the triggering packet.</td>
+      <td>Is this a critical asset (DC, DB server, payment system)? Internet-facing? An internal host receiving external attack traffic is highest priority.</td>
+    </tr>
+    <tr>
+      <td><code>destination.port</code></td>
+      <td>Target service port. Common threat ports: 445 (SMB), 3389 (RDP), 4444 (Meterpreter default), 1337 (C2), 8080 (web proxy/C2)</td>
+      <td>Does the port match the expected service on that host? Mismatch = evasion. Pivot to conn.log to confirm data was actually exchanged.
+        <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('zeek'); return false;">Zeek conn.log ↗</a>)</span>
+      </td>
+    </tr>
+    <tr>
+      <td><code>network.protocol</code></td>
+      <td>Layer-4 protocol: <strong>tcp</strong> / <strong>udp</strong> / <strong>icmp</strong></td>
+      <td>DNS over TCP (not UDP) = large response or zone transfer attempt. ICMP with large payload = covert tunnel. Verify protocol matches expected service behavior.</td>
+    </tr>
+    <tr>
+      <td><code>network.community_id</code></td>
+      <td>Deterministic hash of the 5-tuple (src IP, dst IP, src port, dst port, protocol). <em>The same hash appears in Suricata alerts, Zeek conn.log, dns.log, http.log, and PCAP metadata for the exact same connection.</em></td>
+      <td>This is your pivot key. Copy it and search Hunt to pull ALL log entries for this same connection across every data source — one query links alert to Zeek to PCAP.
+        <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('zeek'); return false;">Zeek conn.log ↗</a> <a href="#" class="xref" onclick="loadTopic('pcap'); return false;">PCAP retrieval ↗</a> <a href="#" class="xref" onclick="loadTopic('hunt'); return false;">Hunt queries ↗</a>)</span>
+      </td>
+    </tr>
+    <tr>
+      <td><code>suricata.alert.category</code></td>
+      <td>Attack class from the rule's <code>classtype:</code> field — e.g. <strong>exploit</strong>, <strong>trojan-activity</strong>, <strong>web-application-attack</strong>, <strong>network-scan</strong>, <strong>policy-violation</strong></td>
+      <td>Category determines the escalation path and investigation depth required. exploit and trojan-activity = highest urgency; policy-violation = may not need IR involvement.
+        <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('suricata'); return false;">Full category table ↗</a>)</span>
+      </td>
+    </tr>
+    <tr>
+      <td><code>suricata.alert.signature_id</code></td>
+      <td>Suricata SID number — uniquely identifies the exact rule. ET rules SIDs start at 2000000+. Local rules (yours) should use 9000000+.</td>
+      <td>Search SID on <a href="https://rules.emergingthreats.net" target="_blank">rules.emergingthreats.net</a> or grep <code>/opt/so/rules/</code> to read the full rule logic and understand exactly what triggered.
+        <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('suricata'); return false;">Rule management ↗</a>)</span>
+      </td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Triage Workflow</h2>
+<pre><code><span class="cm">Step 1 — Load the queue</span>
+   Filter: status: new
+   Sort: @timestamp descending (newest first)
+   Group by severity: handle High before Medium before Low
+
+<span class="cm">Step 2 — Assess the alert</span>
+   Read rule.name — what attack type does the rule describe?
+   Note source.ip — internal or external? First time seen?
+   Note destination.ip — critical asset? Public-facing?
+   Note destination.port — does the port match the attack type?
+
+<span class="cm">Step 3 — Get context (pivot to Hunt)</span>
+   Click the "Hunt" button on the alert
+   → Zeek conn.log: was there a full connection? conn_state SF vs S0?
+   → Check orig_bytes + resp_bytes — any data actually exchanged?
+   → Time range: was this a one-time event or ongoing?
+
+<span class="cm">Step 4 — Get packet evidence (if suspicious or confirmed)</span>
+   Click "PCAP" button → download raw capture
+   Open in Wireshark → Follow TCP/HTTP stream
+   Look for: actual payloads, credentials, commands, file transfers
+
+<span class="cm">Step 5 — Make a disposition</span>
+   True Positive (TP)  → Create/update Case, escalate if active compromise
+   False Positive (FP) → Mark closed (FP), add suppression rule if recurring
+   Needs more info     → Keep status in_review, gather more context</code></pre>
+
+<div class="callout note">
+  <strong>Triage quick-jumps:</strong> &nbsp;
+  <a href="#" class="xref" onclick="loadTopic('zeek'); return false;">Zeek conn.log fields &amp; conn_state ↗</a> &nbsp;
+  <a href="#" class="xref" onclick="loadTopic('hunt'); return false;">Hunt KQL queries ↗</a> &nbsp;
+  <a href="#" class="xref" onclick="loadTopic('pcap'); return false;">PCAP retrieval ↗</a> &nbsp;
+  <a href="#" class="xref" onclick="loadTopic('suricata'); return false;">Suricata rule lookup ↗</a> &nbsp;
+  <a href="#" class="xref" onclick="loadTopic('cases'); return false;">Create a Case ↗</a>
+</div>
+
+<h2>Alert Status Management</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Status</th><th>Meaning</th><th>When to Set</th></tr></thead>
+  <tbody>
+    <tr><td><strong>new</strong></td><td>Unreviewed</td><td>Default for all incoming alerts</td></tr>
+    <tr><td><strong>in_review</strong></td><td>Being actively investigated</td><td>Set when you start working an alert</td></tr>
+    <tr><td><strong>escalated</strong></td><td>Needs senior analyst / IR team</td><td>Confirmed serious incident or active compromise</td></tr>
+    <tr><td><strong>closed (FP)</strong></td><td>Confirmed false positive</td><td>Benign tool, known scanner, misconfigured device</td></tr>
+    <tr><td><strong>closed (TP)</strong></td><td>Confirmed true positive — handled</td><td>After case is created and action taken</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Severity &amp; Escalation Guide</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Severity</th><th>Example Rules</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td><strong>High / Critical</strong></td><td>Exploit code, Meterpreter C2, EternalBlue attempt, ransomware beacon</td><td>Immediate review → escalate to IR if TP</td></tr>
+    <tr><td><strong>Medium</strong></td><td>Port scan, brute force, suspicious outbound, SQL injection attempt</td><td>Review within SLA, pivot to Hunt and PCAP</td></tr>
+    <tr><td><strong>Low</strong></td><td>Policy violation, known tool signatures, informational probes</td><td>Periodic review, may batch close as FP</td></tr>
+    <tr><td><strong>Informational</strong></td><td>Protocol anomaly, self-signed cert, unexpected protocol on port</td><td>Baseline and suppress if recurring benign traffic</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Common False Positive Patterns</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>What You See</th><th>Likely Cause</th><th>How to Confirm FP</th></tr></thead>
+  <tbody>
+    <tr><td>ET SCAN rules from internal IP</td><td>Vulnerability scanner (Nessus, Qualys, OpenVAS)</td><td>Confirm with asset owner; suppress scanner IP</td></tr>
+    <tr><td>ET MALWARE for Windows update traffic</td><td>Microsoft CDN domains trigger old rules</td><td>Check dest IP — should resolve to *.microsoft.com</td></tr>
+    <tr><td>ET POLICY Tor exit node</td><td>Privacy browser in use</td><td>Policy decision — acceptable vs. not per your org</td></tr>
+    <tr><td><code>S0</code> conn_state in Zeek for alert traffic</td><td>Firewall dropped the packet <em>after</em> Suricata saw the SYN — connection never completed</td><td>No <code>orig_bytes</code> or <code>resp_bytes</code> = blocked before reaching target. Usually safe to close as FP or informational.
+      <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('zeek'); return false;">conn_state reference ↗</a> <a href="#" class="xref" onclick="loadTopic('hunt'); return false;">S0 hunt query ↗</a>)</span>
+    </td></tr>
+    <tr><td>Alerts for own security tools</td><td>EDR scanning, SIEM agent, authorized pentest</td><td>Correlate with change management / scan windows</td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Reading Your First Alert</summary>
+  <div class="tier-body">
+    <h4>Step-by-step</h4>
+    <ul>
+      <li>Go to <strong>Alerts</strong> → filter <code>status: new</code> → sort newest first</li>
+      <li>Read <code>rule.name</code> — this tells you exactly what the rule detected (e.g., "ET SCAN Nmap")</li>
+      <li>Identify: who is attacking whom? <code>source.ip</code> → <code>destination.ip</code> on <code>destination.port</code></li>
+      <li>Note <code>event.severity_label</code> — handle <strong>high</strong> before medium and low</li>
+      <li>Check: is the source IP internal (lateral movement) or external (inbound attack)?</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Pivoting to Confirm</summary>
+  <div class="tier-body">
+    <h4>Using community_id to pivot</h4>
+    <ul>
+      <li>Copy <code>network.community_id</code> from the alert</li>
+      <li>Go to <strong>Hunt</strong> → paste it: <code>network.community_id: "1:abc123=="</code></li>
+      <li>Check Zeek conn.log: <code>conn_state: SF</code> (full connection) vs <code>S0</code> (SYN only — likely blocked)</li>
+      <li>Check <code>zeek.conn.orig_bytes</code> + <code>resp_bytes</code> — if both are 0, no data exchanged = likely FP or blocked</li>
+    </ul>
+    <pre><code>network.community_id: "1:xb5jN/3q..." AND event.dataset: "zeek.conn"</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Suppression &amp; Correlation</summary>
+  <div class="tier-body">
+    <h4>Suppress noisy FP rules</h4>
+    <ul>
+      <li>In SO Admin → Detections → find the rule by SID → set threshold or suppress by source IP</li>
+      <li>Or edit <code>/opt/so/conf/suricata/threshold.conf</code> directly:
+        <pre><code>suppress gen_id 1, sig_id 2009358, track by_src, ip 192.168.56.20</code></pre></li>
+    </ul>
+    <h4>Kill chain correlation</h4>
+    <ul>
+      <li>Build a Hunt query that chains multiple alert types from the same source IP within a time window</li>
+      <li>Pattern: scan alert → exploit alert → C2 alert within 15 minutes = active compromise</li>
+    </ul>
+    <pre><code>source.ip: "192.168.56.10" AND @timestamp: [now-15m TO now]</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     04 · Dashboards
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-dashboards">
+<article class="topic">
+<h1>04 · Security Onion — Dashboards</h1>
+<hr class="divider">
+
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Dashboards visualize data extracted from all network layers — DNS (L7), TCP connections (L4), IP conversations (L3). The HTTP and TLS dashboards focus on L7 application traffic patterns.</span>
+</div>
+
+<h2>Overview</h2>
+<p>Dashboards at <strong>/dashboards</strong> are pre-built Kibana visualizations. Use them to establish a traffic baseline and spot volume anomalies before diving into Hunt queries. Think of them as a "30,000 foot view" — something looks wrong here, now I go investigate in Hunt.</p>
+
+<h2>Available Dashboards &amp; SOC Use Cases</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Dashboard</th><th>Key Panels</th><th>Threat Signals to Hunt</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Security Overview</strong></td><td>Alert counts by severity, top alert types, alert timeline</td><td>Sudden spike in alert volume = active attack or new scanner</td></tr>
+    <tr><td><strong>Alerts</strong></td><td>By category, by source IP, by destination IP, over time</td><td>Single source → many destinations = scan; many alerts on one dest = targeted</td></tr>
+    <tr>
+      <td><strong>DNS</strong></td>
+      <td>Query volume over time, top queried domains, NXDOMAIN rate, query type breakdown (A/AAAA/TXT/MX)</td>
+      <td>High NXDOMAIN rate (&gt;20%) = DGA malware generating random domains. High TXT query volume = DNS tunneling (C2 or exfil). Single host querying hundreds of unique domains = beacon.
+        <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('zeek'); return false;">Zeek dns.log fields ↗</a> <a href="#" class="xref" onclick="loadTopic('hunt'); return false;">DNS hunt queries ↗</a>)</span>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>HTTP</strong></td>
+      <td>Top requested URIs, HTTP methods, user agent strings, response status codes, request/response body sizes</td>
+      <td>404 storms = directory brute force. Large POST bodies = possible data exfiltration. Tool user agents (curl, python-requests, nmap) = automated activity. 200 OK after 4xx storm = successful exploit.
+        <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('zeek'); return false;">Zeek http.log fields ↗</a> <a href="#" class="xref" onclick="loadTopic('hunt'); return false;">HTTP hunt queries ↗</a>)</span>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>TLS</strong></td>
+      <td>TLS versions used, cipher suites negotiated, SNI server names, certificate issuers and validity</td>
+      <td>TLS 1.0/1.1 in active use = legacy risk. Self-signed or expired certs on internal servers. TLS traffic on non-443 ports = C2 hiding as HTTPS. Unknown SNI names going out.
+        <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('zeek'); return false;">Zeek ssl.log fields ↗</a>)</span>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>Zeek</strong></td>
+      <td>Total connection counts by protocol, bytes transferred per source/dest, top-talker hosts</td>
+      <td>Unexpected protocol spikes (e.g. sudden SMB surge). One host transferring far more bytes than baseline = staging for exfil. Internal hosts talking to unusual external destinations.
+        <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('zeek'); return false;">Zeek conn.log fields ↗</a> <a href="#" class="xref" onclick="loadTopic('hunt'); return false;">Top-talker queries ↗</a>)</span>
+      </td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Dashboard Controls</h2>
+<pre><code><span class="cm"># Time filter (top right):</span>
+Last 15 minutes  → Live monitoring mode
+Last 24 hours    → Normal operational view
+Last 7 days      → Trend / baseline view
+Custom range     → Incident time window investigation
+
+<span class="cm"># Add a filter (click + near search bar):</span>
+event.module: "suricata"          → IDS data only
+source.ip: "192.168.56.10"        → Focus on Kali attacker
+destination.port: 445             → Focus on SMB traffic
+NOT source.ip: "192.168.56.20"    → Exclude SO's own traffic
+
+<span class="cm"># Drill down:</span>
+Click any bar/chart element → Adds it as a filter automatically
+Click a value in a table → Filters the entire dashboard to that value
+X on a filter → Removes it</code></pre>
+
+<h2>Reading the DNS Dashboard for Threats</h2>
+<pre><code><span class="cm"># Red flags to look for:</span>
+
+1. NXDOMAIN ratio &gt; 20% of total queries
+   → DGA malware generating random-looking domain names
+   → Or: misconfigured host hitting wrong DNS server
+   → Hunt query: zeek.dns.rcode_name: "NXDOMAIN" to find which host
+
+2. Single host making 100s of DNS queries per minute
+   → DNS tunneling — exfiltrating data encoded in subdomains
+   → Hunt: source.ip: "suspect_ip" AND event.dataset: "zeek.dns"
+
+3. Many TXT record queries to unusual domains
+   → DNS tunnel reads data back via TXT responses
+   → Hunt: zeek.dns.qtype_name: "TXT"
+
+4. Very long subdomain labels (50+ character strings)
+   → Encoded data being exfiltrated in DNS queries
+   → Pattern: ZvYW1sZXZpbC5jb20...evil.com
+
+5. Spike in repeated queries to one specific domain
+   → C2 beaconing via DNS — check timing interval in conn.log</code></pre>
+
+<h2>Reading the HTTP Dashboard for Threats</h2>
+<pre><code><span class="cm"># Red flags to look for:</span>
+
+1. 404 spike from a single source IP
+   → Directory brute force / web scanner (dirb, gobuster, dirbuster)
+   → Hunt: source.ip: "X.X.X.X" AND zeek.http.status_code: 404
+
+2. Unusual User-Agent strings in top UA panel
+   → Tools: python-requests, Go-http-client, curl/7.x, nmap, Wget, Nikto
+   → Legitimate browsers: Mozilla/5.0 Chrome/Safari variants
+
+3. Large POST body sizes
+   → File upload or data exfiltration
+   → Hunt: zeek.http.method: "POST" AND zeek.http.request_body_len &gt;= 10000
+
+4. HTTP on non-standard ports
+   → C2 traffic hiding as HTTP on ports 8080, 8888, 4444, 1234
+   → Hunt: event.dataset: "zeek.http" AND NOT destination.port: 80
+
+5. Regular periodic HTTP requests with identical timing
+   → C2 beaconing — check request intervals in Hunt timeline</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Reading Dashboards</summary>
+  <div class="tier-body">
+    <h4>Where to look first</h4>
+    <ul>
+      <li>Set time range to <strong>Last 24 hours</strong> for a normal operations view</li>
+      <li><strong>Security Overview</strong>: look for alert count spikes — sudden increases signal active attacks</li>
+      <li><strong>DNS dashboard</strong>: high NXDOMAIN rate (&gt;20%) is your most reliable sign of DGA malware</li>
+      <li>Click any bar in a chart to instantly filter the entire dashboard to that value</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Hunting with Dashboards</summary>
+  <div class="tier-body">
+    <h4>DNS dashboard signals</h4>
+    <ul>
+      <li>Filter by suspected host IP → watch query volume spike = beacon or DGA</li>
+      <li>High TXT query volume to unusual domains = DNS tunneling (C2 or data exfil)</li>
+    </ul>
+    <h4>HTTP dashboard signals</h4>
+    <ul>
+      <li>404 storm from single IP = directory brute force — click IP to filter → go to Hunt for full history</li>
+      <li>Non-browser User-Agents in top UA list: <code>python-requests</code>, <code>curl</code>, <code>Go-http-client</code></li>
+      <li>Regular periodic HTTP POST requests = C2 beaconing — note the interval (30s, 60s, etc.)</li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Custom Dashboards &amp; Visualizations</summary>
+  <div class="tier-body">
+    <h4>Build custom Kibana panels</h4>
+    <ul>
+      <li>Go to <strong>Dashboards → Edit</strong> → Add panel → choose Lens visualization</li>
+      <li>Create a "Top Talkers by bytes" panel: Lens → Bar chart → X: source.ip, Y: sum(zeek.conn.orig_bytes)</li>
+      <li>Create an "Internal → External connections" map using the Maps panel type</li>
+    </ul>
+    <h4>Detect beaconing automatically</h4>
+    <ul>
+      <li>Use Vega or Timelion to calculate variance in connection intervals per destination IP</li>
+      <li>Low variance + high repetition = beaconing; create ElastAlert rule to notify on this pattern</li>
+    </ul>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     05 · Hunt & Queries
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-hunt">
+<article class="topic">
+<h1>05 · Security Onion — Hunt &amp; KQL Queries</h1>
+<hr class="divider">
+
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">KQL queries span all network layers — filter by IP/port (L3/L4) or search application content in http.log, dns.log, and ssl.log (L7).</span>
+</div>
+
+<h2>Hunt Interface</h2>
+<p>Hunt at <strong>/hunt</strong> is your investigation workbench. It queries Elasticsearch using <strong>KQL (Kibana Query Language)</strong> across all indexed data — Suricata alerts, all Zeek logs, syslog, and any other ingested sources.</p>
+
+<h2>KQL Syntax Reference</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Syntax</th><th>Example</th><th>What It Does</th></tr></thead>
+  <tbody>
+    <tr><td>Field match</td><td><code>source.ip: "192.168.56.10"</code></td><td>Exact value match</td></tr>
+    <tr><td>Wildcard</td><td><code>zeek.dns.query: "*.evil.com"</code></td><td>Match any subdomain of evil.com</td></tr>
+    <tr><td>Exists check</td><td><code>zeek.http.user_agent: *</code></td><td>Field exists with any value</td></tr>
+    <tr><td>Numeric range</td><td><code>zeek.conn.duration &gt;= 300</code></td><td>Connections lasting 5+ minutes</td></tr>
+    <tr><td>AND</td><td><code>source.ip: "10.0.0.1" AND destination.port: 22</code></td><td>Both must match</td></tr>
+    <tr><td>OR (group)</td><td><code>(destination.port: 443 OR destination.port: 8443)</code></td><td>Either port matches</td></tr>
+    <tr><td>NOT</td><td><code>NOT source.ip: "192.168.56.20"</code></td><td>Exclude SO's own traffic</td></tr>
+    <tr><td>Free text</td><td><code>"EternalBlue"</code></td><td>Search across all text fields</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Common ECS Field Names in Security Onion</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Field</th><th>Dataset</th><th>Example Value</th></tr></thead>
+  <tbody>
+    <tr><td><code>event.module</code></td><td>All</td><td>suricata, zeek</td></tr>
+    <tr><td><code>event.dataset</code></td><td>All</td><td>zeek.conn, zeek.dns, zeek.http, zeek.ssl, zeek.files, suricata.alert</td></tr>
+    <tr><td><code>source.ip / source.port</code></td><td>All</td><td>192.168.56.10 / 49523</td></tr>
+    <tr><td><code>destination.ip / destination.port</code></td><td>All</td><td>192.168.56.30 / 80</td></tr>
+    <tr><td><code>network.protocol</code></td><td>All</td><td>tcp, udp, icmp</td></tr>
+    <tr><td><code>network.community_id</code></td><td>All</td><td>1:abc123== (links alert ↔ conn.log ↔ PCAP)</td></tr>
+    <tr><td><code>rule.name</code></td><td>Suricata</td><td>ET SCAN Nmap Scripting Engine User-Agent Detected</td></tr>
+    <tr><td><code>event.severity_label</code></td><td>Suricata</td><td>high, medium, low, informational</td></tr>
+    <tr><td><code>zeek.conn.conn_state</code></td><td>zeek.conn</td><td>SF, S0, REJ, RSTO, RSTR, OTH</td></tr>
+    <tr><td><code>zeek.conn.duration</code></td><td>zeek.conn</td><td>0.234 (seconds)</td></tr>
+    <tr><td><code>zeek.conn.orig_bytes</code></td><td>zeek.conn</td><td>1024 (bytes sent by source)</td></tr>
+    <tr><td><code>zeek.conn.resp_bytes</code></td><td>zeek.conn</td><td>4096 (bytes sent by destination)</td></tr>
+    <tr><td><code>zeek.dns.query</code></td><td>zeek.dns</td><td>evil.example.com</td></tr>
+    <tr><td><code>zeek.dns.qtype_name</code></td><td>zeek.dns</td><td>A, MX, TXT, AAAA</td></tr>
+    <tr><td><code>zeek.http.uri</code></td><td>zeek.http</td><td>/admin/login.php</td></tr>
+    <tr><td><code>zeek.http.method</code></td><td>zeek.http</td><td>GET, POST</td></tr>
+    <tr><td><code>zeek.http.user_agent</code></td><td>zeek.http</td><td>Mozilla/5.0 or python-requests/2.28</td></tr>
+    <tr><td><code>zeek.http.status_code</code></td><td>zeek.http</td><td>200, 302, 404, 500</td></tr>
+    <tr><td><code>zeek.http.request_body_len</code></td><td>zeek.http</td><td>bytes in the POST body</td></tr>
+    <tr><td><code>zeek.ssl.server_name</code></td><td>zeek.ssl</td><td>SNI from TLS Client Hello</td></tr>
+    <tr><td><code>zeek.ssl.version</code></td><td>zeek.ssl</td><td>TLSv13, TLSv12, TLSv10</td></tr>
+    <tr><td><code>zeek.files.md5</code></td><td>zeek.files</td><td>d41d8cd98f00b204e9800998ecf8427e</td></tr>
+    <tr><td><code>zeek.files.mime_type</code></td><td>zeek.files</td><td>application/x-dosexec, application/zip</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Investigation Query Cookbook</h2>
+<pre><code><span class="cm"># All traffic from Kali to Windows</span>
+source.ip: "192.168.56.10" AND destination.ip: "192.168.56.30"
+
+<span class="cm"># Suricata alerts only for Kali traffic</span>
+source.ip: "192.168.56.10" AND event.module: "suricata"
+
+<span class="cm"># Port scan evidence — S0 = SYN sent, no reply (closed/filtered)</span>
+source.ip: "192.168.56.10" AND zeek.conn.conn_state: "S0"
+
+<span class="cm"># Open ports found — SF = full connection completed</span>
+source.ip: "192.168.56.10" AND destination.ip: "192.168.56.30" AND zeek.conn.conn_state: "SF"
+
+<span class="cm"># HTTP requests from Kali (web attacks, dir brute force)</span>
+source.ip: "192.168.56.10" AND event.dataset: "zeek.http"
+
+<span class="cm"># 404 responses only — confirms directory brute force pattern</span>
+source.ip: "192.168.56.10" AND zeek.http.status_code: 404
+
+<span class="cm"># DNS queries — look for DGA, tunneling, C2 beacons</span>
+source.ip: "192.168.56.10" AND event.dataset: "zeek.dns"
+
+<span class="cm"># Long-duration connections — possible C2 beaconing or tunnel</span>
+zeek.conn.duration &gt;= 300 AND event.dataset: "zeek.conn"
+
+<span class="cm"># Large outbound POST — possible data exfiltration</span>
+zeek.http.method: "POST" AND zeek.http.request_body_len &gt;= 10000
+
+<span class="cm"># EXE/DLL files seen in transit — malware delivery</span>
+event.dataset: "zeek.files" AND zeek.files.mime_type: "application/x-dosexec"
+
+<span class="cm"># Pivot from alert — find all events for the same exact connection</span>
+network.community_id: "1:abc123=="
+
+<span class="cm"># TLS on non-standard ports — C2 hiding as HTTPS</span>
+event.dataset: "zeek.ssl" AND NOT (destination.port: 443 OR destination.port: 8443)
+
+<span class="cm"># Suspicious tool user agents in HTTP</span>
+zeek.http.user_agent: "python-requests*" OR zeek.http.user_agent: "curl*" OR zeek.http.user_agent: "nmap*"
+
+<span class="cm"># Connections reset — RST responses (firewall block or IPS)</span>
+zeek.conn.conn_state: "RSTR" AND destination.ip: "192.168.56.30"</code></pre>
+
+<h2>conn_state Quick Reference <a href="#" class="xref" onclick="loadTopic('zeek'); return false;" style="font-size:0.7em;vertical-align:middle;">Full Zeek conn.log fields ↗</a></h2>
+<p style="font-size:0.85em;color:#8b949e;margin-top:-8px;">These states appear in <code>zeek.conn.conn_state</code> in every Zeek conn.log entry. They tell you whether a connection was completed, blocked, or only partially seen — critical for confirming whether an attack actually reached its target.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>State</th><th>What Happened at the TCP Level</th><th>Analyst Interpretation &amp; Action</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>SF</code></td>
+      <td>SYN → SYN-ACK → ACK (full 3-way handshake) + FIN-ACK close. Normal, complete connection.</td>
+      <td>Data was very likely exchanged. Check <code>orig_bytes</code> and <code>resp_bytes</code> — if both are non-zero, investigate payload via PCAP.
+        <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('pcap'); return false;">Get PCAP ↗</a>)</span>
+      </td>
+    </tr>
+    <tr>
+      <td><code>S0</code></td>
+      <td>SYN sent, no SYN-ACK received. Connection attempt with zero response.</td>
+      <td>Port is closed/filtered or destination host is offline. Classic scan probe. For alerts with S0: the attack packet was <em>sent</em> but likely never reached/processed — often a FP.
+        <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('alerts'); return false;">FP pattern ↗</a>)</span>
+      </td>
+    </tr>
+    <tr>
+      <td><code>S1</code></td>
+      <td>Handshake complete but no FIN/RST seen yet. Connection was active when log was written.</td>
+      <td>Normal for long-lived sessions (RDP, SSH, C2 beacon). Check duration — very long duration + periodic small bytes = beacon pattern.</td>
+    </tr>
+    <tr>
+      <td><code>REJ</code></td>
+      <td>SYN sent → RST-ACK back immediately. Port actively rejected.</td>
+      <td>Destination host is up but the port is closed. Faster than firewall drop. Common during port scans against live hosts.</td>
+    </tr>
+    <tr>
+      <td><code>RSTO</code></td>
+      <td>Connection was established, then RST sent by the <em>originator</em> (client).</td>
+      <td>Client aborted mid-session. Can indicate IPS reset injection, tool crash, or scanner moving on. Check what was exchanged before the reset.
+        <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('pcap'); return false;">Check PCAP payload ↗</a>)</span>
+      </td>
+    </tr>
+    <tr>
+      <td><code>RSTR</code></td>
+      <td>Connection was established, then RST sent by the <em>responder</em> (server).</td>
+      <td>Server aborted. Can be an IPS reset, application error, or the server rejecting the request after seeing payload content. Investigate if this follows a suspicious alert.</td>
+    </tr>
+    <tr>
+      <td><code>OTH</code></td>
+      <td>Mid-stream traffic seen but no SYN captured — Zeek joined the session late.</td>
+      <td>SO missed the connection start due to asymmetric routing or tap placement. Treat as an existing session — check bytes transferred to estimate impact.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Basic KQL Queries</summary>
+  <div class="tier-body">
+    <h4>Queries to start with</h4>
+    <pre><code>source.ip: "192.168.56.10"                          <span class="cm"># All traffic from Kali</span>
+destination.port: 445                                <span class="cm"># All SMB traffic</span>
+event.dataset: "zeek.dns"                            <span class="cm"># DNS log only</span>
+event.severity_label: "high"                         <span class="cm"># High-severity alerts</span>
+rule.name: "EternalBlue"                             <span class="cm"># Free-text in rule name</span></code></pre>
+    <h4>Key fields to know</h4>
+    <ul>
+      <li><code>event.dataset</code>: narrows to one log type (zeek.conn, zeek.dns, zeek.http, suricata.alert)</li>
+      <li><code>network.community_id</code>: the pivot key — same hash across all related logs</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Investigation Queries</summary>
+  <div class="tier-body">
+    <h4>Pivot chain: alert → conn.log → PCAP</h4>
+    <pre><code><span class="cm"># Step 1: Get community_id from alert</span>
+event.severity_label: "high" AND source.ip: "192.168.56.10"
+
+<span class="cm"># Step 2: Pivot to conn.log with that id</span>
+network.community_id: "1:abc123==" AND event.dataset: "zeek.conn"
+
+<span class="cm"># Step 3: Check conn_state and bytes</span>
+<span class="cm"># SF + orig_bytes > 0 = real data exchanged</span>
+<span class="cm"># S0 = SYN only, connection never established</span></code></pre>
+    <h4>Time-window correlation</h4>
+    <pre><code>source.ip: "192.168.56.10" AND @timestamp: [now-30m TO now]</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Threat Hunting Patterns</summary>
+  <div class="tier-body">
+    <h4>Hunt for beaconing (regular C2 check-ins)</h4>
+    <pre><code><span class="cm"># Find hosts making many connections to same external IP</span>
+destination.ip: "185.220.101.47" AND event.dataset: "zeek.conn"
+<span class="cm"># Then check timing intervals in the results</span>
+<span class="cm"># Regular intervals at 30s/60s = beaconing</span></code></pre>
+    <h4>Hunt for lateral movement</h4>
+    <pre><code><span class="cm"># Internal host reaching internal hosts on admin ports</span>
+source.ip: 192.168.56.* AND destination.ip: 192.168.56.*
+AND (destination.port: 445 OR destination.port: 3389 OR destination.port: 22)
+AND NOT source.ip: "192.168.56.20"  <span class="cm"># Exclude SO itself</span></code></pre>
+    <h4>Hunt for DGA (Domain Generation Algorithm)</h4>
+    <pre><code>event.dataset: "zeek.dns" AND zeek.dns.rcode_name: "NXDOMAIN"
+<span class="cm"># Group by source.ip → host with most NX = likely DGA infected</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     06 · Suricata IDS
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-suricata">
+<article class="topic">
+<h1>06 · Security Onion — Suricata IDS</h1>
+<hr class="divider">
+
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Suricata signature matching operates at L3 (IP headers), L4 (TCP/UDP flags &amp; ports), and L7 (protocol payload content via PCRE and normalized protocol keywords like http.uri, dns.query, tls.sni).</span>
+</div>
+
+<h2>Suricata in Security Onion</h2>
+<p>Suricata reads raw traffic from the monitoring interface (eth1), matches packets against loaded rule sets, and writes alerts to Elasticsearch as EVE JSON events. In SO's default config it runs in IDS mode — alerts only, no blocking.</p>
+
+<h2>Rule Management</h2>
+<pre><code><span class="cm"># Pull latest rules from all configured feeds + test + reload</span>
+sudo so-rule-update &amp;&amp; \
+  sudo suricata -T -c /opt/so/conf/suricata/suricata.yaml &amp;&amp; \
+  sudo so-suricata-reload
+
+<span class="cm"># Check what rule files are loaded</span>
+ls /opt/so/rules/
+ls /opt/so/rules/et/open/           <span class="cm"># Emerging Threats Open rules</span>
+
+<span class="cm"># Count total rules loaded</span>
+sudo docker exec so-suricata cat /var/log/suricata/suricata.log | grep "rules loaded"
+
+<span class="cm"># Search for a rule by SID (useful when investigating an alert)</span>
+grep -r "sid:2010937" /opt/so/rules/
+
+<span class="cm"># Full Suricata restart</span>
+sudo so-restart suricata
+
+<span class="cm"># Reload rules without full restart (faster)</span>
+sudo so-suricata-reload</code></pre>
+
+<h2>Writing Custom Local Rules</h2>
+<pre><code><span class="cm"># Open local rules file</span>
+sudo nano /opt/so/conf/suricata/rules/local.rules
+
+<span class="cm"># Rule anatomy: action proto src_ip src_port direction dst_ip dst_port (options)</span>
+
+<span class="cm"># Example 1: Detect nmap SYN scan from Kali (many SYNs in short window)</span>
+alert tcp 192.168.56.10 any -&gt; $HOME_NET any (
+  msg:"LOCAL - Nmap SYN Scan from Kali";
+  flags:S,12;
+  flow:stateless;
+  threshold:type threshold, track by_src, count 20, seconds 5;
+  classtype:network-scan;
+  sid:9000001; rev:1;
+)
+
+<span class="cm"># Example 2: Detect webshell access attempts</span>
+alert http $EXTERNAL_NET any -&gt; $HTTP_SERVERS $HTTP_PORTS (
+  msg:"LOCAL - Possible Webshell URI Access";
+  flow:established,to_server;
+  http.uri; content:"/cmd"; nocase;
+  classtype:web-application-attack;
+  sid:9000002; rev:1;
+)
+
+<span class="cm"># Example 3: Detect ICMP ping sweep from external</span>
+alert icmp $EXTERNAL_NET any -&gt; $HOME_NET any (
+  msg:"LOCAL - ICMP Sweep Detected";
+  itype:8;
+  threshold:type threshold, track by_src, count 10, seconds 5;
+  classtype:network-scan;
+  sid:9000003; rev:1;
+)
+
+<span class="cm"># Example 4: Detect Meterpreter default reverse shell port</span>
+alert tcp $HOME_NET any -&gt; $EXTERNAL_NET 4444 (
+  msg:"LOCAL - Outbound to Meterpreter Default Port 4444";
+  flow:established,to_server;
+  classtype:trojan-activity;
+  sid:9000004; rev:1;
+)
+
+<span class="cm"># After writing rules — always test syntax before applying</span>
+sudo suricata -T -c /opt/so/conf/suricata/suricata.yaml &amp;&amp; sudo so-suricata-reload</code></pre>
+
+<h2>Tuning — Suppressing False Positives</h2>
+<pre><code><span class="cm"># Edit suppress/threshold config</span>
+sudo nano /opt/so/conf/suricata/threshold.conf
+
+<span class="cm"># Suppress rule SID 2010937 when triggered by internal scanner (192.168.56.10)</span>
+suppress gen_id 1, sig_id 2010937, track by_src, ip 192.168.56.10
+
+<span class="cm"># Suppress a very noisy rule for all sources</span>
+suppress gen_id 1, sig_id 2100498
+
+<span class="cm"># Rate limit — only alert after 20 hits in 60 seconds from same source</span>
+threshold gen_id 1, sig_id 2002910, type threshold, track by_src, count 20, seconds 60
+
+<span class="cm"># Apply threshold changes</span>
+sudo so-suricata-restart</code></pre>
+
+<h2>Suricata Alert Categories Reference</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Category</th><th>Typical Rules</th><th>Analyst Action</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>attempted-recon</strong></td>
+      <td>Port scans, OS fingerprinting, DNS zone transfer attempts, banner grabbing</td>
+      <td>Check Zeek conn.log for <code>S0</code> states (SYN-only = port probe, no reply). Scope: single host many ports = port scan; single port many hosts = sweep. Internal origin = rogue or compromised asset.
+        <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('zeek'); return false;">Zeek S0 states ↗</a> <a href="#" class="xref" onclick="loadTopic('hunt'); return false;">S0 hunt query ↗</a>)</span>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>web-application-attack</strong></td>
+      <td>SQL injection, XSS, directory traversal, command injection, LFI/RFI, SSRF</td>
+      <td>Pivot to Zeek http.log — check <code>zeek.http.uri</code> for the full payload and <code>zeek.http.status_code</code> for the response. 200 OK after an injection attempt = possible success; 403/404 = likely blocked.
+        <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('zeek'); return false;">Zeek http.log ↗</a> <a href="#" class="xref" onclick="loadTopic('pcap'); return false;">Get PCAP ↗</a>)</span>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>exploit</strong></td>
+      <td>EternalBlue (MS17-010), Log4Shell, Shellshock, Heartbleed, ProxyLogon, remote code execution</td>
+      <td>Highest urgency — retrieve PCAP immediately and open in Wireshark. Check if destination host shows follow-on activity (new processes, lateral movement, new connections). Create case if any signs of compromise.
+        <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('pcap'); return false;">PCAP retrieval ↗</a> <a href="#" class="xref" onclick="loadTopic('cases'); return false;">Create Case ↗</a>)</span>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>trojan-activity</strong></td>
+      <td>Malware C2 beacons, download cradles, staged payload delivery, RAT callbacks</td>
+      <td>Check Zeek conn.log for long-duration periodic connections (beaconing pattern: same dest IP, regular intervals, small consistent byte counts). Isolate host if confirmed. Check for lateral movement via SMB/RDP.
+        <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('zeek'); return false;">Zeek conn duration ↗</a> <a href="#" class="xref" onclick="loadTopic('hunt'); return false;">Beacon queries ↗</a> <a href="#" class="xref" onclick="loadTopic('cases'); return false;">Create Case ↗</a>)</span>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>policy-violation</strong></td>
+      <td>Tor exit nodes, P2P/BitTorrent, unauthorized VPN tunnels, cryptocurrency mining</td>
+      <td>Policy decision — is it acceptable per your org's AUP? If not, check Zeek ssl.log for SNI names and conn.log for destination IPs to build full picture before taking action.
+        <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('zeek'); return false;">Zeek ssl.log ↗</a>)</span>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>network-scan</strong></td>
+      <td>Nmap SYN scan, Masscan, ICMP ping sweep, UDP port sweep, service version detection</td>
+      <td>Is this an authorized vulnerability scanner (Nessus, OpenVAS)? Check scan schedule and source IP against authorized scanner list. Rogue internal scanner = possible compromised host performing lateral recon.
+        <span class="xref-group">(<a href="#" class="xref" onclick="loadTopic('zeek'); return false;">Zeek S0 states ↗</a> <a href="#" class="xref" onclick="loadTopic('suricata'); return false;">Suppress authorized scanner ↗</a>)</span>
+      </td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Viewing Suricata Alerts via CLI</h2>
+<pre><code><span class="cm"># Tail Suricata's fast.log in real time inside the container</span>
+sudo docker exec so-suricata tail -f /var/log/suricata/fast.log
+
+<span class="cm"># Find all alerts for a specific SID from today</span>
+sudo docker exec so-suricata grep "2010937" /var/log/suricata/fast.log | tail -20
+
+<span class="cm"># Count and rank alerts by rule name</span>
+sudo docker exec so-suricata cat /var/log/suricata/fast.log | \
+  awk -F'\[\*\*\]' '{print $2}' | sort | uniq -c | sort -rn | head -20
+
+<span class="cm"># Count today's total alerts</span>
+sudo docker exec so-suricata grep "$(date '+%m/%d/%Y')" \
+  /var/log/suricata/fast.log | wc -l</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Understanding Suricata Rules</summary>
+  <div class="tier-body">
+    <h4>Rule anatomy</h4>
+    <ul>
+      <li><code>alert</code> = action (log and generate alert)</li>
+      <li><code>tcp $HOME_NET any → $EXTERNAL_NET any</code> = direction (L3/L4 matching)</li>
+      <li><code>msg:"ET SCAN Nmap"</code> = human-readable name shown in SOC</li>
+      <li><code>sid:2000537</code> = unique rule ID; <code>rev:5</code> = version</li>
+      <li><code>classtype:network-scan</code> = category shown in SOC alert table</li>
+    </ul>
+    <h4>Finding rules</h4>
+    <ul>
+      <li>All active rules: <code>/opt/so/rules/</code> on the SO server</li>
+      <li>Your custom rules: <code>/opt/so/conf/suricata/rules/local.rules</code></li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Writing Custom Rules</summary>
+  <div class="tier-body">
+    <h4>Basic local rule for Meterpreter default port</h4>
+    <pre><code><span class="cm"># /opt/so/conf/suricata/rules/local.rules</span>
+alert tcp any any -&gt; $HOME_NET 4444 (
+  msg:"Local Rule — Meterpreter Default Port Inbound";
+  flow:to_server,established;
+  classtype:trojan-activity;
+  sid:9000001; rev:1;
+)
+
+<span class="cm"># Apply changes:</span>
+sudo so-suricata-reload</code></pre>
+    <h4>Rule using content matching (L7)</h4>
+    <pre><code>alert http $EXTERNAL_NET any -&gt; $HOME_NET any (
+  msg:"Suspicious curl User-Agent";
+  http.user_agent; content:"curl/";
+  classtype:policy-violation;
+  sid:9000002; rev:1;
+)</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — PCRE, Flowbits &amp; Thresholds</summary>
+  <div class="tier-body">
+    <h4>PCRE content matching</h4>
+    <pre><code><span class="cm"># Match base64-encoded PowerShell in HTTP body</span>
+alert http any any -&gt; any any (
+  msg:"PowerShell Encoded Command in HTTP";
+  http.request_body;
+  pcre:"/[A-Za-z0-9+\/]{40,}={0,2}/";
+  content:"powershell"; nocase;
+  classtype:trojan-activity;
+  sid:9000010; rev:1;
+)</code></pre>
+    <h4>Threshold to suppress noisy rules</h4>
+    <pre><code><span class="cm"># Only alert after 10 events from same source in 60 seconds</span>
+threshold gen_id 1, sig_id 9000001, type threshold,
+  track by_src, count 10, seconds 60</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     07 · Zeek Logs
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-zeek">
+<article class="topic">
+<h1>07 · Security Onion — Zeek Logs</h1>
+<hr class="divider">
+
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l2">L2 Data Link</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Zeek is the deepest layer analyst in SO — it reads raw frames (L2), extracts IP/ICMP (L3), tracks TCP/UDP sessions (L4), and parses application protocols (L7): HTTP, DNS, TLS, SMB, FTP, SMTP, etc.</span>
+</div>
+
+<h2>Key Log Types &amp; Forensic Value</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Log File</th><th>What It Records</th><th>Primary Hunt Use</th></tr></thead>
+  <tbody>
+    <tr><td><strong>conn.log</strong></td><td>Every TCP/UDP/ICMP connection summary</td><td>Scan detection, beaconing intervals, data volumes, open ports</td></tr>
+    <tr><td><strong>dns.log</strong></td><td>All DNS queries and responses</td><td>DGA, DNS tunneling, C2 domain lookups, NXDOMAIN floods</td></tr>
+    <tr><td><strong>http.log</strong></td><td>HTTP transactions — request + response metadata</td><td>Web attacks, exfiltration, suspicious user agents, C2 over HTTP</td></tr>
+    <tr><td><strong>ssl.log</strong></td><td>TLS handshake data — SNI, cert info, JA3 hash</td><td>C2 over HTTPS, expired/self-signed certs, unusual cipher suites</td></tr>
+    <tr><td><strong>files.log</strong></td><td>Files seen in transit — hash, MIME type, size</td><td>Malware delivery, file exfiltration, hash lookups against threat intel</td></tr>
+    <tr><td><strong>weird.log</strong></td><td>Protocol anomalies and unexpected behavior</td><td>Evasion attempts, protocol violations, obfuscated traffic</td></tr>
+    <tr><td><strong>notice.log</strong></td><td>Zeek script-generated high-level notices</td><td>Scan::Port_Scan, SSH::Password_Guessing, SSL::Certificate_Expired</td></tr>
+    <tr><td><strong>smtp.log</strong></td><td>SMTP email transactions</td><td>Phishing delivery, malicious attachments, email C2</td></tr>
+    <tr><td><strong>x509.log</strong></td><td>X.509 certificate details</td><td>Self-signed tracking, cert expiry, cert abuse</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>conn.log — Most Important Log Fields</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Field</th><th>Description</th><th>Hunt Value</th></tr></thead>
+  <tbody>
+    <tr><td><code>id.orig_h / id.orig_p</code></td><td>Source IP / port</td><td>Who initiated</td></tr>
+    <tr><td><code>id.resp_h / id.resp_p</code></td><td>Destination IP / port</td><td>What was contacted</td></tr>
+    <tr><td><code>proto</code></td><td>tcp / udp / icmp</td><td>Unexpected protocol = possible evasion</td></tr>
+    <tr><td><code>service</code></td><td>Detected app protocol (http, dns, ssh, ssl)</td><td>Protocol mismatch: ssh traffic on port 80 = suspicious</td></tr>
+    <tr><td><code>duration</code></td><td>Connection length (seconds)</td><td>Very long = tunnel/beaconing; very short burst = scan</td></tr>
+    <tr><td><code>orig_bytes</code></td><td>Bytes sent by source</td><td>Large = upload; tiny + consistent = C2 beacon check-in</td></tr>
+    <tr><td><code>resp_bytes</code></td><td>Bytes sent by destination</td><td>Large = download; zero = blocked or no response</td></tr>
+    <tr><td><code>conn_state</code></td><td>SF / S0 / REJ / RSTO / RSTR / OTH</td><td>See Hunt section conn_state table</td></tr>
+    <tr><td><code>history</code></td><td>TCP flag sequence string</td><td>Sh = SYN+SYN-ACK; ShAd = data; unusual = scan or evasion</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Working with Zeek Logs via CLI (zeek-cut)</h2>
+<pre><code><span class="cm"># Zeek logs on SO node</span>
+ls /nsm/zeek/logs/current/
+
+<span class="cm"># zeek-cut = field extractor for Zeek tab-separated logs</span>
+<span class="cm"># Syntax: zeek-cut field1 field2 ... &lt; logfile.log</span>
+
+<span class="cm"># Top 10 talkers by total bytes (source + destination combined)</span>
+zeek-cut id.orig_h id.resp_h id.resp_p proto orig_bytes resp_bytes \
+  &lt; /nsm/zeek/logs/current/conn.log | \
+  awk '{sum[$1" "$2" "$3" "$4] += $5+$6} END {for(k in sum) print sum[k],k}' | \
+  sort -rn | head -10
+
+<span class="cm"># Find all S0 connections from Kali (port scan — no response)</span>
+zeek-cut id.orig_h id.resp_h id.resp_p conn_state \
+  &lt; /nsm/zeek/logs/current/conn.log | \
+  awk '$1=="192.168.56.10" &amp;&amp; $4=="S0"' | \
+  sort -k3 -n | head -30
+
+<span class="cm"># Find open ports (SF = completed connection)</span>
+zeek-cut id.orig_h id.resp_h id.resp_p service conn_state \
+  &lt; /nsm/zeek/logs/current/conn.log | \
+  awk '$1=="192.168.56.10" &amp;&amp; $5=="SF"'
+
+<span class="cm"># DNS queries from Kali — look for suspicious domains</span>
+zeek-cut id.orig_h query qtype_name rcode_name \
+  &lt; /nsm/zeek/logs/current/dns.log | \
+  awk '$1=="192.168.56.10"'
+
+<span class="cm"># HTTP requests with suspicious user agents</span>
+zeek-cut id.orig_h host uri method user_agent \
+  &lt; /nsm/zeek/logs/current/http.log | \
+  grep -iE "python-requests|curl|wget|nmap|nikto|sqlmap"
+
+<span class="cm"># HTTP POST with large bodies — possible exfil</span>
+zeek-cut id.orig_h host uri method request_body_len \
+  &lt; /nsm/zeek/logs/current/http.log | \
+  awk '$4=="POST" &amp;&amp; $5+0 &gt; 10000' | sort -k5 -rn
+
+<span class="cm"># Files seen in transit — hunt for EXE/DLL delivery</span>
+zeek-cut id.orig_h id.resp_h filename mime_type md5 total_bytes \
+  &lt; /nsm/zeek/logs/current/files.log | \
+  awk '$4=="application/x-dosexec"'
+
+<span class="cm"># Long-duration connections — beaconing or tunnel</span>
+zeek-cut id.orig_h id.resp_h id.resp_p service duration \
+  &lt; /nsm/zeek/logs/current/conn.log | \
+  awk '$5+0 &gt; 300' | sort -k5 -rn | head -20
+
+<span class="cm"># SSL — find self-signed certs (subject == issuer)</span>
+zeek-cut id.orig_h id.resp_h id.resp_p version subject issuer \
+  &lt; /nsm/zeek/logs/current/ssl.log | \
+  awk '$5 == $6'</code></pre>
+
+<h2>notice.log — Zeek's Built-in Detections</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Notice Type</th><th>What Triggered It</th><th>Analyst Action</th></tr></thead>
+  <tbody>
+    <tr><td><code>Scan::Port_Scan</code></td><td>Host contacted 15+ ports in short window</td><td>Confirm with conn S0 states; authorized scanner?</td></tr>
+    <tr><td><code>Scan::Address_Scan</code></td><td>Host contacted many different IPs</td><td>Internal host scanning outward = potential worm or pivot</td></tr>
+    <tr><td><code>SSH::Password_Guessing</code></td><td>Many SSH auth failures from one source</td><td>Brute force — check if any auth succeeded</td></tr>
+    <tr><td><code>SSL::Certificate_Expired</code></td><td>Server presented expired TLS cert</td><td>Oversight or attacker using old cert — investigate</td></tr>
+    <tr><td><code>SSL::Invalid_Server_Cert</code></td><td>Cert validation failed</td><td>Self-signed or untrusted CA — check the server</td></tr>
+    <tr><td><code>HTTP::Sqli_Attack</code></td><td>SQL injection pattern in HTTP URI or body</td><td>Check http.log URI + response — did it succeed?</td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Reading Zeek Logs</summary>
+  <div class="tier-body">
+    <h4>The three logs you'll use most</h4>
+    <ul>
+      <li><strong>conn.log</strong> — every network connection: src/dst IP, port, protocol, bytes, <code>conn_state</code></li>
+      <li><strong>dns.log</strong> — every DNS query/response: domain name queried, query type, answer IP</li>
+      <li><strong>http.log</strong> — every HTTP request: method, URI, User-Agent, response code, body sizes</li>
+    </ul>
+    <h4>conn_state essentials</h4>
+    <ul>
+      <li><code>SF</code> = full handshake + data exchanged (normal TCP session)</li>
+      <li><code>S0</code> = SYN sent, never got SYN-ACK (port closed or firewall)</li>
+      <li><code>REJ</code> = RST received (port actively refused)</li>
+      <li><code>RSTO</code> = established then reset by originator (connection aborted)</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Correlating Logs with uid</summary>
+  <div class="tier-body">
+    <h4>The uid field links related Zeek logs</h4>
+    <ul>
+      <li>Every conn.log entry has a <code>uid</code> — the same <code>uid</code> appears in http.log, files.log, and ssl.log for the same connection</li>
+      <li>Hunt query: <code>zeek.conn.uid: "CHhAvVGS1DHFjwGM9"</code> to pull all logs for one session</li>
+    </ul>
+    <h4>HTTP + file correlation</h4>
+    <pre><code><span class="cm"># Find file downloads: http.log with large resp_body_len</span>
+event.dataset: "zeek.http" AND zeek.http.resp_body_len &gt;= 100000
+<span class="cm"># Then pivot with uid to files.log to get the SHA-256 hash</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Zeek Notices &amp; Custom Scripts</summary>
+  <div class="tier-body">
+    <h4>notice.log — Zeek's built-in detection</h4>
+    <ul>
+      <li>Zeek ships with detection scripts that write to <code>notice.log</code>: port scans, SSH brute force, SSL anomalies, SQL injection</li>
+      <li>Hunt: <code>event.dataset: "zeek.notice"</code> to see all Zeek-detected anomalies (separate from Suricata)</li>
+    </ul>
+    <h4>Loading custom Zeek scripts</h4>
+    <pre><code><span class="cm"># Place script in:</span>
+/opt/so/conf/zeek/local.zeek
+
+<span class="cm"># Example: log all SMB file access</span>
+@load protocols/smb
+
+<span class="cm"># Reload Zeek:</span>
+sudo so-zeek-restart</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     08 · PCAP Analysis
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-pcap">
+<article class="topic">
+<h1>08 · Security Onion — PCAP Analysis</h1>
+<hr class="divider">
+
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l2">L2 Data Link</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-note">PCAPs contain raw frames starting at L2 — every Ethernet header, IP packet (L3), TCP segment (L4), and application payload (L7) is preserved. This is the ground truth for all other logs.</span>
+</div>
+
+<h2>Stenographer — Full Packet Capture</h2>
+<p>Security Onion uses <strong>Stenographer</strong> to continuously write all packets from the monitoring interface to disk as a ring buffer. You can retrieve the raw PCAP of any connection SO saw, going back as far as the ring buffer holds.</p>
+<div class="callout"><strong>KEY:</strong> Stenographer indexes by IP/port/time. You query it with filter criteria and it extracts the matching packets into a PCAP file you can open in Wireshark.</div>
+
+<h2>Retrieving PCAPs — Web Interface</h2>
+<pre><code><span class="cm">Method 1: From an Alert (easiest)</span>
+   1. Open alert in /alerts → expand it
+   2. Click the "PCAP" button
+   3. SO queries Stenographer automatically using the alert's 5-tuple
+   4. PCAP downloads to your browser
+
+<span class="cm">Method 2: Manual PCAP query via /pcap</span>
+   1. Navigate to https://192.168.56.20/pcap
+   2. Fill in filters:
+      Source IP:        192.168.56.10
+      Destination IP:   192.168.56.30
+      Destination Port: 80
+      Start Time:       2024-01-15 14:00:00
+      End Time:         2024-01-15 14:10:00
+   3. Click "Get PCAP" → downloads the matching capture</code></pre>
+
+<h2>Retrieving PCAPs — CLI</h2>
+<pre><code><span class="cm"># Basic retrieval by source/dest IP + time window</span>
+sudo so-pcap \
+  --src-ip 192.168.56.10 \
+  --dst-ip 192.168.56.30 \
+  --start-time "2024-01-15 14:00:00" \
+  --end-time "2024-01-15 14:10:00" \
+  --output /tmp/kali_to_windows.pcap
+
+<span class="cm"># Filter to specific port (isolate one service from the capture)</span>
+sudo so-pcap \
+  --src-ip 192.168.56.10 \
+  --dst-ip 192.168.56.30 \
+  --dst-port 80 \
+  --start-time "2024-01-15 14:00:00" \
+  --end-time "2024-01-15 14:05:00" \
+  --output /tmp/kali_http_only.pcap
+
+<span class="cm"># Quick sanity check on the PCAP before opening in Wireshark</span>
+ls -lh /tmp/kali_to_windows.pcap           <span class="cm"># File size</span>
+sudo tcpdump -r /tmp/kali_to_windows.pcap -nn -q | wc -l  <span class="cm"># Packet count</span>
+sudo tcpdump -r /tmp/kali_to_windows.pcap -nn | head -20  <span class="cm"># First 20 packets</span>
+
+<span class="cm"># Filter while reading — focus on specific traffic</span>
+sudo tcpdump -r /tmp/kali_to_windows.pcap -nn "port 80"
+sudo tcpdump -r /tmp/kali_to_windows.pcap -nn "tcp[13] == 2"  <span class="cm"># SYN only (scan)</span></code></pre>
+
+<h2>Analyzing PCAPs with Wireshark — Key Filters</h2>
+<pre><code><span class="cm"># Port scan pattern — many SYN packets with mostly RSTs back</span>
+tcp.flags == 0x002                          <span class="cm"># Pure SYN (scan probes)</span>
+tcp.flags.syn == 1 &amp;&amp; tcp.flags.ack == 0   <span class="cm"># SYN without ACK = scan</span>
+tcp.flags.syn == 1 &amp;&amp; tcp.flags.ack == 1   <span class="cm"># SYN-ACK = open port response</span>
+
+<span class="cm"># HTTP traffic analysis</span>
+http &amp;&amp; ip.src == 192.168.56.10            <span class="cm"># HTTP from Kali only</span>
+http.request.method == "POST"               <span class="cm"># POST requests (data upload)</span>
+http contains "password" || http contains "user="  <span class="cm"># Cleartext credentials</span>
+
+<span class="cm"># TLS inspection</span>
+tls.handshake.extensions_server_name        <span class="cm"># SNI field (what domain client wants)</span>
+tls.handshake.type == 1                     <span class="cm"># Client Hello only</span>
+tls.handshake.type == 11                    <span class="cm"># Certificate message</span>
+
+<span class="cm"># DNS queries in the PCAP</span>
+dns.qry.name                               <span class="cm"># Show all DNS query names</span>
+dns.qry.type == 16                         <span class="cm"># TXT record queries (tunneling)</span>
+
+<span class="cm"># SMB activity (lateral movement evidence)</span>
+smb2.filename || smb.file
+
+<span class="cm"># TCP retransmissions (IPS blocking or network issues)</span>
+tcp.analysis.retransmission</code></pre>
+
+<h2>Following Streams &amp; Statistics</h2>
+<pre><code><span class="cm"># Follow TCP stream: right-click packet → Follow → TCP Stream</span>
+<span class="cm"># Red = client sent; Blue = server responded</span>
+<span class="cm"># Shows full HTTP request + response body in readable text</span>
+
+<span class="cm"># Statistics → Protocol Hierarchy</span>
+<span class="cm">#   See breakdown: what % of traffic is TCP, HTTP, DNS, SMB</span>
+<span class="cm">#   Unexpected: ICMP &gt; 30%, HTTP on port 4444, DNS &gt; 40%</span>
+
+<span class="cm"># Statistics → Conversations → TCP tab</span>
+<span class="cm">#   Sort by Bytes → heaviest transfers (exfil candidate)</span>
+<span class="cm">#   Sort by Packets → most active connections</span>
+
+<span class="cm"># tshark equivalents for automated PCAP analysis</span>
+tshark -r /tmp/capture.pcap -q -z "io,phs"           <span class="cm"># Protocol hierarchy</span>
+tshark -r /tmp/capture.pcap -q -z "conv,tcp"          <span class="cm"># TCP conversations</span>
+tshark -r /tmp/capture.pcap -T fields \
+  -e ip.src -e ip.dst -e http.request.uri \
+  -Y "http.request" 2&gt;/dev/null | head -20            <span class="cm"># HTTP URIs only</span>
+tshark -r /tmp/capture.pcap -T fields \
+  -e ip.dst -e tcp.dstport \
+  -Y "tcp.flags.syn==1 &amp;&amp; tcp.flags.ack==0" 2&gt;/dev/null | \
+  sort -t$'\t' -k2 -n | uniq | head -30               <span class="cm"># List all scanned ports</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Getting a PCAP</summary>
+  <div class="tier-body">
+    <h4>Request PCAP from SOC interface</h4>
+    <ul>
+      <li>Go to an alert → click <strong>PCAP</strong> button → SO queries Stenographer → downloads a .pcap file</li>
+      <li>Open in Wireshark → <strong>Statistics → Conversations</strong> to see all connections</li>
+      <li>Right-click a TCP conversation → <strong>Follow → TCP Stream</strong> to read the raw payload</li>
+      <li>For HTTP: right-click → Follow → HTTP Stream to read requests/responses in clear text</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Extracting Objects &amp; Credentials</summary>
+  <div class="tier-body">
+    <h4>Export files from PCAP</h4>
+    <ul>
+      <li>Wireshark → <strong>File → Export Objects → HTTP</strong> → save all transferred files (EXEs, ZIPs, scripts)</li>
+      <li>Submit extracted files to ANY.RUN or Cuckoo for dynamic analysis</li>
+    </ul>
+    <h4>tshark for CLI-based extraction</h4>
+    <pre><code>tshark -r capture.pcap -q -z "conv,tcp"       <span class="cm"># All TCP conversations</span>
+tshark -r capture.pcap -Y "http.request"  \   <span class="cm"># All HTTP requests</span>
+  -T fields -e ip.src -e http.request.uri</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — HTTPS Decryption &amp; Protocol Analysis</summary>
+  <div class="tier-body">
+    <h4>Decrypt TLS in Wireshark</h4>
+    <ul>
+      <li>If you have the pre-master secret log from the victim browser: <strong>Edit → Preferences → TLS → (Pre)-Master-Secret log filename</strong></li>
+      <li>NSS Keylog format: browser generates this automatically with <code>SSLKEYLOGFILE=/tmp/keys.log</code> env var</li>
+    </ul>
+    <h4>Analyze SMB2 traffic for lateral movement</h4>
+    <pre><code>tshark -r capture.pcap -Y "smb2" \
+  -T fields -e ip.src -e ip.dst \
+  -e smb2.filename -e smb2.cmd | \
+  grep -E "(WRITE|CREATE|EXEC)"</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     09 · Cases & Evidence
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-cases">
+<article class="topic">
+<h1>09 · Security Onion — Cases &amp; Evidence</h1>
+<hr class="divider">
+
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Cases live at the application layer — they aggregate and document evidence from all network layers (alerts, Zeek logs, PCAPs) into a structured case file for incident response tracking.</span>
+</div>
+
+<h2>Case Management Overview</h2>
+<p>Cases at <strong>/cases</strong> document, track, and escalate incidents. Every confirmed True Positive should become a case. Cases link alerts, Hunt queries, PCAP evidence, IOCs, and analyst notes in one place.</p>
+
+<h2>Creating a Case</h2>
+<pre><code><span class="cm">From an alert:</span>
+   1. Expand the alert in /alerts
+   2. Click "Create Case" (or "Add to Case" if one exists)
+   3. Fill in title, severity, description, TLP
+   4. Case opens in /cases with the alert linked
+
+<span class="cm">From multiple alerts (same incident):</span>
+   1. Check boxes on related alerts
+   2. Actions → "Create Case"
+   3. All selected alerts link to the one case</code></pre>
+
+<h2>Case Fields Reference</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Field</th><th>Options</th><th>Guidance</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Status</strong></td><td>New → In Review → Escalated → Closed</td><td>Update as investigation progresses</td></tr>
+    <tr><td><strong>Severity</strong></td><td>low / medium / high / critical</td><td>Match to what the attacker actually did or could do</td></tr>
+    <tr><td><strong>TLP</strong></td><td>White / Green / Amber / Red</td><td>Controls who can see and share this case data</td></tr>
+    <tr><td><strong>Tags</strong></td><td>Free text</td><td>Add MITRE ATT&amp;CK technique IDs (T1046, T1059, etc.)</td></tr>
+    <tr><td><strong>Assignee</strong></td><td>SO user accounts</td><td>Assign to the analyst handling the investigation</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Adding Observables (IOCs)</h2>
+<pre><code><span class="cm">In the case view: Observables tab → Add Observable</span>
+
+Observable types and examples:
+  ip         192.168.56.10         (attacker source IP)
+  domain     evil.example.com       (C2 domain from Zeek dns.log)
+  url        http://192.168.56.30/cmd.php
+  md5        d41d8cd98f00b204e9800998ecf8427e
+  sha256     abc123...              (from Zeek files.log)
+  filename   payload.exe            (from Zeek files.log)
+
+<span class="cm">Mark each as:</span>
+  ioc: True   → Confirmed malicious — share / block
+  ioc: False  → Context only, not a standalone indicator</code></pre>
+
+<h2>Adding Evidence</h2>
+<pre><code><span class="cm">Evidence tab → Add Evidence</span>
+
+Types to attach:
+  1. PCAP file    → Download from /pcap, upload to case
+  2. Screenshots  → Alert view, Hunt query results, Wireshark stream
+  3. Log excerpts → Copy-paste key Zeek entries with timestamps
+  4. Analyst notes → What you found, when, what action you took
+
+Always document:
+  - Exact timestamp of each finding
+  - What query / tool revealed it
+  - What action was taken (blocked, notified, escalated)</code></pre>
+
+<h2>Case Documentation Template</h2>
+<pre><code">Title: [Alert Type] — [Source IP] targeting [Dest IP] — [Date]
+Severity: Medium
+TLP: Amber
+
+SUMMARY:
+Kali host (192.168.56.10) performed SYN port scan and HTTP directory
+enumeration against Windows host (192.168.56.30). No exploitation confirmed.
+
+TIMELINE:
+14:00:15  Suricata: ET SCAN Nmap SYN Scan (SID 2000537)
+14:00:15  Zeek conn: 450 S0 connections from 192.168.56.10 in 30 seconds
+14:00:47  Zeek conn: SF connections to ports 80, 445, 3389 (open)
+14:01:10  Suricata: ET SCAN Nmap Scripting Engine detected
+14:01:30  Zeek http: GET /admin, /login, /wp-admin from 192.168.56.10
+14:02:00  Analyst: PCAP pulled, Wireshark confirms Nmap NSE scan
+
+IOCs:
+  IP: 192.168.56.10 (attacker — Kali)
+  IP: 192.168.56.30 (target — Windows web server)
+  Open ports: 80, 445, 3389
+
+ATT&CK:
+  T1046  Network Service Scanning
+  T1595  Active Scanning
+
+DISPOSITION: True Positive — Unauthorized Recon
+ACTION: Alerted system owner; monitoring for follow-on activity</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Creating Your First Case</summary>
+  <div class="tier-body">
+    <h4>Steps</h4>
+    <ul>
+      <li>From a confirmed TP alert: click <strong>Create Case</strong> button — this links the alert to the case automatically</li>
+      <li>Fill in: Title, Description (who/what/when/where), Severity (low/medium/high/critical)</li>
+      <li>Add IOCs: IPs, domains, hashes, file names — tag with type (ip, domain, hash, etc.)</li>
+      <li>Set status: <strong>In Progress</strong> while investigating, <strong>Closed</strong> when resolved</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Building a Full Case Record</summary>
+  <div class="tier-body">
+    <h4>What a complete case should contain</h4>
+    <ul>
+      <li>All related alerts linked to the case (click <strong>Add Alert</strong> to attach additional triggers)</li>
+      <li>Timeline of events (chronological attack chain reconstructed from logs)</li>
+      <li>PCAP evidence uploaded or linked via Stenographer query</li>
+      <li>ATT&amp;CK techniques observed (use the Tags field: T1046, T1059.001, etc.)</li>
+      <li>Disposition: TP/FP, escalated/closed, actions taken</li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Case Management Workflow</summary>
+  <div class="tier-body">
+    <h4>Escalation and hand-off</h4>
+    <ul>
+      <li>Export case to PDF/HTML for management reporting or legal hold</li>
+      <li>Use the SO API to push case data to external ticketing systems (Jira, ServiceNow) via webhook</li>
+      <li>Correlate multiple cases by IOC — if same C2 IP appears in two cases, they may be the same threat actor campaign</li>
+    </ul>
+    <h4>MITRE ATT&amp;CK tagging strategy</h4>
+    <ul>
+      <li>Tag every case with ATT&amp;CK techniques — over time this builds a picture of which techniques target your org most</li>
+      <li>Export tagged cases → feed into ATT&amp;CK Navigator to show your coverage gaps</li>
+    </ul>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     10 · CLI & so-* Commands
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-cli">
+<article class="topic">
+<h1>10 · Security Onion — CLI &amp; so-* Commands</h1>
+<hr class="divider">
+
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">CLI tools manage the services that monitor all network layers — so-tcpdump captures L2-L4 frames, so-elastic manages L7 log storage, so-suricata-reload applies L3/L4/L7 detection rules.</span>
+</div>
+
+<h2>Core so-* Command Reference</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Command</th><th>What It Does</th></tr></thead>
+  <tbody>
+    <tr><td><code>so-status</code></td><td>Show status of all SO services</td></tr>
+    <tr><td><code>so-restart</code></td><td>Restart all SO services</td></tr>
+    <tr><td><code>so-restart [service]</code></td><td>Restart one service: suricata, zeek, elasticsearch, logstash, etc.</td></tr>
+    <tr><td><code>so-rule-update</code></td><td>Pull latest Suricata rules from configured feeds</td></tr>
+    <tr><td><code>so-suricata-reload</code></td><td>Reload Suricata rules without full restart</td></tr>
+    <tr><td><code>so-import-pcap &lt;file&gt;</code></td><td>Import PCAP for offline analysis — alerts appear in SOC</td></tr>
+    <tr><td><code>so-pcap</code></td><td>Query Stenographer to extract raw PCAP by IP/port/time</td></tr>
+    <tr><td><code>so-tcpdump</code></td><td>Run tcpdump on the monitoring interface</td></tr>
+    <tr><td><code>so-user-add &lt;email&gt;</code></td><td>Add a new SOC web interface user</td></tr>
+    <tr><td><code>so-firewall-allow-ip &lt;ip&gt;</code></td><td>Allow IP to access SO management</td></tr>
+    <tr><td><code>so-firewall-apply</code></td><td>Apply pending firewall rule changes</td></tr>
+    <tr><td><code>so-elastic-clear</code></td><td>Clear ALL Elasticsearch data (destructive!)</td></tr>
+    <tr><td><code>so-elastic-info</code></td><td>Show index sizes and document counts</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Status &amp; Health Checks</h2>
+<pre><code><span class="cm"># Full status — start here at the beginning of every shift</span>
+sudo so-status
+
+<span class="cm"># Show only non-running services (highlight problems)</span>
+sudo so-status | grep -v running
+
+<span class="cm"># Check disk — PCAP ring buffer can fill up quickly</span>
+df -h /nsm &amp;&amp; du -sh /nsm/stenographer/ &amp;&amp; du -sh /nsm/zeek/
+
+<span class="cm"># Tail Suricata container logs (real-time alert stream)</span>
+sudo docker logs so-suricata --tail 50 -f
+
+<span class="cm"># Verify traffic IS being captured on monitoring interface</span>
+sudo so-tcpdump -i eth1 -n -c 5              <span class="cm"># 5 packets then stop</span>
+sudo so-tcpdump -i eth1 -n "host 192.168.56.10" -c 10  <span class="cm"># Filter to Kali only</span>
+sudo so-tcpdump -i eth1 -n "port 80" -c 20   <span class="cm"># HTTP traffic only</span></code></pre>
+
+<h2>Rule Management Workflow</h2>
+<pre><code><span class="cm"># Full pipeline: update → test syntax → reload (all in one)</span>
+sudo so-rule-update &amp;&amp; \
+  sudo suricata -T -c /opt/so/conf/suricata/suricata.yaml &amp;&amp; \
+  sudo so-suricata-reload
+
+<span class="cm"># Add a quick custom rule inline and immediately apply</span>
+echo 'alert tcp 192.168.56.10 any -&gt; $HOME_NET any (msg:"LOCAL Test"; flags:S,12; sid:9000099; rev:1;)' | \
+  sudo tee -a /opt/so/conf/suricata/rules/local.rules &amp;&amp; \
+  sudo suricata -T -c /opt/so/conf/suricata/suricata.yaml &amp;&amp; \
+  sudo so-suricata-reload
+
+<span class="cm"># Find a specific rule by SID</span>
+grep -r "sid:2010937" /opt/so/rules/
+
+<span class="cm"># Count total loaded rules</span>
+sudo docker exec so-suricata cat /var/log/suricata/suricata.log | grep "rules loaded"</code></pre>
+
+<h2>PCAP &amp; Offline Analysis</h2>
+<pre><code><span class="cm"># Import a PCAP → SO processes it → alerts appear in /alerts within 1–2 min</span>
+sudo so-import-pcap /tmp/suspicious_capture.pcap
+
+<span class="cm"># Watch Suricata process the imported PCAP in real time</span>
+sudo so-import-pcap /tmp/malware.pcap &amp;
+sleep 5 &amp;&amp; sudo docker logs so-suricata --tail 20
+
+<span class="cm"># Retrieve PCAP from Stenographer by source IP + time</span>
+sudo so-pcap \
+  --src-ip 192.168.56.10 \
+  --dst-ip 192.168.56.30 \
+  --start-time "2024-01-15 14:00:00" \
+  --end-time "2024-01-15 14:15:00" \
+  --output /tmp/incident.pcap
+
+<span class="cm"># Confirm PCAP content before opening in Wireshark</span>
+sudo tcpdump -r /tmp/incident.pcap -nn -q | wc -l    <span class="cm"># Packet count</span>
+sudo tcpdump -r /tmp/incident.pcap -nn | head -20    <span class="cm"># First 20 packets</span></code></pre>
+
+<h2>Useful Command Combinations</h2>
+<pre><code"><span class="cm"># Quick-start: status + show any problems + disk check</span>
+sudo so-status &amp;&amp; echo "=== Disk ===" &amp;&amp; df -h /nsm
+
+<span class="cm"># Top 10 talkers from today's conn.log (who's sending the most data?)</span>
+zeek-cut id.orig_h id.resp_h id.resp_p orig_bytes resp_bytes \
+  &lt; /nsm/zeek/logs/current/conn.log | \
+  awk '{sum[$1" "$2" "$3] += $4+$5} END {for(k in sum) print sum[k],k}' | \
+  sort -rn | head -10
+
+<span class="cm"># Count port scan activity: how many S0 connections from Kali today?</span>
+zeek-cut id.orig_h conn_state \
+  &lt; /nsm/zeek/logs/current/conn.log | \
+  awk '$1=="192.168.56.10" &amp;&amp; $2=="S0"' | wc -l
+
+<span class="cm"># Find all alerts from the last hour in Suricata fast.log</span>
+sudo docker exec so-suricata grep "$(date -d '1 hour ago' '+%m/%d/%Y-%H')" \
+  /var/log/suricata/fast.log | tail -30
+
+<span class="cm"># Docker status overview</span>
+sudo docker ps --format "table {{.Names}}\t{{.Status}}"</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Essential so-* Commands</summary>
+  <div class="tier-body">
+    <h4>Commands to memorize</h4>
+    <pre><code>sudo so-status                    <span class="cm"># Are all services running?</span>
+sudo so-firewall-allow-ip X.X.X.X <span class="cm"># Open access for an IP</span>
+sudo so-firewall-apply            <span class="cm"># Apply firewall changes</span>
+sudo so-rule-update               <span class="cm"># Pull latest Suricata rules from ET</span>
+sudo so-import-pcap /path/to.pcap <span class="cm"># Import a PCAP file for offline analysis</span></code></pre>
+    <h4>Checking live logs (SSH into SO)</h4>
+    <pre><code>tail -f /nsm/zeek/logs/current/conn.log    <span class="cm"># Live connection log</span>
+tail -f /nsm/zeek/logs/current/dns.log     <span class="cm"># Live DNS queries</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Service Management</summary>
+  <div class="tier-body">
+    <pre><code>sudo so-suricata-reload           <span class="cm"># Apply local.rules changes without restart</span>
+sudo so-zeek-restart              <span class="cm"># Restart Zeek (reloads local.zeek scripts)</span>
+sudo so-elastic-restart           <span class="cm"># Restart Elasticsearch (if logs stop flowing)</span>
+sudo so-tcpdump -i eth1 -n -c 20  <span class="cm"># Verify monitoring NIC is seeing traffic</span>
+df -h /nsm                        <span class="cm"># Check disk usage for PCAP/log storage</span></code></pre>
+    <h4>Reading Suricata fast.log directly</h4>
+    <pre><code>sudo docker exec so-suricata tail -f /var/log/suricata/fast.log</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Configuration &amp; Tuning</summary>
+  <div class="tier-body">
+    <h4>Key configuration files</h4>
+    <ul>
+      <li><code>/opt/so/conf/suricata/suricata.yaml</code> — Suricata config (HOME_NET, thread count, logging)</li>
+      <li><code>/opt/so/conf/zeek/local.zeek</code> — Zeek local scripts and module loads</li>
+      <li><code>/opt/so/conf/logstash/</code> — Logstash pipelines (input parsing, ECS field mapping)</li>
+      <li><code>/opt/so/conf/elasticsearch/</code> — ES cluster settings, ILM policies, index templates</li>
+    </ul>
+    <pre><code><span class="cm"># After editing any config, validate and reload:</span>
+sudo so-suricata-reload           <span class="cm"># Suricata</span>
+sudo so-zeek-restart              <span class="cm"># Zeek</span>
+sudo so-logstash-restart          <span class="cm"># Logstash pipeline</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     11 · Investigation Lab
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-lab">
+<article class="topic">
+<h1>11 · Security Onion — Investigation Lab</h1>
+<hr class="divider">
+
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">This lab exercises all three analyst-relevant OSI layers: L3 (IP addresses in alerts), L4 (port scanning at transport layer), and L7 (HTTP requests, DNS queries, application protocol detection).</span>
+</div>
+
+<h2>Lab Environment</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>VM</th><th>Role</th><th>IP</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Security Onion</strong></td><td>Monitor / SOC</td><td>192.168.56.20 (eth0)</td><td>eth1 = monitoring, no IP, promiscuous, same network as Kali &amp; Windows</td></tr>
+    <tr><td><strong>Kali Linux</strong></td><td>Attacker</td><td>192.168.56.10</td><td>Runs nmap, curl, smbclient to generate detectable attack traffic</td></tr>
+    <tr><td><strong>Windows 10</strong></td><td>Victim / Target</td><td>192.168.56.30</td><td>Web server (IIS/Apache) on port 80; SMB enabled</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="callout lab"><strong>Goal:</strong> Generate realistic attacker traffic from Kali, observe SO detecting it in real time, triage alerts, pivot to Hunt + PCAP, and document the full incident in a Case.</div>
+
+<h2>Phase 1 — Generate Attack Traffic (from Kali)</h2>
+<pre><code><span class="cm">## Run on Kali (192.168.56.10) ##</span>
+
+<span class="cm"># Step 1: Host discovery — confirm which IPs are live</span>
+nmap -sn 192.168.56.0/24
+<span class="cm"># Expected live: .1 (host), .20 (SO), .30 (Windows)</span>
+
+<span class="cm"># Step 2: SYN port scan of Windows — fast, stealthier than full connect</span>
+nmap -sS -p 1-1024 --open 192.168.56.30
+<span class="cm"># -sS = SYN scan (half-open, doesn't complete handshake)</span>
+<span class="cm"># -p 1-1024 = first 1024 ports</span>
+<span class="cm"># --open = only show open (responding) ports</span>
+
+<span class="cm"># Step 3: Service + version detection on found ports (more noise)</span>
+nmap -sV -sC -p 80,139,445,3389 192.168.56.30
+<span class="cm"># -sV = detect service versions (banner grabbing)</span>
+<span class="cm"># -sC = run default NSE scripts (http-title, smb-os-discovery, etc.)</span>
+<span class="cm"># Combines version detection + scripting in one scan</span>
+
+<span class="cm"># Step 4: Aggressive scan — OS + version + scripts + traceroute</span>
+nmap -A -p 80,445 192.168.56.30
+<span class="cm"># -A = everything: OS detection, version, scripts, traceroute</span>
+<span class="cm"># More noisy but most comprehensive output</span>
+
+<span class="cm"># Step 5: HTTP web requests (simulating attacker browsing the target)</span>
+curl -v http://192.168.56.30/
+curl -A "python-requests/2.28.0" http://192.168.56.30/admin
+
+<span class="cm"># Step 6: Directory brute force simulation</span>
+for path in admin login wp-admin backup config shell cmd.php .env; do
+  code=$(curl -o /dev/null -s -w "%{http_code}" http://192.168.56.30/$path)
+  echo "$code  http://192.168.56.30/$path"
+done
+
+<span class="cm"># Step 7: SMB enumeration probe</span>
+smbclient -L //192.168.56.30 -N
+enum4linux -a 192.168.56.30   <span class="cm"># More thorough SMB/RPC enumeration</span>
+
+<span class="cm"># Step 8: Efficient combined workflow (discover → scan found hosts)</span>
+nmap -sn 192.168.56.0/24 -oG - | \
+  awk '/Up$/{print $2}' | \
+  xargs -I {} nmap -sS -sV -p 22,80,443,445,3389 --open {}</code></pre>
+
+<h2>Phase 2 — Triage Alerts in SO (/alerts)</h2>
+<pre><code><span class="cm">## Browser → https://192.168.56.20/alerts ##</span>
+
+Alerts you should see firing:
+  - ET SCAN Nmap Scripting Engine User-Agent Detected
+  - ET SCAN Suspicious inbound to MSSQL port (or similar scan rules)
+  - ET SCAN Nmap -sV scan detected
+  - ET POLICY SMB Traffic Detected
+  - ET SCAN Aggressive Web Scan Detected
+
+Triage steps:
+  1. Filter: status: new
+  2. Sort: @timestamp ascending (see the attack timeline unfold)
+  3. Click the first Nmap scan alert
+     - Note: source.ip = 192.168.56.10 (Kali)
+     - Note: destination.ip = 192.168.56.30 (Windows)
+     - Copy the network.community_id value
+  4. Click "Hunt" button on the alert</code></pre>
+
+<h2>Phase 3 — Hunt Queries</h2>
+<pre><code><span class="cm">## https://192.168.56.20/hunt ##</span>
+
+<span class="cm"># Q1: All traffic from Kali — see attack scope</span>
+source.ip: "192.168.56.10" AND destination.ip: "192.168.56.30"
+
+<span class="cm"># Q2: Scan evidence — S0 = no reply (closed/filtered ports)</span>
+source.ip: "192.168.56.10" AND zeek.conn.conn_state: "S0"
+<span class="cm"># → High count = confirmed port scan</span>
+
+<span class="cm"># Q3: Open ports — SF = connection completed</span>
+source.ip: "192.168.56.10" AND destination.ip: "192.168.56.30" AND zeek.conn.conn_state: "SF"
+<span class="cm"># → Look at zeek.conn.service field — http? smb? microsoft-ds?</span>
+
+<span class="cm"># Q4: HTTP requests — web attack evidence</span>
+source.ip: "192.168.56.10" AND event.dataset: "zeek.http"
+<span class="cm"># → Expand entries → see zeek.http.uri and zeek.http.user_agent</span>
+<span class="cm"># → Should see python-requests UA and /admin /cmd paths</span>
+
+<span class="cm"># Q5: 404 responses — dir brute force confirmation</span>
+source.ip: "192.168.56.10" AND zeek.http.status_code: 404
+
+<span class="cm"># Q6: SMB activity</span>
+source.ip: "192.168.56.10" AND event.dataset: "zeek.smb_mapping"
+
+<span class="cm"># Q7: Pivot from community_id to see same connection in all log types</span>
+network.community_id: "&lt;paste the ID from the alert&gt;"</code></pre>
+
+<h2>Phase 4 — Retrieve &amp; Analyze PCAP</h2>
+<pre><code><span class="cm">## https://192.168.56.20/pcap ##</span>
+
+Fill in:
+  Source IP:   192.168.56.10
+  Dest IP:     192.168.56.30
+  Time range:  [window when you ran the attack]
+Click "Get PCAP" → download investigation.pcap
+
+<span class="cm">## Open in Wireshark ##</span>
+
+<span class="cm"># 1. Protocol Hierarchy (Statistics menu)</span>
+<span class="cm">#    See how much is TCP, HTTP, SMB, ICMP</span>
+
+<span class="cm"># 2. Confirm port scan — many SYNs, mostly RSTs back</span>
+tcp.flags == 0x002
+<span class="cm">#    Many different destination ports = SYN scan confirmed</span>
+
+<span class="cm"># 3. Find open ports — these ports answered with SYN-ACK</span>
+tcp.flags.syn == 1 &amp;&amp; tcp.flags.ack == 1
+<span class="cm">#    Note destination ports — these are the open ones</span>
+
+<span class="cm"># 4. HTTP — right-click any HTTP packet → Follow → TCP Stream</span>
+http &amp;&amp; ip.src == 192.168.56.10
+<span class="cm">#    See GET requests, python-requests user agent, server responses</span>
+
+<span class="cm"># 5. Conversations (Statistics menu) → TCP</span>
+<span class="cm">#    Sort by Bytes → biggest transfers</span>
+<span class="cm">#    Sort by Packets → most active connections</span>
+
+<span class="cm"># tshark quick-analysis from command line</span>
+tshark -r investigation.pcap -q -z "conv,tcp" 2&gt;/dev/null | head -20
+tshark -r investigation.pcap -T fields -e ip.dst -e tcp.dstport \
+  -Y "tcp.flags.syn==1 &amp;&amp; tcp.flags.ack==0" 2&gt;/dev/null | \
+  sort -t$'\t' -k2 -n | uniq                     <span class="cm"># All scanned ports</span></code></pre>
+
+<h2>Phase 5 — Create the Case (/cases)</h2>
+<pre><code"><span class="cm">## https://192.168.56.20/cases → New Case ##</span>
+
+Title:       Nmap Recon + Web Probe — Kali (192.168.56.10) vs Windows (192.168.56.30)
+Severity:    Medium
+TLP:         Amber
+Description: Attacker performed SYN scan (ports 1-1024), NSE scripting,
+             HTTP directory brute force with suspicious user agents, and
+             SMB enumeration. No exploitation confirmed.
+
+Observables:
+  ip: 192.168.56.10  [ioc:false — attacker IP in lab context]
+  ip: 192.168.56.30  [ioc:false — victim/target IP]
+
+Evidence:
+  [ Upload: investigation.pcap ]
+  [ Paste: key zeek.conn log entries showing S0 + SF states ]
+  [ Screenshot: Hunt query showing attack sequence ]
+
+ATT&CK Tags:
+  T1046  Network Service Scanning
+  T1595  Active Scanning
+  T1592  Gather Victim Host Information
+
+Disposition:  True Positive — Unauthorized Reconnaissance (Lab Exercise)
+Action:       Lab only — no real action needed.
+              In production: isolate source, notify asset owner, review firewall.</code></pre>
+
+<h2>Expected Results Summary</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Data Source</th><th>Evidence Observed</th></tr></thead>
+  <tbody>
+    <tr><td>Suricata Alerts</td><td>ET SCAN rules for Nmap, NSE scripts, SMB; ET POLICY for SMB</td></tr>
+    <tr><td>Zeek conn.log</td><td>Hundreds of S0 states (scan probes), few SF (open ports), REJ (RST responses)</td></tr>
+    <tr><td>Zeek http.log</td><td>GET /admin /cmd /wp-admin; 404 responses; python-requests + curl user agents</td></tr>
+    <tr><td>Zeek notice.log</td><td>Scan::Port_Scan notice triggered by Zeek's built-in scan detection scripts</td></tr>
+    <tr><td>PCAP / Wireshark</td><td>SYN scan pattern, SYN-ACK on open ports, HTTP GET requests in plain text</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="callout lab"><strong>Lab Extension:</strong> Download a real-world PCAP from <strong>malware-traffic-analysis.net</strong> and run <code>sudo so-import-pcap</code> to see how SO handles actual malware traffic. Triage the alerts it generates using the full workflow above.</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Run the Lab &amp; Find Alerts</summary>
+  <div class="tier-body">
+    <h4>Step 1: Generate traffic from Kali (192.168.56.10)</h4>
+    <pre><code>nmap -sS -p 1-1000 192.168.56.30   <span class="cm"># Basic SYN scan against Windows 10</span></code></pre>
+    <h4>Step 2: Check SO Alerts</h4>
+    <ul>
+      <li>Open <code>https://192.168.56.20/alerts</code> → you should see Suricata SCAN alerts within 30 seconds</li>
+      <li>Read the <code>rule.name</code> — it should say something like "ET SCAN Nmap"</li>
+      <li>Confirm <code>source.ip: 192.168.56.10</code> and <code>destination.ip: 192.168.56.30</code></li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Full Pivot Chain</summary>
+  <div class="tier-body">
+    <h4>Complete the triage workflow</h4>
+    <pre><code><span class="cm"># 1. From Kali — run a more aggressive scan to generate more interesting alerts</span>
+nmap -sS -sV -sC -O -p 22,80,135,139,443,445,3389 --open 192.168.56.30
+
+<span class="cm"># 2. In SO → Alerts: copy the community_id from the alert</span>
+<span class="cm"># 3. Hunt → search: network.community_id: "1:xxxxx=="</span>
+<span class="cm"># 4. Verify conn_state in Zeek conn.log: S0 (blocked) or SF (reached target)</span>
+<span class="cm"># 5. PCAP → click to download raw capture → open in Wireshark</span>
+<span class="cm"># 6. Wireshark → Follow TCP Stream → see the SYN scan packets</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Write a Custom Detection Rule</summary>
+  <div class="tier-body">
+    <h4>Write a rule for Nmap NSE scripts</h4>
+    <pre><code><span class="cm"># Nmap NSE scripts send HTTP requests with "Nmap Scripting Engine" User-Agent</span>
+<span class="cm"># Write this in /opt/so/conf/suricata/rules/local.rules:</span>
+
+alert http any any -&gt; any any (
+  msg:"Lab Rule — Nmap NSE HTTP User-Agent";
+  http.user_agent; content:"Nmap Scripting Engine"; nocase;
+  classtype:network-scan;
+  sid:9001001; rev:1;
+)
+
+<span class="cm"># Reload:</span>
+sudo so-suricata-reload
+
+<span class="cm"># Trigger it from Kali:</span>
+nmap -sV --script http-headers 192.168.56.30
+
+<span class="cm"># Verify your new rule fires in SO Alerts</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
 <script>
 window.NOTEBOOK = {
   title: 'Security Onion',
   topics: [
-    { id: 'overview',    badge: '01', label: 'Overview & Navigation'         },
-    { id: 'alerts',      badge: '02', label: 'Alert Triage'                  },
-    { id: 'dashboards',  badge: '03', label: 'Dashboards'                    },
-    { id: 'kibana',      badge: '04', label: 'Kibana / ELK Queries'          },
-    { id: 'suricata',    badge: '05', label: 'Suricata IDS Rules'            },
-    { id: 'zeek',        badge: '06', label: 'Zeek Log Fields'               },
-    { id: 'pcap',        badge: '07', label: 'PCAP Analysis'                 },
-    { id: 'workflows',   badge: '08', label: 'Investigation Workflows'       },
+    { id: 'overview',    badge: '01', label: 'Overview & Tool Stack'    },
+    { id: 'setup',       badge: '02', label: 'Setup & Deployment'       },
+    { id: 'alerts',      badge: '03', label: 'Alert Triage'             },
+    { id: 'dashboards',  badge: '04', label: 'Dashboards'               },
+    { id: 'hunt',        badge: '05', label: 'Hunt & KQL Queries'       },
+    { id: 'suricata',    badge: '06', label: 'Suricata IDS'             },
+    { id: 'zeek',        badge: '07', label: 'Zeek Logs'                },
+    { id: 'pcap',        badge: '08', label: 'PCAP Analysis'            },
+    { id: 'cases',       badge: '09', label: 'Cases & Evidence'         },
+    { id: 'cli',         badge: '10', label: 'CLI & so-* Commands'      },
+    { id: 'lab',         badge: '11', label: 'Investigation Lab'        },
   ]
 };
 </script>
-
-<!-- ═══════════════════════════════════════════════════════════════
-     EMBEDDED CONTENT TEMPLATES — no server required
-     Content is invisible until loadTopic() reads tpl.innerHTML
-     ═══════════════════════════════════════════════════════════════ -->
-
-<template id="tpl-overview">
-<article class="topic">
-<h1>01 · Security Onion — Overview &amp; Navigation</h1>
-<hr class="divider">
-
-<h2>What is Security Onion?</h2>
-<p>Security Onion is a free, open-source Linux distribution for threat hunting, enterprise security monitoring, and log management. It bundles multiple NSM tools into a single platform.</p>
-
-<h2>Core Components</h2>
-<div class="table-wrap">
-<table>
-  <thead><tr><th>Component</th><th>Role</th></tr></thead>
-  <tbody>
-    <tr><td>Suricata</td><td>IDS/IPS — generates alerts from rule signatures</td></tr>
-    <tr><td>Zeek (Bro)</td><td>Network analysis — generates structured connection logs</td></tr>
-    <tr><td>Elasticsearch</td><td>Log storage and indexing backend</td></tr>
-    <tr><td>Kibana</td><td>Web UI for querying and visualizing logs</td></tr>
-    <tr><td>Logstash</td><td>Log ingestion and normalization pipeline</td></tr>
-    <tr><td>Stenographer</td><td>Full packet capture (PCAP) storage</td></tr>
-    <tr><td>OSSEC/Wazuh</td><td>Host-based intrusion detection (HIDS)</td></tr>
-  </tbody>
-</table>
-</div>
-
-<h2>Security Onion Console (SOC) — Key Sections</h2>
-<div class="table-wrap">
-<table>
-  <thead><tr><th>Section</th><th>URL Path</th><th>What It Shows</th></tr></thead>
-  <tbody>
-    <tr><td>Alerts</td><td>/alerts</td><td>Suricata IDS alerts — primary triage view</td></tr>
-    <tr><td>Dashboards</td><td>/dashboards</td><td>Pre-built visualizations (DNS, HTTP, alerts)</td></tr>
-    <tr><td>Hunt</td><td>/hunt</td><td>Threat hunting interface — query logs</td></tr>
-    <tr><td>PCAP</td><td>/pcap</td><td>Packet capture retrieval and analysis</td></tr>
-    <tr><td>Cases</td><td>/cases</td><td>Case management for incidents</td></tr>
-    <tr><td>Grid</td><td>/grid</td><td>Node management and health status</td></tr>
-  </tbody>
-</table>
-</div>
-
-<h2>Deployment Types</h2>
-<div class="table-wrap">
-<table>
-  <thead><tr><th>Type</th><th>Use Case</th></tr></thead>
-  <tbody>
-    <tr><td>Standalone</td><td>All components on one node — lab/small org</td></tr>
-    <tr><td>Manager + Sensor</td><td>Sensor captures traffic, manager holds data</td></tr>
-    <tr><td>Distributed</td><td>Multiple sensors reporting to cluster — enterprise</td></tr>
-  </tbody>
-</table>
-</div>
-
-<h2>Notes to Add</h2>
-<ul>
-  <li>Alert triage workflow and escalation process</li>
-  <li>Common Suricata rule categories and severity levels</li>
-  <li>Zeek log fields reference</li>
-  <li>Kibana query syntax for Security Onion</li>
-  <li>PCAP retrieval and Wireshark integration</li>
-  <li>Case creation and documentation workflow</li>
-</ul>
-</article>
-</template>
-
-<template id="tpl-alerts">
-<article class="topic">
-<h1>02 · Security Onion — Alert Triage</h1>
-<hr class="divider">
-<div class="callout note"><strong>In Progress</strong> — Add your Alert Triage notes here.</div>
-<p>This section is ready for your notes. Use the PSAA sections as a template for tables, code blocks, and callouts.</p>
-<h2>Quick Structure Guide</h2>
-<pre><code><span class="cm"># Table example</span>
-&lt;h2&gt;Section Title&lt;/h2&gt;
-&lt;div class="table-wrap"&gt;
-&lt;table&gt;
-  &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Col 1&lt;/th&gt;&lt;th&gt;Col 2&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;&lt;td&gt;Value&lt;/td&gt;&lt;td&gt;Description&lt;/td&gt;&lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-&lt;/div&gt;
-
-<span class="cm"># Code block example</span>
-&lt;pre&gt;&lt;code&gt;&lt;span class="cm"&gt;# comment&lt;/span&gt;
-command here&lt;/code&gt;&lt;/pre&gt;</code></pre>
-</article>
-</template>
-
-<template id="tpl-dashboards">
-<article class="topic">
-<h1>03 · Security Onion — Dashboards</h1>
-<hr class="divider">
-<div class="callout note"><strong>In Progress</strong> — Add your Dashboards notes here.</div>
-<p>This section is ready for your notes. Use the PSAA sections as a template for tables, code blocks, and callouts.</p>
-<h2>Quick Structure Guide</h2>
-<pre><code><span class="cm"># Table example</span>
-&lt;h2&gt;Section Title&lt;/h2&gt;
-&lt;div class="table-wrap"&gt;
-&lt;table&gt;
-  &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Col 1&lt;/th&gt;&lt;th&gt;Col 2&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;&lt;td&gt;Value&lt;/td&gt;&lt;td&gt;Description&lt;/td&gt;&lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-&lt;/div&gt;
-
-<span class="cm"># Code block example</span>
-&lt;pre&gt;&lt;code&gt;&lt;span class="cm"&gt;# comment&lt;/span&gt;
-command here&lt;/code&gt;&lt;/pre&gt;</code></pre>
-</article>
-</template>
-
-<template id="tpl-kibana">
-<article class="topic">
-<h1>04 · Security Onion — Kibana / ELK Queries</h1>
-<hr class="divider">
-<div class="callout note"><strong>In Progress</strong> — Add your Kibana / ELK Queries notes here.</div>
-<p>This section is ready for your notes. Use the PSAA sections as a template for tables, code blocks, and callouts.</p>
-<h2>Quick Structure Guide</h2>
-<pre><code><span class="cm"># Table example</span>
-&lt;h2&gt;Section Title&lt;/h2&gt;
-&lt;div class="table-wrap"&gt;
-&lt;table&gt;
-  &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Col 1&lt;/th&gt;&lt;th&gt;Col 2&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;&lt;td&gt;Value&lt;/td&gt;&lt;td&gt;Description&lt;/td&gt;&lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-&lt;/div&gt;
-
-<span class="cm"># Code block example</span>
-&lt;pre&gt;&lt;code&gt;&lt;span class="cm"&gt;# comment&lt;/span&gt;
-command here&lt;/code&gt;&lt;/pre&gt;</code></pre>
-</article>
-</template>
-
-<template id="tpl-suricata">
-<article class="topic">
-<h1>05 · Security Onion — Suricata IDS Rules</h1>
-<hr class="divider">
-<div class="callout note"><strong>In Progress</strong> — Add your Suricata IDS Rules notes here.</div>
-<p>This section is ready for your notes. Use the PSAA sections as a template for tables, code blocks, and callouts.</p>
-<h2>Quick Structure Guide</h2>
-<pre><code><span class="cm"># Table example</span>
-&lt;h2&gt;Section Title&lt;/h2&gt;
-&lt;div class="table-wrap"&gt;
-&lt;table&gt;
-  &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Col 1&lt;/th&gt;&lt;th&gt;Col 2&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;&lt;td&gt;Value&lt;/td&gt;&lt;td&gt;Description&lt;/td&gt;&lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-&lt;/div&gt;
-
-<span class="cm"># Code block example</span>
-&lt;pre&gt;&lt;code&gt;&lt;span class="cm"&gt;# comment&lt;/span&gt;
-command here&lt;/code&gt;&lt;/pre&gt;</code></pre>
-</article>
-</template>
-
-<template id="tpl-zeek">
-<article class="topic">
-<h1>06 · Security Onion — Zeek Log Fields</h1>
-<hr class="divider">
-<div class="callout note"><strong>In Progress</strong> — Add your Zeek Log Fields notes here.</div>
-<p>This section is ready for your notes. Use the PSAA sections as a template for tables, code blocks, and callouts.</p>
-<h2>Quick Structure Guide</h2>
-<pre><code><span class="cm"># Table example</span>
-&lt;h2&gt;Section Title&lt;/h2&gt;
-&lt;div class="table-wrap"&gt;
-&lt;table&gt;
-  &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Col 1&lt;/th&gt;&lt;th&gt;Col 2&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;&lt;td&gt;Value&lt;/td&gt;&lt;td&gt;Description&lt;/td&gt;&lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-&lt;/div&gt;
-
-<span class="cm"># Code block example</span>
-&lt;pre&gt;&lt;code&gt;&lt;span class="cm"&gt;# comment&lt;/span&gt;
-command here&lt;/code&gt;&lt;/pre&gt;</code></pre>
-</article>
-</template>
-
-<template id="tpl-pcap">
-<article class="topic">
-<h1>07 · Security Onion — PCAP Analysis</h1>
-<hr class="divider">
-<div class="callout note"><strong>In Progress</strong> — Add your PCAP Analysis notes here.</div>
-<p>This section is ready for your notes. Use the PSAA sections as a template for tables, code blocks, and callouts.</p>
-<h2>Quick Structure Guide</h2>
-<pre><code><span class="cm"># Table example</span>
-&lt;h2&gt;Section Title&lt;/h2&gt;
-&lt;div class="table-wrap"&gt;
-&lt;table&gt;
-  &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Col 1&lt;/th&gt;&lt;th&gt;Col 2&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;&lt;td&gt;Value&lt;/td&gt;&lt;td&gt;Description&lt;/td&gt;&lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-&lt;/div&gt;
-
-<span class="cm"># Code block example</span>
-&lt;pre&gt;&lt;code&gt;&lt;span class="cm"&gt;# comment&lt;/span&gt;
-command here&lt;/code&gt;&lt;/pre&gt;</code></pre>
-</article>
-</template>
-
-<template id="tpl-workflows">
-<article class="topic">
-<h1>08 · Security Onion — Investigation Workflows</h1>
-<hr class="divider">
-<div class="callout note"><strong>In Progress</strong> — Add your Investigation Workflows notes here.</div>
-<p>This section is ready for your notes. Use the PSAA sections as a template for tables, code blocks, and callouts.</p>
-<h2>Quick Structure Guide</h2>
-<pre><code><span class="cm"># Table example</span>
-&lt;h2&gt;Section Title&lt;/h2&gt;
-&lt;div class="table-wrap"&gt;
-&lt;table&gt;
-  &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Col 1&lt;/th&gt;&lt;th&gt;Col 2&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;&lt;td&gt;Value&lt;/td&gt;&lt;td&gt;Description&lt;/td&gt;&lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-&lt;/div&gt;
-
-<span class="cm"># Code block example</span>
-&lt;pre&gt;&lt;code&gt;&lt;span class="cm"&gt;# comment&lt;/span&gt;
-command here&lt;/code&gt;&lt;/pre&gt;</code></pre>
-</article>
-</template>
-
 <script src="js/app.js"></script>
 </body>
 </html>

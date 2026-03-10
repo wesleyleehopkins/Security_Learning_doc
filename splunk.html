@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Splunk — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Notebook</div>
+      <div class="sidebar-title">Splunk</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">🔍</div>
+          <h2>Splunk</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Splunk',
+  topics: [
+    { id: 'overview',    badge: '01', label: 'Overview & Use Cases'        },
+    { id: 'architecture',badge: '02', label: 'Architecture & Components'   },
+    { id: 'sourcetypes', badge: '03', label: 'Indexes & Sourcetypes'       },
+    { id: 'cim-fields',  badge: '04', label: 'CIM Field Reference'         },
+    { id: 'es-overview', badge: '05', label: 'Enterprise Security'         },
+    { id: 'sub-pages',   badge: '→',  label: 'Sub-Notebooks'               },
+  ]
+};
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EMBEDDED CONTENT TEMPLATES — no server required
+     ═══════════════════════════════════════════════════════════════ -->
+
+<template id="tpl-overview">
+<article class="topic">
+<h1>01 · Splunk — Overview &amp; Use Cases</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Splunk ingests, indexes, and searches application-layer log data — operating entirely at L7 via its REST API, web UI, and SPL query engine.</span>
+</div>
+<hr class="divider">
+
+<h2>What is Splunk?</h2>
+<p>Splunk is a data platform that ingests machine data (logs, metrics, events) from any source, indexes it, and makes it searchable via the Splunk Processing Language (SPL). In a SOC context it functions as a SIEM — collecting, correlating, and alerting on security-relevant events across the enterprise.</p>
+
+<h2>Splunk Product Suite (Security Focus)</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Product</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td>Splunk Enterprise</td><td>Core platform — ingest, index, search, visualize</td></tr>
+    <tr><td>Splunk Enterprise Security (ES)</td><td>SIEM add-on — correlation searches, notable events, risk scoring</td></tr>
+    <tr><td>Splunk SOAR (Phantom)</td><td>Security Orchestration, Automation &amp; Response playbooks</td></tr>
+    <tr><td>Splunk UBA</td><td>User &amp; Entity Behavior Analytics — ML-based anomaly detection</td></tr>
+    <tr><td>Splunk App for MITRE ATT&amp;CK</td><td>Maps detections to ATT&amp;CK framework techniques</td></tr>
+    <tr><td>Splunk Security Essentials</td><td>Free app with 300+ pre-built security detections</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>SOC Use Cases</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Use Case</th><th>How Splunk Addresses It</th></tr></thead>
+  <tbody>
+    <tr><td>Alert Triage</td><td>Notable events in ES, correlation search results with risk scores</td></tr>
+    <tr><td>Log Investigation</td><td>SPL search across all ingested sourcetypes; join across indexes</td></tr>
+    <tr><td>Threat Hunting</td><td>Ad-hoc SPL queries; MITRE ATT&amp;CK mapped detections</td></tr>
+    <tr><td>Incident Timeline</td><td>transaction command groups events; timechart shows progression</td></tr>
+    <tr><td>Dashboards / Reporting</td><td>Saved searches feed scheduled dashboard panels for leadership</td></tr>
+    <tr><td>Compliance</td><td>Indexed logs meet retention requirements; audit trails searchable</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Splunk Data Flow</h2>
+<pre><code><span class="cm"># Data path through Splunk:</span>
+[Source]  →  [Universal Forwarder]  →  [Indexer]  →  [Search Head]  →  [Analyst]
+
+<span class="cm"># At indexing time:</span>
+Raw event  →  Line breaking  →  Timestamp extraction  →  Sourcetype assignment  →  Index storage
+
+<span class="cm"># At search time:</span>
+SPL query  →  Search Head distributes to Indexers  →  Results merged  →  Displayed</code></pre>
+
+<h2>Key Concepts</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+  <tbody>
+    <tr><td>Index</td><td>Storage bucket — logical partition for data (e.g., <code>index=windows</code>)</td></tr>
+    <tr><td>Sourcetype</td><td>Format/parser applied to events — tells Splunk how to extract fields (e.g., <code>sourcetype=WinEventLog:Security</code>)</td></tr>
+    <tr><td>Source</td><td>Path of the originating file or input (e.g., <code>source=WinEventLog:Security</code>)</td></tr>
+    <tr><td>Host</td><td>Hostname of the system that generated the event</td></tr>
+    <tr><td>SPL</td><td>Search Processing Language — query language for Splunk</td></tr>
+    <tr><td>Knowledge Object</td><td>Saved searches, field extractions, lookups, macros — reusable search components</td></tr>
+    <tr><td>CIM</td><td>Common Information Model — normalized field naming across data sources</td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Understanding Splunk's role in a SOC</h4>
+    <ul>
+      <li>Splunk is a SIEM that collects L7 application log data and makes it searchable via SPL</li>
+      <li>Key terms: index, sourcetype, source, host — all L7 metadata assigned at ingest</li>
+      <li>Always specify index first — massively improves search performance</li>
+    </ul>
+    <pre><code>index=windows sourcetype=WinEventLog:Security
+| head 20</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Correlating across data models</h4>
+    <ul>
+      <li>Use CIM field names (src, dest, user, action) to search across multiple sourcetypes simultaneously</li>
+      <li>Splunk ES adds SIEM workflow on top — notable events, risk scoring, and correlation searches</li>
+    </ul>
+    <pre><code>index=* (action=failure OR action=failed) earliest=-1h
+| stats count by src, dest, user
+| sort -count</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Risk-based alerting and multi-product correlation</h4>
+    <ul>
+      <li>Tune ES correlation searches so urgency reflects true asset criticality — depends on Asset &amp; Identity data</li>
+      <li>Use Splunk UBA to baseline user/entity behavior at L7 and surface statistical anomalies automatically</li>
+    </ul>
+    <pre><code>index=notable earliest=-24h status!=5
+| stats count, dc(src) AS unique_srcs by rule_name
+| sort -count
+<span class="cm"># Identify top noisy rules for FP tuning</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-architecture">
+<article class="topic">
+<h1>02 · Splunk — Architecture &amp; Components</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Each Splunk component communicates via HTTP/HTTPS management APIs (L7) — forwarders ship log data over TCP port 9997 while the search head serves analysts via HTTPS on port 8000.</span>
+</div>
+<hr class="divider">
+
+<h2>Core Components</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Component</th><th>Role</th><th>Typical Port</th></tr></thead>
+  <tbody>
+    <tr><td>Universal Forwarder (UF)</td><td>Lightweight agent on endpoint — collects &amp; forwards raw data</td><td>9997 (out)</td></tr>
+    <tr><td>Heavy Forwarder (HF)</td><td>Full Splunk instance — parses, filters, routes before sending</td><td>9997 (out)</td></tr>
+    <tr><td>Indexer</td><td>Receives, parses, indexes events; stores data on disk</td><td>9997 (in), 8089 (mgmt)</td></tr>
+    <tr><td>Search Head (SH)</td><td>Analyst UI — distributes searches to indexers, merges results</td><td>8000 (web), 8089 (mgmt)</td></tr>
+    <tr><td>Deployment Server</td><td>Centrally manages forwarder configurations and app deployment</td><td>8089</td></tr>
+    <tr><td>License Master</td><td>Controls daily indexing volume allowance</td><td>8089</td></tr>
+    <tr><td>Cluster Master</td><td>Manages index cluster replication and search factor</td><td>8089</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Deployment Models</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Model</th><th>Use Case</th></tr></thead>
+  <tbody>
+    <tr><td>Standalone</td><td>All roles on one server — dev/lab/small deployment (&lt;10 GB/day)</td></tr>
+    <tr><td>Distributed</td><td>Separate indexers and search heads — mid-size enterprises</td></tr>
+    <tr><td>Index Cluster</td><td>Multiple indexers with replication — high availability</td></tr>
+    <tr><td>Search Head Cluster</td><td>Multiple SHs behind a load balancer — high availability for analysts</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Important Configuration Files</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>File</th><th>Location</th><th>Controls</th></tr></thead>
+  <tbody>
+    <tr><td>inputs.conf</td><td>$SPLUNK_HOME/etc/system/local/ or app</td><td>What data to collect — monitors, scripted inputs, network</td></tr>
+    <tr><td>outputs.conf</td><td>Forwarder: etc/system/local/</td><td>Where to send data — indexer address, port, SSL</td></tr>
+    <tr><td>props.conf</td><td>Indexer / Search Head</td><td>Sourcetype settings — line merging, timestamp, field transforms</td></tr>
+    <tr><td>transforms.conf</td><td>Indexer / Search Head</td><td>Field extractions, lookups, event routing</td></tr>
+    <tr><td>indexes.conf</td><td>Indexer</td><td>Index creation, retention, storage paths</td></tr>
+    <tr><td>serverclass.conf</td><td>Deployment Server</td><td>Forwarder groups and app assignments</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Data Pipeline (Index Time)</h2>
+<pre><code><span class="cm"># Input phase — data enters Splunk</span>
+Monitor file / Network input / Scripted input / HTTP Event Collector (HEC)
+
+<span class="cm"># Parsing phase — data is structured</span>
+Line breaking → Charset conversion → Timestamp extraction → Event merging
+
+<span class="cm"># Indexing phase — data is stored</span>
+Field extraction (default fields) → Index storage → tsidx (time-series index) files
+
+<span class="cm"># Search phase — data is retrieved</span>
+SPL → bloom filters → tsidx lookup → raw event retrieval → field extraction → results</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Knowing the components and their ports</h4>
+    <ul>
+      <li>Universal Forwarder → Indexer on TCP 9997; Search Head web UI on HTTPS 8000</li>
+      <li>All management communication uses port 8089 (Splunk REST API at L7)</li>
+      <li>For a single-server lab, all roles run on one instance (standalone deployment)</li>
+    </ul>
+    <pre><code><span class="cm"># Verify forwarder connectivity from Search Head</span>
+index=_internal sourcetype=splunkd earliest=-15m
+| stats dc(host) AS active_forwarders</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Configuration file precedence</h4>
+    <ul>
+      <li>Config priority: app/local &gt; app/default &gt; system/local &gt; system/default</li>
+      <li>inputs.conf controls what is collected; outputs.conf controls where data is sent</li>
+    </ul>
+    <pre><code><span class="cm"># Check which forwarders haven't reported recently</span>
+index=_internal sourcetype=splunkd group=tcpout_connections
+| stats max(_time) AS last_seen by host
+| eval hours_ago = round((now()-last_seen)/3600,1)
+| where hours_ago > 2
+| sort -hours_ago</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Indexer clustering and search head clustering</h4>
+    <ul>
+      <li>Index clusters use a Cluster Master to maintain replication factor — data survives indexer loss</li>
+      <li>Search Head Clustering (SHC) requires a deployer node to push knowledge objects to all SH members</li>
+    </ul>
+    <pre><code><span class="cm"># Check cluster peer status from Cluster Master</span>
+index=_internal sourcetype=splunkd component=CMaster
+| stats count by host, status
+| sort status</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-sourcetypes">
+<article class="topic">
+<h1>03 · Splunk — Indexes &amp; Sourcetypes</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Indexes and sourcetypes organize application-layer log events — from Windows security auditing and web server access logs to firewall syslog, all classified and searched at L7.</span>
+</div>
+<hr class="divider">
+
+<h2>Common Index Names (Enterprise Conventions)</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Index</th><th>Typical Content</th></tr></thead>
+  <tbody>
+    <tr><td><code>main</code></td><td>Default catch-all — avoid in production; used for test data</td></tr>
+    <tr><td><code>windows</code></td><td>Windows event logs (Security, System, Application, PowerShell)</td></tr>
+    <tr><td><code>endpoint</code></td><td>EDR telemetry — Sysmon, CrowdStrike, Carbon Black</td></tr>
+    <tr><td><code>network</code></td><td>Firewall, IDS, router/switch syslog, NetFlow</td></tr>
+    <tr><td><code>web</code></td><td>Web proxy logs, IIS, Apache, nginx access logs</td></tr>
+    <tr><td><code>email</code></td><td>Mail gateway logs — Proofpoint, Mimecast, Exchange</td></tr>
+    <tr><td><code>cloud</code></td><td>AWS CloudTrail, Azure Activity Log, GCP audit</td></tr>
+    <tr><td><code>linux</code></td><td>Linux syslog, auth.log, auditd</td></tr>
+    <tr><td><code>dns</code></td><td>DNS query/response logs — Infoblox, BIND, Windows DNS</td></tr>
+    <tr><td><code>identity</code></td><td>AD, LDAP, Okta, Azure AD authentication events</td></tr>
+    <tr><td><code>vulnerability</code></td><td>Nessus, Qualys, Rapid7 scan results</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Common Sourcetypes — Windows</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Sourcetype</th><th>Content</th><th>Key EventCodes</th></tr></thead>
+  <tbody>
+    <tr><td><code>WinEventLog:Security</code></td><td>Security audit events</td><td>4624 logon, 4625 failed, 4648 explicit cred, 4688 process, 4698 sched task</td></tr>
+    <tr><td><code>WinEventLog:System</code></td><td>System events — service starts, crashes</td><td>7045 new service, 7036 service state</td></tr>
+    <tr><td><code>WinEventLog:Application</code></td><td>Application errors and warnings</td><td>Varies by application</td></tr>
+    <tr><td><code>WinEventLog:Microsoft-Windows-PowerShell/Operational</code></td><td>PowerShell execution logs</td><td>4103 pipeline execution, 4104 script block</td></tr>
+    <tr><td><code>WinEventLog:Microsoft-Windows-Sysmon/Operational</code></td><td>Sysmon enhanced telemetry</td><td>1 process, 3 netconn, 11 file, 12/13 registry</td></tr>
+    <tr><td><code>XmlWinEventLog:Security</code></td><td>XML-formatted Security events (richer field extraction)</td><td>Same EventCodes</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Common Sourcetypes — Linux / Network / Web</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Sourcetype</th><th>Content</th></tr></thead>
+  <tbody>
+    <tr><td><code>linux_secure</code></td><td>SSH, sudo, su — /var/log/secure or /var/log/auth.log</td></tr>
+    <tr><td><code>linux_audit</code></td><td>auditd — syscall-level events</td></tr>
+    <tr><td><code>syslog</code></td><td>Generic syslog — fallback for unrecognized devices</td></tr>
+    <tr><td><code>access_combined</code></td><td>Apache/nginx combined access log format</td></tr>
+    <tr><td><code>iis</code></td><td>Microsoft IIS web server access log</td></tr>
+    <tr><td><code>cisco:asa</code></td><td>Cisco ASA firewall — connections, denies, VPN</td></tr>
+    <tr><td><code>pan:traffic</code></td><td>Palo Alto Networks firewall traffic log</td></tr>
+    <tr><td><code>pan:threat</code></td><td>Palo Alto Networks threat/IPS log</td></tr>
+    <tr><td><code>stream:tcp</code></td><td>Splunk Stream TCP session metadata</td></tr>
+    <tr><td><code>suricata</code></td><td>Suricata IDS JSON alert output</td></tr>
+    <tr><td><code>zeek:conn</code></td><td>Zeek connection log</td></tr>
+    <tr><td><code>aws:cloudtrail</code></td><td>AWS API activity events</td></tr>
+    <tr><td><code>o365:management:activity</code></td><td>Microsoft 365 audit log</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Searching by Index and Sourcetype</h2>
+<pre><code><span class="cm"># Always specify index first — massively improves performance</span>
+index=windows sourcetype=WinEventLog:Security EventCode=4625
+
+<span class="cm"># Multiple indexes</span>
+(index=windows OR index=endpoint) sourcetype=WinEventLog:Security
+
+<span class="cm"># Wildcard sourcetype</span>
+index=windows sourcetype=WinEventLog:*
+
+<span class="cm"># Check what's in an index</span>
+index=network | stats count by sourcetype | sort -count</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Identifying the right index and sourcetype</h4>
+    <ul>
+      <li>Always start searches with <code>index=</code> — avoids scanning all data and drastically reduces search time</li>
+      <li>Sourcetype tells Splunk how to parse the event — the wrong sourcetype means missing fields</li>
+      <li>Common starting point: <code>index=windows sourcetype=WinEventLog:Security</code></li>
+    </ul>
+    <pre><code>index=windows sourcetype=WinEventLog:Security EventCode=4625
+| stats count by src_ip
+| sort -count</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Searching across multiple sourcetypes efficiently</h4>
+    <ul>
+      <li>Use <code>index=windows sourcetype=WinEventLog:*</code> to catch all Windows log channels at once</li>
+      <li>Use <code>| metadata type=sourcetypes index=network</code> to enumerate what sourcetypes are in an index</li>
+    </ul>
+    <pre><code>| metadata type=sourcetypes index=network
+| table sourcetype, recentTime, totalCount
+| sort -totalCount</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Index optimization and retention strategy</h4>
+    <ul>
+      <li>High-volume indexes (network, endpoint) benefit from separate hot/warm/cold buckets to optimize storage cost</li>
+      <li>Use <code>indexes.conf</code> to set per-index retention: <code>frozenTimePeriodInSecs</code> for compliance requirements</li>
+    </ul>
+    <pre><code><span class="cm"># Audit index disk usage and event counts</span>
+| rest /services/data/indexes
+| table title, currentDBSizeMB, totalEventCount, frozenTimePeriodInSecs
+| sort -currentDBSizeMB</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-cim-fields">
+<article class="topic">
+<h1>04 · Splunk — CIM Field Reference</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">CIM normalizes vendor-specific field names to common L7 data model fields — enabling cross-sourcetype correlation regardless of whether a log came from Windows, Cisco, Palo Alto, or AWS.</span>
+</div>
+<hr class="divider">
+
+<div class="callout"><strong>CIM (Common Information Model)</strong> — Splunk's normalized field naming standard. CIM-compliant add-ons rename vendor-specific fields to common names, enabling cross-sourcetype correlation queries. Enterprise Security requires CIM compliance.</div>
+
+<h2>Universal Fields (All Events)</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Field</th><th>Description</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><code>_time</code></td><td>Epoch timestamp of event</td><td>1704067200.000</td></tr>
+    <tr><td><code>host</code></td><td>Hostname that generated the event</td><td>DC01.corp.local</td></tr>
+    <tr><td><code>source</code></td><td>Log source path or name</td><td>WinEventLog:Security</td></tr>
+    <tr><td><code>sourcetype</code></td><td>Parser/format applied</td><td>WinEventLog:Security</td></tr>
+    <tr><td><code>index</code></td><td>Index where event is stored</td><td>windows</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Authentication Data Model</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>CIM Field</th><th>Description</th><th>Example Value</th></tr></thead>
+  <tbody>
+    <tr><td><code>src</code></td><td>Source IP or hostname initiating the request</td><td>192.168.10.50</td></tr>
+    <tr><td><code>dest</code></td><td>Destination IP or hostname</td><td>DC01.corp.local</td></tr>
+    <tr><td><code>user</code></td><td>Username attempting authentication</td><td>jsmith</td></tr>
+    <tr><td><code>action</code></td><td>Result — <code>success</code>, <code>failure</code>, <code>error</code></td><td>failure</td></tr>
+    <tr><td><code>app</code></td><td>Application performing authentication</td><td>ssh, ntlm, kerberos</td></tr>
+    <tr><td><code>authentication_method</code></td><td>Protocol used</td><td>Kerberos, NTLM, Password</td></tr>
+    <tr><td><code>src_port</code></td><td>Source TCP/UDP port</td><td>52413</td></tr>
+    <tr><td><code>dest_port</code></td><td>Destination port</td><td>445, 3389, 22</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Network Traffic Data Model</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>CIM Field</th><th>Description</th><th>Example Value</th></tr></thead>
+  <tbody>
+    <tr><td><code>src_ip</code></td><td>Source IP address</td><td>10.0.1.100</td></tr>
+    <tr><td><code>dest_ip</code></td><td>Destination IP address</td><td>8.8.8.8</td></tr>
+    <tr><td><code>src_port</code></td><td>Source port</td><td>54321</td></tr>
+    <tr><td><code>dest_port</code></td><td>Destination port</td><td>443</td></tr>
+    <tr><td><code>protocol</code></td><td>Transport protocol</td><td>tcp, udp, icmp</td></tr>
+    <tr><td><code>bytes</code></td><td>Total bytes transferred</td><td>204800</td></tr>
+    <tr><td><code>bytes_in</code></td><td>Bytes received</td><td>1024</td></tr>
+    <tr><td><code>bytes_out</code></td><td>Bytes sent</td><td>203776</td></tr>
+    <tr><td><code>duration</code></td><td>Session duration in seconds</td><td>127</td></tr>
+    <tr><td><code>transport</code></td><td>Transport layer protocol</td><td>tcp</td></tr>
+    <tr><td><code>direction</code></td><td>Traffic direction</td><td>inbound, outbound</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Endpoint / Malware Data Model</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>CIM Field</th><th>Description</th><th>Example Value</th></tr></thead>
+  <tbody>
+    <tr><td><code>process</code></td><td>Process name that was executed</td><td>powershell.exe</td></tr>
+    <tr><td><code>process_name</code></td><td>Base process name (no path)</td><td>cmd.exe</td></tr>
+    <tr><td><code>process_path</code></td><td>Full path to process</td><td>C:\Windows\System32\cmd.exe</td></tr>
+    <tr><td><code>parent_process</code></td><td>Parent process command line</td><td>explorer.exe</td></tr>
+    <tr><td><code>file_name</code></td><td>Name of file involved</td><td>malware.exe</td></tr>
+    <tr><td><code>file_path</code></td><td>Full file path</td><td>C:\Users\user\AppData\Temp\malware.exe</td></tr>
+    <tr><td><code>file_hash</code></td><td>MD5/SHA1/SHA256 hash</td><td>d41d8cd98f00b204e9800998ecf8427e</td></tr>
+    <tr><td><code>registry_path</code></td><td>Registry key path</td><td>HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>DNS Data Model</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>CIM Field</th><th>Description</th><th>Example Value</th></tr></thead>
+  <tbody>
+    <tr><td><code>query</code></td><td>DNS query name</td><td>evil.c2server.com</td></tr>
+    <tr><td><code>query_type</code></td><td>Record type requested</td><td>A, AAAA, MX, TXT, CNAME</td></tr>
+    <tr><td><code>answer</code></td><td>DNS response value</td><td>185.220.101.34</td></tr>
+    <tr><td><code>record_type</code></td><td>Response record type</td><td>A</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Using CIM in Searches</h2>
+<pre><code><span class="cm"># Search across multiple sourcetypes using normalized fields</span>
+index=* (action=failure OR action=failed)
+| stats count by src, dest, user, action
+| sort -count
+
+<span class="cm"># Requires TA (Technology Add-on) to normalize fields to CIM names</span>
+<span class="cm"># Example: Splunk Add-on for Microsoft Windows normalizes</span>
+<span class="cm">#   EventCode=4625 → action=failure, user=SubjectUserName, src=IpAddress</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Understanding CIM field names</h4>
+    <ul>
+      <li>CIM standardizes L7 log fields — <code>src</code>, <code>dest</code>, <code>user</code>, <code>action</code> work across all CIM-compliant sourcetypes</li>
+      <li>TAs (Technology Add-ons) perform the field renaming at index time or search time</li>
+      <li>Splunk Enterprise Security requires CIM compliance for its correlation searches to function</li>
+    </ul>
+    <pre><code>index=windows EventCode=4624
+| table _time, src, dest, user, action, app
+| head 10</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Cross-sourcetype correlation using CIM fields</h4>
+    <ul>
+      <li>Use CIM Authentication data model fields to correlate Windows, Linux SSH, and VPN logins in one search</li>
+      <li>Network Traffic data model: <code>src_ip</code>, <code>dest_ip</code>, <code>bytes_out</code> work across firewall, IDS, and proxy sourcetypes</li>
+    </ul>
+    <pre><code>index=* action=failure earliest=-1h
+| stats count AS failed_auths, dc(dest) AS unique_targets by src, user
+| where failed_auths > 10
+| sort -failed_auths</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Accelerated data models for high-performance queries</h4>
+    <ul>
+      <li>CIM data models can be accelerated — pre-computed summaries that make large-scale queries run in seconds</li>
+      <li>Use <code>tstats</code> command against accelerated data models for extremely fast searches over billions of events</li>
+    </ul>
+    <pre><code><span class="cm"># tstats is 10-100x faster than stats on accelerated models</span>
+| tstats count AS failed_logins FROM datamodel=Authentication
+  WHERE Authentication.action=failure
+  BY Authentication.src, Authentication.user
+| rename Authentication.* AS *
+| where failed_logins > 50</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-es-overview">
+<article class="topic">
+<h1>05 · Splunk Enterprise Security</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Enterprise Security is a fully L7 SIEM overlay — correlation searches evaluate L7 log content to generate notable events; the Incident Review workflow and risk engine operate on application-layer data.</span>
+</div>
+<hr class="divider">
+
+<h2>What is Enterprise Security (ES)?</h2>
+<p>Splunk ES is a premium SIEM add-on that runs on top of Splunk Enterprise. It provides pre-built correlation searches, a notable events workflow, risk scoring, threat intelligence feeds, and dashboards designed for SOC operations.</p>
+
+<h2>ES Key Interfaces</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Interface</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td>Security Posture</td><td>Executive dashboard — open notables, risk scores, trending threats</td></tr>
+    <tr><td>Incident Review</td><td>Primary analyst triage queue — shows all notable events</td></tr>
+    <tr><td>Risk Analysis</td><td>Risk score timeline per asset or identity</td></tr>
+    <tr><td>Threat Intelligence</td><td>IOC management — threat intel feeds, lookup table matches</td></tr>
+    <tr><td>Asset &amp; Identity</td><td>Asset inventory, user identity correlation</td></tr>
+    <tr><td>Content Management</td><td>Correlation searches — enable/disable/tune detections</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Notable Event Lifecycle</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>New</td><td>Unreviewed — just generated by correlation search</td></tr>
+    <tr><td>In Progress</td><td>Analyst actively investigating</td></tr>
+    <tr><td>Pending</td><td>Waiting on information or another team</td></tr>
+    <tr><td>Resolved — True Positive</td><td>Confirmed malicious — escalate to incident</td></tr>
+    <tr><td>Resolved — False Positive</td><td>Benign — tune the detection or add exclusion</td></tr>
+    <tr><td>Resolved — No Action Required</td><td>Informational alert, expected behavior</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Notable Event Key Fields</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Field</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>rule_name</code></td><td>Correlation search that generated the notable</td></tr>
+    <tr><td><code>urgency</code></td><td>informational → low → medium → high → critical</td></tr>
+    <tr><td><code>src</code></td><td>Source entity (IP, host, user)</td></tr>
+    <tr><td><code>dest</code></td><td>Target entity</td></tr>
+    <tr><td><code>owner</code></td><td>Analyst assigned for investigation</td></tr>
+    <tr><td><code>status</code></td><td>Workflow status (new, in_progress, resolved)</td></tr>
+    <tr><td><code>risk_score</code></td><td>Cumulative risk score driving the alert</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Searching Notable Events</h2>
+<pre><code><span class="cm"># View all open notables from the last 24 hours</span>
+index=notable earliest=-24h
+| search status!="5"
+| table _time, rule_name, urgency, src, dest, owner, status
+
+<span class="cm"># High urgency notables only</span>
+index=notable urgency=high OR urgency=critical
+| stats count by rule_name | sort -count
+
+<span class="cm"># Notables for a specific host</span>
+index=notable (src="192.168.1.50" OR dest="192.168.1.50")
+| table _time, rule_name, urgency, owner, status</code></pre>
+
+<h2>Risk-Based Alerting (RBA) Concepts</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Component</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>Risk Rules</td><td>Lower-fidelity searches that add risk score to an entity instead of firing an alert</td></tr>
+    <tr><td>Risk Object</td><td>Entity accumulating risk — a user, system, or other field value</td></tr>
+    <tr><td>Risk Score</td><td>Numeric value added per risk rule match</td></tr>
+    <tr><td>Risk Incident</td><td>Alert fires when risk score exceeds threshold (e.g., score &gt; 100)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Working the Incident Review queue</h4>
+    <ul>
+      <li>Incident Review is the primary analyst triage queue — notable events appear here when correlation searches fire</li>
+      <li>Work notables in urgency order: critical → high → medium → low</li>
+      <li>Always update status, assign an owner, and add a comment when investigating</li>
+    </ul>
+    <pre><code>index=notable urgency=critical OR urgency=high
+| stats count by rule_name, urgency
+| sort -urgency, -count</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Tuning correlation searches to reduce false positives</h4>
+    <ul>
+      <li>Identify top noisy rules — add whitelist lookups to suppress known benign activity</li>
+      <li>Adjust throttle windows so one attacker IP produces one notable per hour, not one per 5 minutes</li>
+    </ul>
+    <pre><code>index=notable earliest=-7d
+| stats count, dc(src) AS unique_srcs by rule_name
+| sort -count
+<span class="cm"># Rules with high count and high unique_srcs = noisy, tune or RBA-convert</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Building a Risk-Based Alerting (RBA) framework</h4>
+    <ul>
+      <li>Convert low-confidence detections from "create notable" to "add risk" — only alert when cumulative risk exceeds threshold</li>
+      <li>Assign risk scores proportional to MITRE ATT&CK technique severity — high-impact TTPs score higher</li>
+    </ul>
+    <pre><code>index=risk earliest=-24h
+| stats sum(risk_score) AS total_risk,
+        dc(source) AS rule_count,
+        values(source) AS contributing_rules
+        by risk_object, risk_object_type
+| where total_risk > 100
+| sort -total_risk</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-sub-pages">
+<article class="topic">
+<h1>→ · Splunk Sub-Notebooks</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">All Splunk sub-notebooks cover L7 application-layer topics — SPL searches, dashboards, alerts, and forwarder configuration all operate on application log content.</span>
+</div>
+<hr class="divider">
+<p>The Splunk section is split into focused notebooks. Each is a standalone page with its own sidebar.</p>
+
+<h2>Available Sub-Notebooks</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Notebook</th><th>Topics Covered</th></tr></thead>
+  <tbody>
+    <tr><td><a href="splunk-spl-basics.html" style="color:var(--accent-h)">SPL Basics</a></td><td>Search syntax, pipes, time modifiers, field commands, rex, lookup tables</td></tr>
+    <tr><td><a href="splunk-stats-count.html" style="color:var(--accent-h)">Stats &amp; Counting</a></td><td>stats, count, dc(), values(), eval expressions, dedup, timechart, chart</td></tr>
+    <tr><td><a href="splunk-visualizations.html" style="color:var(--accent-h)">Visualizations</a></td><td>Chart types guide, dashboard panels, BOTS-style brute force &amp; traffic panels</td></tr>
+    <tr><td><a href="splunk-alerts.html" style="color:var(--accent-h)">Alerts &amp; ES</a></td><td>Scheduled searches, correlation searches, notable events, throttling, RBA</td></tr>
+    <tr><td><a href="splunk-forwarders.html" style="color:var(--accent-h)">Forwarders</a></td><td>Universal Forwarder, inputs.conf, outputs.conf, props.conf, deployment server</td></tr>
+    <tr><td><a href="splunk-threat-hunting.html" style="color:var(--accent-h)">Threat Hunting</a></td><td>MITRE ATT&amp;CK mapped queries, execution, persistence, lateral movement, exfil, BOTS</td></tr>
+    <tr><td><a href="splunk-lab.html" style="color:var(--accent-h)">Lab: Brute Force</a></td><td>Step-by-step brute force investigation with real SPL and sample log output</td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Recommended learning order</h4>
+    <ul>
+      <li>Start with SPL Basics to learn search syntax, then Stats &amp; Counting for aggregation</li>
+      <li>Move to Alerts &amp; ES to understand how detections fire in Enterprise Security</li>
+      <li>Complete the Brute Force Lab last — it applies all prior concepts end-to-end</li>
+    </ul>
+    <pre><code>index=windows EventCode=4625
+| stats count by src_ip
+| sort -count</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Connecting sub-notebook concepts</h4>
+    <ul>
+      <li>Forwarders feed data → Indexes/Sourcetypes classify it → SPL searches it → Visualizations display it → Alerts fire on it</li>
+      <li>Threat Hunting applies all SPL and CIM knowledge in an adversary-focused, hypothesis-driven workflow</li>
+    </ul>
+    <pre><code>index=windows EventCode=4625 earliest=-1h
+| stats count AS failures, dc(user) AS accounts by src_ip
+| where failures > 20
+| sort -failures</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Building an end-to-end detection pipeline</h4>
+    <ul>
+      <li>Full pipeline: UF inputs.conf → indexer props/transforms → CIM normalization → correlation search → RBA risk → notable event</li>
+      <li>Each sub-notebook covers one layer of this pipeline — mastery requires understanding all of them together</li>
+    </ul>
+    <pre><code><span class="cm"># Full pipeline test: verify data flows from forwarder to notable</span>
+index=_internal sourcetype=splunkd group=tcpout_connections
+| stats max(_time) AS last_fw_event by host
+| join host [search index=windows earliest=-1h | stats count by host]
+| table host, last_fw_event, count</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<script src="js/app.js"></script>
+</body>
+</html>

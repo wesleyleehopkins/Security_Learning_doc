@@ -1,0 +1,1493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClamAV — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .xref { display:inline; color:var(--accent,#3b82f6); font-size:.75em; font-weight:600; border:1px solid var(--accent,#3b82f6); border-radius:3px; padding:1px 5px; margin-left:4px; text-decoration:none; cursor:pointer; white-space:nowrap; opacity:.85; }
+    .xref:hover { background:rgba(59,130,246,.15); opacity:1; }
+    .xref-group { color:#8b949e; font-size:.82em; margin-left:2px; }
+    td .xref-group { display:block; margin-top:3px; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="index.html" class="nav-brand">
+    <span class="icon">⬡</span> SOC Notes
+  </a>
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()">☰</button>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html" class="active">ClamAV</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sb-title">ClamAV</div>
+    <nav id="sb-nav"></nav>
+  </aside>
+
+  <main id="main" class="main">
+    <div id="content-area"></div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 01 -->
+<template id="tpl-overview">
+<article class="topic">
+  <h2>Overview &amp; Architecture</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">ClamAV operates entirely at L7 — it inspects application-layer file content (executables, documents, archives, email attachments) against signature databases to detect malware patterns.</span>
+  </div>
+
+  <p>ClamAV is the leading open-source antivirus engine. Originally designed for email gateway scanning, it is now widely used for server-side file scanning, mail relay protection, SOC file triage, and integration with security orchestration platforms like OSSEC/Wazuh, Security Onion, and custom SOAR pipelines.</p>
+
+  <h3>Core Components</h3>
+  <table>
+    <thead><tr><th>Component</th><th>Binary</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td>clamscan</td><td><code>clamscan</code></td><td>On-demand scanner — scans files/directories and exits. No daemon required. Best for scripts and manual triage.</td></tr>
+      <tr><td>clamd</td><td><code>clamd</code></td><td>Daemon mode — loads signatures once, accepts scan requests via socket. Much faster than clamscan for repeated scans.</td></tr>
+      <tr><td>clamdscan</td><td><code>clamdscan</code></td><td>Client that sends scan jobs to a running clamd daemon. Same CLI feel as clamscan, but faster (no signature reload).</td></tr>
+      <tr><td>freshclam</td><td><code>freshclam</code></td><td>Signature database updater — pulls from ClamAV mirrors. Run hourly as a cron job or systemd timer.</td></tr>
+      <tr><td>sigtool</td><td><code>sigtool</code></td><td>Signature manipulation tool — inspect databases, create custom signatures, test patterns.</td></tr>
+      <tr><td>clambc</td><td><code>clambc</code></td><td>ClamAV bytecode compiler/debugger — for advanced custom signatures.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Signature Database Types</h3>
+  <table>
+    <thead><tr><th>File</th><th>Contents</th><th>Update Frequency</th></tr></thead>
+    <tbody>
+      <tr><td><code>main.cvd</code></td><td>Main virus database (compressed)</td><td>Periodically (major updates)</td></tr>
+      <tr><td><code>daily.cvd</code> / <code>daily.cld</code></td><td>Daily incremental signatures</td><td>Daily</td></tr>
+      <tr><td><code>bytecode.cvd</code></td><td>Bytecode signatures for heuristic detection</td><td>Weekly</td></tr>
+      <tr><td>Custom <code>.db</code> / <code>.ndb</code></td><td>User-created signature files</td><td>Manual</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Installation</h3>
+  <pre><code># Ubuntu/Debian
+sudo apt update && sudo apt install -y clamav clamav-daemon
+
+# Update signatures immediately
+sudo systemctl stop clamav-freshclam   # stop auto-updater first
+sudo freshclam                          # manual update
+sudo systemctl start clamav-freshclam  # restart auto-updater
+
+# RHEL/CentOS
+sudo yum install -y epel-release && sudo yum install -y clamav clamav-update
+
+# Verify installation
+clamscan --version
+freshclam --version
+
+# Check database status
+sigtool --info /var/lib/clamav/daily.cvd</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — What ClamAV Is &amp; When to Use It</summary>
+  <div class="tier-body">
+    <h4>L7 File Scanning Fundamentals</h4>
+    <ul>
+      <li>ClamAV scans <strong>L7 file content</strong> — it doesn't see network traffic; it sees what's on disk</li>
+      <li>Three scan modes: clamscan (one-shot), clamd (daemon), clamdscan (client for daemon)</li>
+      <li>Database files (.cvd/.cld) contain L7 byte signatures for known malware families</li>
+      <li>EICAR test file: safe string that triggers all AV engines — use to verify detection works</li>
+    </ul>
+    <pre><code><span class="cm"># Verify ClamAV is installed and database is current</span>
+clamscan --version
+sigtool --info /var/lib/clamav/daily.cvd
+<span class="cm"># Quick scan of a single file (L7 content check)</span>
+clamscan /tmp/suspicious.exe</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Daemon Mode &amp; Signature Updates</summary>
+  <div class="tier-body">
+    <h4>clamd + freshclam for Production</h4>
+    <ul>
+      <li>clamd loads signatures once → stays resident → faster than clamscan for high-volume L7 scanning</li>
+      <li>freshclam auto-updates L7 signature databases from ClamAV mirrors via HTTPS</li>
+      <li>Update frequency: at least daily for production; multiple times per day for mail gateways</li>
+    </ul>
+    <pre><code><span class="cm"># Enable and start both services</span>
+sudo systemctl enable --now clamav-daemon clamav-freshclam
+<span class="cm"># Force immediate signature update (L7 database download)</span>
+sudo freshclam
+<span class="cm"># Verify daemon listening on socket</span>
+sudo clamdscan --ping 3</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Integration Pipeline</summary>
+  <div class="tier-body">
+    <h4>ClamAV in a Full L7 Detection Pipeline</h4>
+    <ul>
+      <li>Mail gateway: Postfix + clamav-milter → scan all L7 MIME email content before delivery</li>
+      <li>OSSEC integration: ClamAV log → OSSEC decoder → L7 alert → active response (quarantine)</li>
+      <li>YARA augmentation: ClamAV flags suspicious → YARA deep-scans with behavioral rules → report</li>
+    </ul>
+    <pre><code><span class="cm"># Full integration: ClamAV → OSSEC → Security Onion</span>
+<span class="cm"># 1. ClamAV detects L7 malware, logs to /var/log/clamav/clamav.log</span>
+<span class="cm"># 2. OSSEC reads log, matches decoder, fires rule 100900 (level 12)</span>
+<span class="cm"># 3. OSSEC active response quarantines file</span>
+<span class="cm"># 4. OSSEC alert ships to Security Onion SIEM via syslog (L7 → L4 UDP:514)</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 02 -->
+<template id="tpl-clamscan">
+<article class="topic">
+  <h2>clamscan — On-Demand Scanning</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">clamscan reads L7 file content on disk — parsing executables, archives, and documents byte-by-byte against signature patterns. No network layer involvement during scanning.</span>
+  </div>
+  <p>clamscan is the standalone scanner binary. No daemon needed — loads signatures on each run. Perfect for scripts, IR triage, and one-off scans.</p>
+
+  <h3>Basic Scan Commands</h3>
+  <pre><code># Scan a single file
+clamscan /path/to/suspicious.exe
+
+# Scan a directory (non-recursive)
+clamscan /tmp/
+
+# Recursive directory scan
+clamscan -r /home/
+
+# Show only infected files (suppress clean output)
+clamscan -r --infected /home/
+
+# Suppress OK messages and show summary only
+clamscan -r --no-summary=no --infected /tmp/
+
+# Full verbose scan with all stats
+clamscan -r -v /var/www/</code></pre>
+
+  <h3>Useful Flag Combinations</h3>
+  <table>
+    <thead><tr><th>Flag Combo</th><th>Effect</th><th>Use When</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>-r --infected --no-summary</code></td>
+        <td>Recursive, show only matches, no footer stats</td>
+        <td>Piping results to grep/awk/SIEM</td>
+      </tr>
+      <tr>
+        <td><code>-r --move=/quarantine/</code></td>
+        <td>Move infected files to quarantine directory</td>
+        <td>Automated quarantine during IR</td>
+      </tr>
+      <tr>
+        <td><code>-r --remove</code></td>
+        <td>Delete infected files (permanent — use carefully)</td>
+        <td>Only when you are certain and have backups</td>
+      </tr>
+      <tr>
+        <td><code>--log=/var/log/clamscan.log</code></td>
+        <td>Write results to log file</td>
+        <td>Cron jobs, automated scans</td>
+      </tr>
+      <tr>
+        <td><code>--exclude-dir=^/proc</code></td>
+        <td>Skip /proc and /sys (virtual filesystems)</td>
+        <td>Always use in full-system scans</td>
+      </tr>
+      <tr>
+        <td><code>--max-filesize=100M</code></td>
+        <td>Skip files larger than 100MB</td>
+        <td>Speed up scans of large file repositories</td>
+      </tr>
+      <tr>
+        <td><code>--scan-mail=yes --scan-archive=yes</code></td>
+        <td>Unpack and scan archives and email files</td>
+        <td>Email gateway inspection</td>
+      </tr>
+      <tr>
+        <td><code>-d /path/custom.db</code></td>
+        <td>Add custom signature database</td>
+        <td>Load YARA-converted or custom .ndb rules</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Scan Output Interpretation</h3>
+  <pre><code># Sample output:
+# /tmp/eicar.com: Eicar-Signature FOUND
+# /tmp/normal.pdf: OK
+# /tmp/packed.exe: PUA.Win.Packer.UPX-1 FOUND
+#
+# Scan Summary:
+# Known viruses:     8695819
+# Engine version:    1.0.4
+# Scanned files:     127
+# Infected files:    2
+# Time:              15.302 sec (0 m 15 s)
+
+# Exit codes:
+# 0 = No virus found
+# 1 = Virus(es) found
+# 2 = Error occurred
+
+clamscan /tmp/ ; echo "Exit: $?"</code></pre>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 03 -->
+<template id="tpl-clamd">
+<article class="topic">
+  <h2>clamd Daemon &amp; clamdscan</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">clamd communicates over a Unix socket or TCP loopback (all local L7 IPC) — scan requests and results are L7 application-layer messages. The actual scanning is L7 file content inspection.</span>
+  </div>
+  <p>clamd loads the signature database once and listens for scan requests via Unix socket or TCP. clamdscan sends jobs to clamd — dramatically faster than clamscan for high-volume scanning.</p>
+
+  <h3>clamd Configuration (/etc/clamav/clamd.conf)</h3>
+  <pre><code># Key clamd.conf settings
+
+# Socket settings (choose one)
+LocalSocket /var/run/clamav/clamd.ctl        # Unix socket (same host — preferred)
+TCPSocket 3310                               # TCP (for network clients — less common)
+TCPAddr 127.0.0.1                            # bind only to localhost if using TCP
+
+# User / permissions
+User clamav
+
+# Database directory
+DatabaseDirectory /var/lib/clamav
+
+# Logging
+LogFile /var/log/clamav/clamd.log
+LogTime yes
+LogVerbose no
+LogSyslog yes                                # also log to syslog
+
+# Limits
+MaxFileSize 100M           # max file size to scan (skip larger files)
+MaxScanSize 400M           # max decompressed data to scan per file
+MaxFiles 10000             # max files in archive
+MaxRecursion 16            # max archive nesting depth
+
+# On-access scanning (requires fanotify kernel support)
+# ScanOnAccess yes
+# OnAccessIncludePath /home
+# OnAccessPrevention yes   # block execution if infected (IPS mode)</code></pre>
+
+  <h3>Managing clamd Service</h3>
+  <pre><code># Start/stop/status
+sudo systemctl start clamav-daemon
+sudo systemctl enable clamav-daemon
+sudo systemctl status clamav-daemon
+
+# Check socket exists (daemon running)
+ls -la /var/run/clamav/clamd.ctl
+
+# Test with echo (basic connectivity)
+echo "PING" | nc -U /var/run/clamav/clamd.ctl
+# → PONG</code></pre>
+
+  <h3>clamdscan — Scanning via clamd</h3>
+  <pre><code># Same syntax as clamscan but uses running clamd
+clamdscan /path/to/file.exe
+clamdscan -r --infected /home/user/
+clamdscan --multiscan /large/directory/      # scan files in parallel threads
+
+# Use specific config
+clamdscan --config-file=/etc/clamav/clamd.conf /tmp/
+
+# FD passing (stdin — for piping)
+cat suspicious.exe | clamdscan --stdin
+
+# Reload signatures without restart
+clamdscan --reload</code></pre>
+
+  <h3>Performance Comparison</h3>
+  <table>
+    <thead><tr><th>Method</th><th>Startup Time</th><th>Throughput</th><th>Best For</th></tr></thead>
+    <tbody>
+      <tr><td>clamscan</td><td>~3-15 sec (loads DB)</td><td>~1-5 MB/s</td><td>Manual triage, scripts scanning a few files</td></tr>
+      <tr><td>clamdscan (clamd running)</td><td>Near-instant</td><td>~20-100 MB/s</td><td>High-volume automated scanning, mail gateways</td></tr>
+      <tr><td>clamd multiscan</td><td>Near-instant</td><td>~50-200 MB/s</td><td>Large directories, parallel scanning</td></tr>
+    </tbody>
+  </table>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Basic clamscan Usage</summary>
+  <div class="tier-body">
+    <h4>Scanning Files &amp; Directories (L7)</h4>
+    <ul>
+      <li><code>clamscan [file]</code>: scans a single L7 file and reports FOUND/OK/ERROR</li>
+      <li><code>-r</code>: recursive directory scan</li>
+      <li><code>--infected</code>: only print infected files (cleaner output for SOC triage)</li>
+      <li>Exit code 1 = virus found; use in scripts to trigger L7 response actions</li>
+    </ul>
+    <pre><code><span class="cm"># Scan a directory recursively, show only infected files</span>
+clamscan -r --infected /home/
+<span class="cm"># Scan uploaded files in web server (L7 user uploads)</span>
+clamscan -r --infected /var/www/uploads/</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — IR Triage Scanning</summary>
+  <div class="tier-body">
+    <h4>Fast L7 Evidence Collection</h4>
+    <ul>
+      <li>Scan suspect binary immediately on receipt — hash first, scan second (preserve evidence integrity)</li>
+      <li><code>--cross-fs=no</code>: don't follow into other mounted filesystems (avoid scanning /proc)</li>
+      <li>clamdscan is 10-50× faster than clamscan for large directories due to persistent daemon</li>
+    </ul>
+    <pre><code><span class="cm"># IR triage: hash then scan</span>
+sha256sum /tmp/suspicious.exe
+clamscan -v /tmp/suspicious.exe
+<span class="cm"># Fast scan with clamd daemon</span>
+clamdscan --multiscan --fdpass /var/www/uploads/</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Performance Optimization</summary>
+  <div class="tier-body">
+    <h4>High-Volume L7 Scanning</h4>
+    <ul>
+      <li>clamd --multiscan: parallel scanning using multiple threads for large directory trees</li>
+      <li>Exclude known-clean directories (OS binaries, logs) to focus L7 scanning on risky areas</li>
+      <li>Stream scan via Unix socket for in-memory content (e.g., email body before disk write)</li>
+    </ul>
+    <pre><code><span class="cm"># Parallel scan via daemon (L7 fastest option)</span>
+clamdscan --multiscan --fdpass -r /
+<span class="cm"># Exclude OS directories from L7 scan</span>
+clamscan -r / --exclude-dir=/proc --exclude-dir=/sys --exclude-dir=/dev</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 04 -->
+<template id="tpl-freshclam">
+<article class="topic">
+  <h2>freshclam — Signature Updates</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">freshclam downloads signature databases over L7 HTTPS (L3/L4 transport, L7 content). The downloaded .cvd/.cld files are L7 application-layer signature data used to identify malware patterns.</span>
+  </div>
+  <p>freshclam keeps the signature database current. Stale signatures are one of the most common reasons ClamAV misses malware — update at least twice daily in production.</p>
+
+  <h3>freshclam Configuration (/etc/clamav/freshclam.conf)</h3>
+  <pre><code># Key settings
+
+DatabaseDirectory /var/lib/clamav   # where to store .cvd/.cld files
+UpdateLogFile /var/log/clamav/freshclam.log
+LogSyslog yes
+
+# Mirror settings
+DatabaseMirror database.clamav.net   # official mirror
+MaxAttempts 5                        # retry failed downloads
+
+# Update frequency
+Checks 24                            # check 24 times per day = hourly
+
+# Proxy (if behind corporate proxy)
+# HTTPProxyServer proxy.internal.com
+# HTTPProxyPort 8080
+# HTTPProxyUsername proxyuser
+# HTTPProxyPassword proxypass</code></pre>
+
+  <h3>freshclam Commands</h3>
+  <pre><code># Manual update (stop daemon first if using systemd service)
+sudo systemctl stop clamav-freshclam
+sudo freshclam
+sudo systemctl start clamav-freshclam
+
+# Update and show verbose progress
+freshclam -v
+
+# Update to specific path (custom DB location)
+freshclam --datadir=/custom/db/path/
+
+# Force download even if up to date
+freshclam --force-update
+
+# Check current database versions
+sigtool --info /var/lib/clamav/daily.cvd | grep Version
+sigtool --info /var/lib/clamav/main.cvd  | grep Version
+
+# Automated update via cron (alternative to freshclam service)
+# Add to /etc/cron.d/clamav:
+# 0 */2 * * * clamav freshclam --quiet</code></pre>
+
+  <h3>Offline/Air-Gapped Updates</h3>
+  <pre><code># Download on internet-connected machine
+wget https://database.clamav.net/main.cvd -O /transfer/main.cvd
+wget https://database.clamav.net/daily.cvd -O /transfer/daily.cvd
+wget https://database.clamav.net/bytecode.cvd -O /transfer/bytecode.cvd
+
+# Verify integrity
+sigtool --verify /transfer/main.cvd
+
+# Transfer to air-gapped system and copy
+sudo cp /transfer/*.cvd /var/lib/clamav/
+sudo chown clamav:clamav /var/lib/clamav/*.cvd
+sudo systemctl restart clamav-daemon</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Keeping Signatures Current</summary>
+  <div class="tier-body">
+    <h4>freshclam Downloads L7 Malware Signatures</h4>
+    <ul>
+      <li>freshclam downloads .cvd/.cld files via HTTPS — these contain the L7 byte signatures for detection</li>
+      <li>Outdated signatures = missed malware: update at minimum daily</li>
+      <li>Check database age with <code>sigtool --info</code> before trusting a scan result</li>
+    </ul>
+    <pre><code><span class="cm"># Manual signature update</span>
+sudo freshclam
+<span class="cm"># Check when databases were last updated</span>
+sigtool --info /var/lib/clamav/main.cvd
+sigtool --info /var/lib/clamav/daily.cvd</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — freshclam Configuration</summary>
+  <div class="tier-body">
+    <h4>Automated Database Management</h4>
+    <ul>
+      <li>Set <code>Checks N</code> in freshclam.conf to update N times per day</li>
+      <li>Use <code>DatabaseMirror</code> to specify regional mirrors for faster L7 database downloads</li>
+      <li>On proxy-restricted networks, set <code>HTTPProxyServer</code> in freshclam.conf</li>
+    </ul>
+    <pre><code><span class="cm"># /etc/clamav/freshclam.conf</span>
+DatabaseMirror database.clamav.net
+Checks 24          <span class="cm"># update every hour</span>
+NotifyClamd /etc/clamav/clamd.conf  <span class="cm"># reload daemon after update</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Air-Gapped Signature Transfer</summary>
+  <div class="tier-body">
+    <h4>Offline L7 Signature Updates</h4>
+    <ul>
+      <li>Air-gapped environments: download .cvd files on internet host, transfer physically, copy manually</li>
+      <li>Mirror: set up an internal freshclam mirror using <code>cvdupdate</code> Python tool</li>
+      <li>Verify integrity: cvd files have built-in DSA digital signature — sigtool verifies before loading</li>
+    </ul>
+    <pre><code><span class="cm"># Internal mirror with cvdupdate</span>
+pip install cvdupdate
+cvd update  <span class="cm"># downloads all databases to ./database/</span>
+<span class="cm"># Configure freshclam to pull from internal mirror</span>
+<span class="cm"># DatabaseMirror http://internal-mirror.local/clamav/</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 05 -->
+<template id="tpl-signatures">
+<article class="topic">
+  <h2>Custom Signature Writing</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Custom signatures target L7 byte patterns within file content — hex sequences, MD5 hashes of malware, or extended patterns (NDB format). All matching occurs at the L7 file/payload layer.</span>
+  </div>
+  <p>ClamAV supports several custom signature formats. Custom signatures let SOC teams add detection for internal threats, custom malware, or IOCs not yet in the official database.
+    <a href="#" class="xref" onclick="loadTopic('yara_int'); return false;">YARA integration ↗</a>
+  </p>
+
+  <h3>Signature Types</h3>
+  <table>
+    <thead><tr><th>Format</th><th>Extension</th><th>Description</th><th>Best For</th></tr></thead>
+    <tbody>
+      <tr><td>MD5 Hash</td><td><code>.hdb</code> / <code>.hsb</code></td><td>Match by MD5 hash of file or section</td><td>Known-bad file hash blocklists (IOCs)</td></tr>
+      <tr><td>Extended signature</td><td><code>.ndb</code></td><td>Pattern match at specific file offset or anywhere</td><td>Byte pattern / string detection</td></tr>
+      <tr><td>Logical signature</td><td><code>.ldb</code></td><td>Boolean logic combining multiple patterns</td><td>Multi-condition detections (like YARA)</td></tr>
+      <tr><td>YARA rules</td><td><code>.yar</code> / <code>.yara</code></td><td>Native YARA support (ClamAV 0.99+)</td><td>Direct YARA integration</td></tr>
+      <tr><td>Phishing URL</td><td><code>.pdb</code></td><td>URL pattern matching for email phishing</td><td>Mail gateway phishing detection</td></tr>
+    </tbody>
+  </table>
+
+  <h3>MD5 Hash Signatures (.hdb)</h3>
+  <pre><code"># Format: MD5:SIZE:MalwareName
+# Size = file size in bytes; use * for any size
+
+# Create .hdb file
+cat > custom_iocs.hdb << 'EOF'
+44d88612fea8a8f36de82e1278abb02f:68:EICAR-Test-Signature
+d41d8cd98f00b204e9800998ecf8427e:0:EmptyFile
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855:0:SHA256-EmptyFile
+EOF
+
+# SHA256 format uses .hsb extension:
+echo "d41d8cd98f00b204e9800998ecf8427e:0:EmptyFile" > custom.hdb
+
+# Test the signature
+clamscan -d custom_iocs.hdb /path/to/scan/</code></pre>
+
+  <h3>Extended Signatures (.ndb)</h3>
+  <pre><code"># Format: SignatureName:TargetType:Offset:HexSignature[:min_flevel[:max_flevel]]
+# TargetType: 0=any, 1=PE, 2=OLE2, 3=HTML, 4=mail, 5=graphics, 6=ELF
+# Offset: 0=any, EOF=end-of-file, EP=entry point (PE only)
+
+# Match hex pattern anywhere in any file (type 0, offset 0)
+echo "Trojan.EvilBot:0:0:4d616c6963696f7573537472696e67" > evil_pattern.ndb
+# 4d616c6963696f7573537472696e67 = hex for "MaliciousString"
+
+# Match at entry point of PE file
+echo "Trojan.EntryPoint:1:EP:90909090909090" > ep_sled.ndb
+# Detects NOP sled at PE entry point
+
+# Convert string to hex for .ndb
+echo -n "This is malware" | xxd -p
+# → 54686973206973206d616c77617265
+
+# Test
+clamscan -d evil_pattern.ndb testfile.bin</code></pre>
+
+  <h3>Logical Signatures (.ldb)</h3>
+  <pre><code"># Format: SignatureName;TargetDescriptionBlock;LogicalExpression;SubSignature...
+# More complex but allows AND/OR/NOT of multiple hex patterns
+
+# Example: match file containing both string A AND string B
+cat > ransomware_detect.ldb << 'EOF'
+Ransomware.DoubleExtortion;Engine:81-255,Target:0;0&1;\
+  796f757266696c65736172656e6f77656e637279707465643b\
+  424954434f494e5f41444452455353
+EOF
+# → Matches files containing BOTH "yourfilesarenowencrypted" AND "BITCOIN_ADDRESS"
+
+# Install custom signatures
+sudo cp custom_iocs.hdb /var/lib/clamav/
+sudo cp evil_pattern.ndb /var/lib/clamav/
+# freshclam won't overwrite .hdb/.ndb files (only manages .cvd/.cld)
+# Reload clamd after adding signatures:
+sudo systemctl reload clamav-daemon</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Signature File Formats</summary>
+  <div class="tier-body">
+    <h4>Three L7 Signature Types</h4>
+    <ul>
+      <li><strong>.hdb</strong>: MD5 hash-based — exact file hash match, fastest L7 lookup</li>
+      <li><strong>.ndb</strong>: byte pattern (hex string) at a specific offset in the L7 file content</li>
+      <li><strong>.yara</strong>: YARA rule syntax — more expressive L7 behavioral matching</li>
+      <li>Place custom files in <code>/var/lib/clamav/</code> — freshclam won't overwrite them</li>
+    </ul>
+    <pre><code><span class="cm"># Create MD5 hash signature for a known malware file</span>
+sha256sum malware.exe  <span class="cm"># get hash first</span>
+md5sum malware.exe     <span class="cm"># .hdb format uses MD5</span>
+echo "$(md5sum malware.exe | cut -d' ' -f1):$(wc -c &lt; malware.exe):Malware.Custom.001" \
+  &gt;&gt; /var/lib/clamav/custom.hdb</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — NDB Pattern Matching</summary>
+  <div class="tier-body">
+    <h4>Hex Byte Patterns in L7 File Content</h4>
+    <ul>
+      <li>NDB format: <code>MalwareName:TargetType:Offset:HexPattern</code></li>
+      <li>Target type 0 = any file; offset 0 = from start of file; * = any offset</li>
+      <li>Hex pattern can include wildcards: <code>??</code> = any byte</li>
+    </ul>
+    <pre><code><span class="cm"># NDB format: match hex pattern in any file at any offset</span>
+Malware.Custom.Dropper:0:*:deadbeef00112233aabbccdd
+
+<span class="cm"># Extract hex from suspected malware for signature creation</span>
+xxd malware.exe | head -4  <span class="cm"># view hex bytes to pattern match</span>
+
+<span class="cm"># Test custom signature immediately</span>
+clamscan --database=/var/lib/clamav/custom.ndb malware.exe</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — YARA in ClamAV</summary>
+  <div class="tier-body">
+    <h4>Expressive L7 Behavioral Signatures</h4>
+    <ul>
+      <li>YARA rules can match multiple string patterns with AND/OR logic — much more powerful than single NDB hex</li>
+      <li>ClamAV natively loads .yara files from the signature directory (version 0.99+)</li>
+      <li>Use YARA for multi-string malware families where a single hash won't catch all variants</li>
+    </ul>
+    <pre><code><span class="cm"># clamav-compatible YARA rule</span>
+rule Malware_CustomRAT_L7 {
+  meta:
+    description = "Custom RAT - L7 string indicators"
+  strings:
+    $s1 = "C2_BEACON_PROTOCOL" ascii
+    $s2 = { 68 65 6c 6c 6f 20 77 6f 72 6c 64 }  // hex pattern
+    $s3 = "cmd.exe /c whoami" ascii
+  condition:
+    2 of ($s1, $s2, $s3)
+}
+<span class="cm"># Copy to ClamAV database dir and reload</span>
+sudo cp custom.yara /var/lib/clamav/
+sudo systemctl reload clamav-daemon</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 06 -->
+<template id="tpl-mail">
+<article class="topic">
+  <h2>Mail Gateway Integration</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">ClamAV integrates with mail servers (Postfix/sendmail) at L7 — scanning email bodies and attachments (L7 MIME content) before delivery. The milter protocol is a L7 interface between the MTA and ClamAV.</span>
+  </div>
+  <p>ClamAV was originally built for email scanning. Integrating with Postfix and Amavis (or milter) gives you real-time AV scanning of all inbound and outbound email.</p>
+
+  <h3>Postfix + Amavis + ClamAV Stack</h3>
+  <pre><code># Install components
+sudo apt install -y postfix amavis clamav-daemon
+
+# Architecture:
+# Internet → Postfix (25) → Amavis (10024) → ClamAV (clamd.ctl)
+#                         ↓
+#                       Postfix (10025) → Delivery
+
+# Key Amavis config (/etc/amavis/conf.d/15-content_filter_mode):
+use strict;
+@bypass_virus_checks_maps = (
+    \%bypass_virus_checks, \@bypass_virus_checks_acl, \$bypass_virus_checks_re);
+# Comment out the above to ENABLE virus checking
+
+# Amavis clamd socket reference (/etc/amavis/conf.d/50-user):
+$virus_admin = "postmaster\@localhost";
+$mailfrom_notify_admin = "amavis\@localhost";
+@av_scanners = ([
+    \&ask_daemon, ["CONTSCAN {}\n", "/var/run/clamav/clamd.ctl"],
+    qr/\bOK$/m, qr/\bFOUND$/m,
+    qr/^.*?: (?!Infected Archive)(.*) FOUND$/m
+]);</code></pre>
+
+  <h3>Testing Mail Scanning</h3>
+  <pre><code"># Send EICAR test file via email
+echo "Subject: Test AV" | mutt -s "ClamAV Test" -a /tmp/eicar.com -- admin@localhost
+
+# Check Amavis log
+tail -f /var/log/mail.log | grep -i "virus\|clamav\|blocked\|infected"
+
+# Manual scan of an .eml file
+clamscan --scan-mail=yes email_archive.eml
+
+# Scan mailbox (mbox format)
+clamscan -r --scan-mail=yes /var/mail/</code></pre>
+
+  <h3>ClamAV Milter (Direct Postfix Integration)</h3>
+  <pre><code"># Install clamav-milter for direct integration (no Amavis)
+sudo apt install -y clamav-milter
+
+# Configure /etc/clamav/clamav-milter.conf
+MilterSocket /var/run/clamav/milter.ctl
+ClamdSocket unix:/var/run/clamav/clamd.ctl
+OnInfected Reject                # Reject infected mail at SMTP
+OnFail Defer                     # Defer on clamd connection failure
+RejectMsg "Virus found: %v"      # Custom rejection message
+AddHeader Replace                # Add X-Virus-Scanned header
+
+# Add milter to Postfix (/etc/postfix/main.cf)
+milter_default_action = accept
+smtpd_milters = unix:/var/run/clamav/milter.ctl</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Mail Gateway Concepts</summary>
+  <div class="tier-body">
+    <h4>Scanning L7 Email Content in Transit</h4>
+    <ul>
+      <li>Email travels as L7 SMTP data; milter intercepts each message <em>before</em> delivery</li>
+      <li>ClamAV scans the entire L7 MIME message: headers, body, and all attachments</li>
+      <li>Infected messages are rejected with a 550 SMTP error response</li>
+    </ul>
+    <pre><code><span class="cm"># Verify clamav-milter is running</span>
+sudo systemctl status clamav-milter
+<span class="cm"># Check mail log for ClamAV actions</span>
+tail -f /var/log/mail.log | grep -i "clamav\|infected\|blocked"</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — amavis + ClamAV Setup</summary>
+  <div class="tier-body">
+    <h4>Production Mail Scanning Stack</h4>
+    <ul>
+      <li>amavisd-new: content filter that interfaces between Postfix (L7 SMTP) and ClamAV</li>
+      <li>Handles MIME unpacking — extracts nested archives before scanning L7 content</li>
+      <li>Configure per-domain policies and quarantine storage for infected L7 messages</li>
+    </ul>
+    <pre><code><span class="cm"># Install amavis with ClamAV integration</span>
+sudo apt install amavisd-new clamav-daemon
+<span class="cm"># /etc/amavis/conf.d/15-content_filter_mode</span>
+@bypass_virus_checks_maps = (  \%bypass_virus_checks, \@bypass_virus_checks_acl );
+<span class="cm"># Test with EICAR: send email with EICAR attachment</span>
+<span class="cm"># Should be rejected: "554 5.7.0 Reject, id=... Blocked INFECTED"</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Direct Milter Configuration</summary>
+  <div class="tier-body">
+    <h4>ClamAV-Milter Without amavis</h4>
+    <ul>
+      <li>Direct milter integration: fewer L7 processing hops = lower latency for high-volume mail</li>
+      <li>MilterSocket communicates via Unix socket (L7 IPC) with the Postfix milter framework</li>
+      <li>Add X-Virus-Scanned header to all clean messages for audit trail</li>
+    </ul>
+    <pre><code><span class="cm"># /etc/clamav/clamav-milter.conf</span>
+MilterSocket unix:/var/run/clamav/milter.ctl
+OnInfected Reject
+OnError Accept
+AddHeader Replace   <span class="cm"># add X-Virus-Scanned to clean messages</span>
+
+<span class="cm"># /etc/postfix/main.cf</span>
+milter_default_action = accept
+smtpd_milters = unix:/var/run/clamav/milter.ctl</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 07 -->
+<template id="tpl-yara_int">
+<article class="topic">
+  <h2>YARA Integration</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">YARA integration extends ClamAV's L7 file pattern matching with rule-based behavioral signatures — both tools inspect the L7 application-layer content of files and memory for malicious patterns.</span>
+  </div>
+  <p>ClamAV (v0.99+) natively supports YARA rules — place .yar files in the database directory and ClamAV will use them alongside its own signatures.
+    <a href="#" class="xref" onclick="loadTopic('signatures'); return false;">ClamAV custom signatures ↗</a>
+  </p>
+
+  <h3>Using YARA Rules with ClamAV</h3>
+  <pre><code"># Copy YARA rules to ClamAV database directory
+sudo cp ransomware_detect.yar /var/lib/clamav/
+sudo cp -r /opt/yara-rules/*.yar /var/lib/clamav/
+
+# Reload clamd to pick up new rules
+sudo systemctl reload clamav-daemon
+
+# Use specific YARA file with clamscan (without daemon)
+clamscan -d /path/to/rules.yar --infected /suspect_files/
+
+# ClamAV will report YARA matches like:
+# /tmp/malware.exe: YARA.Ransomware_WannaCry_2017 FOUND</code></pre>
+
+  <h3>YARA Rule Compatibility Notes</h3>
+  <table>
+    <thead><tr><th>YARA Feature</th><th>ClamAV Support</th></tr></thead>
+    <tbody>
+      <tr><td>Plaintext strings</td><td>Full support</td></tr>
+      <tr><td>Hex strings with wildcards</td><td>Full support</td></tr>
+      <tr><td>Regex strings</td><td>Partial — some complex regex may not work</td></tr>
+      <tr><td>PE module</td><td>Supported (limited vs standalone YARA)</td></tr>
+      <tr><td>Math module (entropy)</td><td>Not supported in all versions</td></tr>
+      <tr><td>External variables</td><td>Not supported</td></tr>
+      <tr><td>Rule tags</td><td>Supported for display, not for filtering</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Combining ClamAV + YARA for Comprehensive Coverage</h3>
+  <pre><code"># Strategy: Use ClamAV for known virus signatures + YARA for custom IOC detection
+
+# 1. ClamAV catches: known malware, EICAR, virus families, packers
+# 2. YARA rules catch: APT-specific IOCs, custom malware, internal tool misuse
+
+# Combined scan command
+clamscan -r \
+    -d /var/lib/clamav/           \   # official signatures
+    -d /opt/yara-rules/           \   # custom YARA rules
+    --infected \
+    /mnt/suspect_drive/
+
+# In OSSEC/Wazuh integration: ClamAV alert triggers YARA secondary scan
+# → ClamAV detects "suspicious" → OSSEC active response → YARA deep scan → Report</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Why Combine ClamAV + YARA</summary>
+  <div class="tier-body">
+    <h4>Two Complementary L7 Detection Methods</h4>
+    <ul>
+      <li>ClamAV: signature database, fast, covers known malware (L7 hash/pattern match)</li>
+      <li>YARA: rule-based, catches new variants of known families using string/behavior patterns</li>
+      <li>ClamAV flags a file → YARA provides deeper L7 behavioral context and classification</li>
+    </ul>
+    <pre><code><span class="cm"># Run ClamAV + YARA together on a suspicious file</span>
+clamscan /tmp/suspect.exe
+yara /opt/yara-rules/malware.yar /tmp/suspect.exe</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — YARA as ClamAV Signature Format</summary>
+  <div class="tier-body">
+    <h4>Embed YARA Rules Directly in ClamAV</h4>
+    <ul>
+      <li>ClamAV 0.99+ loads .yara files natively from the database directory</li>
+      <li>This means one scan operation applies both ClamAV signatures AND YARA rules to every L7 file</li>
+      <li>Use high-quality community rules: Neo23x0/signature-base, CISA, abuse.ch</li>
+    </ul>
+    <pre><code><span class="cm"># Download and install community YARA rules</span>
+git clone https://github.com/Neo23x0/signature-base /opt/signature-base
+sudo cp /opt/signature-base/yara/*.yar /var/lib/clamav/
+sudo systemctl reload clamav-daemon
+<span class="cm"># Test: scan test files with both engines simultaneously</span>
+clamscan --infected /tmp/</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Tiered Detection Pipeline</summary>
+  <div class="tier-body">
+    <h4>ClamAV → YARA Cascade for Maximum L7 Coverage</h4>
+    <ul>
+      <li>Stage 1: ClamAV fast scan on all incoming files (low false positive rate)</li>
+      <li>Stage 2: YARA deep scan only on files ClamAV flagged as suspicious (targeted, thorough)</li>
+      <li>Stage 3: OSSEC active response quarantines confirmed threats and notifies SIEM</li>
+    </ul>
+    <pre><code><span class="cm"># Automated cascade: ClamAV finds something → YARA validates</span>
+clamscan --infected --move=/quarantine/ /watched/dir/ 2>&amp;1 | \
+  grep FOUND | awk '{print $1}' | \
+  xargs -I{} yara -r /opt/yara-rules/ {} | \
+  tee -a /var/log/clamav/yara-hits.log</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 08 -->
+<template id="tpl-ossec_int">
+<article class="topic">
+  <h2>OSSEC / Wazuh Integration</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">OSSEC/Wazuh parses ClamAV L7 alert output (syslog or log files) and triggers active responses. The alert pipeline is L7 application-layer: log parsing → rule matching → response script execution.</span>
+  </div>
+  <p>Integrating ClamAV with OSSEC/Wazuh enables automated scanning when file integrity monitoring detects new or changed files.</p>
+
+  <h3>Architecture</h3>
+  <pre><code"># OSSEC/Wazuh FIM detects a new file
+# → Triggers active-response with ClamAV scan
+# → ClamAV finds infected file
+# → Alert generated in OSSEC/Wazuh dashboard
+# → Optional: quarantine the file</code></pre>
+
+  <h3>Wazuh Active Response: ClamAV on FIM Alert</h3>
+  <pre><code"># Step 1: Create active-response script
+# /var/ossec/active-response/bin/clamav-scan.sh
+#!/bin/bash
+LOCAL=`dirname $0`;
+FILENAME=$3           # File path passed by Wazuh
+LOG_FILE="/var/ossec/logs/clamav_ar.log"
+
+echo "$(date) - Scanning: $FILENAME" >> $LOG_FILE
+clamscan --infected --no-summary "$FILENAME" >> $LOG_FILE 2>&1
+
+if [ $? -eq 1 ]; then
+    echo "$(date) - INFECTED: $FILENAME — moving to quarantine" >> $LOG_FILE
+    mv "$FILENAME" /quarantine/
+fi
+
+chmod +x /var/ossec/active-response/bin/clamav-scan.sh
+
+# Step 2: Configure in /var/ossec/etc/ossec.conf
+<ossec_config>
+  <active-response>
+    <command>clamav-scan</command>
+    <location>local</location>
+    <rules_id>554,550</rules_id>    <!-- FIM rules: file added/modified -->
+    <timeout>60</timeout>
+  </active-response>
+
+  <command>
+    <name>clamav-scan</name>
+    <executable>clamav-scan.sh</executable>
+    <expect>filename</expect>
+    <timeout_allowed>yes</timeout_allowed>
+  </command>
+</ossec_config></code></pre>
+
+  <h3>Parsing ClamAV Alerts in Wazuh</h3>
+  <pre><code"># Wazuh includes built-in rules for ClamAV in rules/clam_rules.xml
+# Rule 52502 = ClamAV found infected file
+# Rule 52500 = ClamAV scan summary
+
+# Custom decoder (if using non-standard log format):
+# /var/ossec/etc/decoders/local_decoder.xml
+<decoder name="clamav-custom">
+  <prematch>clamscan</prematch>
+  <regex>(\S+): (.+) FOUND</regex>
+  <order>file, virus</order>
+</decoder>
+
+# Custom rule:
+<rule id="100900" level="12">
+  <decoded_as>clamav-custom</decoded_as>
+  <description>ClamAV: Virus found in $(file): $(virus)</description>
+  <group>malware,</group>
+</rule></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — OSSEC + ClamAV Detection Flow</summary>
+  <div class="tier-body">
+    <h4>L7 Log → L7 Alert Pipeline</h4>
+    <ul>
+      <li>ClamAV writes detection events to its L7 log file</li>
+      <li>OSSEC agent monitors the log file and matches content against decoder rules</li>
+      <li>Matching generates an OSSEC alert at the configured severity level</li>
+    </ul>
+    <pre><code><span class="cm"># Check ClamAV log for detections</span>
+cat /var/log/clamav/clamav.log | grep FOUND
+<span class="cm"># Check OSSEC is receiving and decoding these logs</span>
+sudo /var/ossec/bin/ossec-logtest &lt; /var/log/clamav/clamav.log</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Custom OSSEC Rules for ClamAV</summary>
+  <div class="tier-body">
+    <h4>Tune Severity Levels for L7 Detections</h4>
+    <ul>
+      <li>Default ClamAV rule in OSSEC fires at level 8 — may not page on-call by default</li>
+      <li>Create custom rule at level 12+ to trigger immediate alerts for malware detections</li>
+      <li>Add <code>&lt;group&gt;malware,&lt;/group&gt;</code> to correlate across ClamAV, YARA, and other AV detections</li>
+    </ul>
+    <pre><code><span class="cm"># Custom OSSEC decoder for ClamAV</span>
+&lt;decoder name="clamav-custom"&gt;
+  &lt;program_name&gt;clamav&lt;/program_name&gt;
+  &lt;regex&gt;(\S+): (\S+) FOUND&lt;/regex&gt;
+  &lt;order&gt;file, virus&lt;/order&gt;
+&lt;/decoder&gt;
+<span class="cm"># Custom high-severity rule</span>
+<span class="cm"># rule id="100900" level="12" — triggers immediate alert</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Active Response Quarantine</summary>
+  <div class="tier-body">
+    <h4>Automate L7 Threat Containment</h4>
+    <ul>
+      <li>OSSEC active-response script automatically moves infected file to quarantine on detection</li>
+      <li>Script receives: action (add/delete), user, IP, filename — quarantine by moving file</li>
+      <li>Combine with SIEM forwarding: OSSEC alert → syslog → Security Onion SIEM</li>
+    </ul>
+    <pre><code><span class="cm"># /var/ossec/active-response/bin/quarantine-clamav.sh</span>
+LOCAL_DIR=/quarantine
+INFECTED_FILE=$4
+mkdir -p "$LOCAL_DIR"
+mv "$INFECTED_FILE" "$LOCAL_DIR/$(basename $INFECTED_FILE).$(date +%s)"
+logger "ClamAV quarantined: $INFECTED_FILE"
+
+<span class="cm"># /var/ossec/etc/ossec.conf — bind to rule 100900</span>
+&lt;active-response&gt;
+  &lt;command&gt;quarantine-clamav&lt;/command&gt;
+  &lt;rules_id&gt;100900&lt;/rules_id&gt;
+&lt;/active-response&gt;</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 09 -->
+<template id="tpl-tuning">
+<article class="topic">
+  <h2>Tuning &amp; False Positives</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">False positive tuning operates at L7 — creating allowlist files (.fp) with specific hashes or byte patterns to exclude from L7 signature matching. PUA detection also targets L7 application behavior categories.</span>
+  </div>
+  <p>ClamAV can generate false positives — especially on compressed files, installers, or security tools. Tuning reduces noise while maintaining detection coverage.</p>
+
+  <h3>Identifying False Positives</h3>
+  <pre><code"># Check a flagged file against VirusTotal
+sha256sum flagged_file.exe
+# Submit hash to VirusTotal — if only ClamAV flags it, likely FP
+
+# Verify with sigtool
+sigtool --md5 flagged_file.exe
+# Lookup the MD5 in ClamAV db:
+sigtool --find-sigs "FOUND_SIGNATURE_NAME" | head</code></pre>
+
+  <h3>Whitelist / Allowlist Approaches</h3>
+  <pre><code"># Method 1: Hash whitelist (.fp = false positive file)
+# Add known-good file hashes to allowlist
+sha256sum /usr/bin/curl >> /var/lib/clamav/whitelist.fp
+sha256sum /opt/app/installer.exe >> /var/lib/clamav/whitelist.fp
+# freshclam will not overwrite .fp files
+
+# Reload clamd
+sudo systemctl reload clamav-daemon
+
+# Method 2: Exclude directories from clamscan
+clamscan -r --exclude-dir=^/opt/safe_tools --exclude-dir=^/usr/share /home/
+
+# Method 3: Signature exclusion (.ign2 file)
+# Add signature name to ignore:
+echo "PUA.Win.Tool.NirSoft-6" >> /var/lib/clamav/local.ign2
+# Matches are suppressed for this signature name
+
+# Reload after changes
+sudo systemctl reload clamav-daemon</code></pre>
+
+  <h3>PUA (Potentially Unwanted Applications)</h3>
+  <pre><code"># ClamAV's PUA signatures flag dual-use tools (Nirsoft, remote admin tools, adware)
+# These are disabled by default — enable selectively
+
+# Enable all PUA detection
+clamscan --detect-pua=yes /home/
+
+# Enable only specific PUA categories
+clamscan --detect-pua=yes --include-pua=Tool /home/   # only tool-category PUAs
+
+# PUA categories: Spy, Adware, Tool, P2P, Downloader, Joke
+# Example: scan for PUA tools but not adware
+clamscan --detect-pua=yes --include-pua=Tool --include-pua=Spy /home/</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Why False Positives Happen</summary>
+  <div class="tier-body">
+    <h4>L7 Signature Collisions</h4>
+    <ul>
+      <li>False positives occur when a legitimate L7 file contains bytes that match a malware signature</li>
+      <li>Common causes: packed executables, obfuscated scripts, security tools with similar byte patterns</li>
+      <li>Always verify a detection before quarantining: check VirusTotal with the file hash</li>
+    </ul>
+    <pre><code><span class="cm"># Check if a detection is a known false positive</span>
+sha256sum suspicious.exe
+<span class="cm"># Look up on VirusTotal — if only 1-2/70 engines flag it, likely FP</span>
+<span class="cm"># Report FP to ClamAV: submit via https://www.clamav.net/reports/fp</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Creating Allowlist (.fp) Files</summary>
+  <div class="tier-body">
+    <h4>Whitelist by Hash or Signature</h4>
+    <ul>
+      <li>.fp file: contains SHA256 hashes of files to exclude from L7 detection</li>
+      <li>Place in <code>/var/lib/clamav/</code> with the same name as the signature database that's causing FP</li>
+      <li>sigtool --find-sigs helps identify which specific signature is triggering</li>
+    </ul>
+    <pre><code><span class="cm"># Identify which signature is causing the false positive</span>
+clamscan -v /path/to/legit_file.exe 2>&amp;1 | grep "signature"
+<span class="cm"># Create an allowlist entry by hash</span>
+sha256sum /path/to/legit_file.exe | cut -d' ' -f1 >> /var/lib/clamav/custom.fp
+sudo systemctl reload clamav-daemon</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Systematic Tuning Process</summary>
+  <div class="tier-body">
+    <h4>Reduce FP Rate Without Losing Coverage</h4>
+    <ul>
+      <li>Use <code>--official-db-only</code> to test if FP comes from official or 3rd-party signatures</li>
+      <li>Test new signature databases on a staging server before deploying to production mail gateway</li>
+      <li>Track FP rate per database: if a 3rd-party .ndb causes &gt;1% FP rate, consider removing it</li>
+    </ul>
+    <pre><code><span class="cm"># Test only with official databases (exclude 3rd-party)</span>
+clamscan --official-db-only /path/to/file
+<span class="cm"># Test specific database only</span>
+clamscan --database=/var/lib/clamav/custom.ndb /path/to/file
+<span class="cm"># Find signatures matching a specific file</span>
+sigtool --find-sigs --hex-dump /path/to/file | head -5</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 10 -->
+<template id="tpl-scripting">
+<article class="topic">
+  <h2>Scripting &amp; Automation</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">ClamAV scripting automates L7 scan pipelines — shell scripts, Python wrappers, and cron jobs orchestrate scanning, result parsing, and alert routing entirely within the L7 application layer.</span>
+  </div>
+  <p>ClamAV integrates naturally into bash scripts, SOAR platforms, and security pipelines for automated scanning workflows.</p>
+
+  <h3>Automated Daily Scan Script</h3>
+  <pre><code"># /usr/local/bin/daily_clamav_scan.sh
+#!/bin/bash
+DATE=$(date +%Y%m%d)
+SCAN_DIR="/home /var/www /tmp /var/tmp"
+LOG="/var/log/clamav/scan_${DATE}.log"
+QUARANTINE="/var/quarantine"
+ALERT_EMAIL="soc@company.com"
+
+# Ensure quarantine exists
+mkdir -p "$QUARANTINE"
+
+# Run scan
+clamscan -r \
+    --infected \
+    --log="$LOG" \
+    --move="$QUARANTINE" \
+    --exclude-dir=^/proc \
+    --exclude-dir=^/sys \
+    --exclude-dir=^/dev \
+    $SCAN_DIR
+
+EXIT_CODE=$?
+
+# Alert if infected files found
+if [ $EXIT_CODE -eq 1 ]; then
+    INFECTED=$(grep "FOUND$" "$LOG" | wc -l)
+    mail -s "ClamAV: $INFECTED infected files found on $(hostname)" \
+         "$ALERT_EMAIL" < "$LOG"
+fi
+
+# Cleanup logs older than 30 days
+find /var/log/clamav/ -name "scan_*.log" -mtime +30 -delete
+
+exit $EXIT_CODE
+
+# Install as cron job:
+# 0 2 * * * root /usr/local/bin/daily_clamav_scan.sh</code></pre>
+
+  <h3>Scan on File Upload (Web Application)</h3>
+  <pre><code"># Python example: scan uploaded file before saving
+import subprocess
+import tempfile
+import os
+
+def scan_file_clamav(file_path):
+    """Returns (clean, virus_name) tuple"""
+    result = subprocess.run(
+        ['clamscan', '--no-summary', file_path],
+        capture_output=True, text=True, timeout=30
+    )
+    if result.returncode == 0:
+        return True, None
+    elif result.returncode == 1:
+        # Extract virus name from output
+        for line in result.stdout.splitlines():
+            if 'FOUND' in line:
+                virus = line.split(':')[1].strip().replace(' FOUND', '')
+                return False, virus
+    return False, 'SCAN_ERROR'
+
+# In your upload handler:
+clean, virus = scan_file_clamav('/tmp/uploaded_file')
+if not clean:
+    os.remove('/tmp/uploaded_file')
+    return error_response(f"Malware detected: {virus}")</code></pre>
+
+  <h3>Clamd Protocol (Direct Socket)</h3>
+  <pre><code"># Communicate with clamd directly via socket (for integration)
+# Commands: PING, SCAN, CONTSCAN, MULTISCAN, INSTREAM
+
+# PING test
+echo -ne "PING\n" | nc -U /var/run/clamav/clamd.ctl
+# → PONG
+
+# Scan a file
+echo -ne "SCAN /path/to/file.exe\n" | nc -U /var/run/clamav/clamd.ctl
+# → /path/to/file.exe: OK   or   /path/to/file.exe: Virus.Name FOUND
+
+# Stream scan (pipe file content to clamd)
+{ echo -ne "zINSTREAM\x00"; \
+  SIZE=$(wc -c < file.exe); \
+  printf '\x00\x00%04x' $SIZE | xxd -r -p; \
+  cat file.exe; \
+  printf '\x00\x00\x00\x00'; } | nc -U /var/run/clamav/clamd.ctl</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Scheduled Scanning Automation</summary>
+  <div class="tier-body">
+    <h4>Automate L7 File Scanning</h4>
+    <ul>
+      <li>Cron jobs run clamscan on a schedule — nightly full system scans are standard practice</li>
+      <li>Email results to admin: <code>clamscan ... | mail -s "ClamAV Report"</code></li>
+      <li>Always log with <code>--log=</code> flag for audit trails and SIEM forwarding</li>
+    </ul>
+    <pre><code><span class="cm"># Cron: nightly scan at 2am, log results (L7 automation)</span>
+0 2 * * * clamscan -r --infected --log=/var/log/clamav/nightly.log /home/
+<span class="cm"># Send results via email</span>
+0 2 * * * clamscan -r --infected /home/ | mail -s "ClamAV Nightly" admin@company.com</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Python Integration &amp; API</summary>
+  <div class="tier-body">
+    <h4>Programmatic L7 Scanning</h4>
+    <ul>
+      <li>Python <code>clamd</code> library communicates with clamd daemon via socket (L7 IPC)</li>
+      <li>Use in SOAR workflows: alert fires → Python script fetches file → scan via clamd → report result</li>
+      <li>pyclamd supports both Unix socket and TCP modes for connecting to the daemon</li>
+    </ul>
+    <pre><code><span class="cm"># Python: scan a file via clamd socket</span>
+import clamd
+cd = clamd.ClamdUnixSocket()
+result = cd.scan('/tmp/suspicious.exe')
+print(result)
+<span class="cm"># Returns: {'/tmp/suspicious.exe': ('FOUND', 'Malware.Name')}</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Stream Scanning &amp; SOAR Integration</summary>
+  <div class="tier-body">
+    <h4>In-Memory L7 Content Scanning</h4>
+    <ul>
+      <li>Stream scan: pipe file content directly to clamd without writing to disk — useful for email scanning</li>
+      <li>INSTREAM command: clamd reads raw bytes, returns OK or FOUND without touching filesystem</li>
+      <li>Integrate into SOAR: TheHive trigger → Python → clamd INSTREAM scan → enrich TheHive case</li>
+    </ul>
+    <pre><code><span class="cm"># Python: stream scan without touching disk</span>
+import clamd, io
+cd = clamd.ClamdUnixSocket()
+with open('suspect.exe', 'rb') as f:
+    result = cd.instream(f)
+print(result)  <span class="cm"># {'stream': ('FOUND', 'Malware.Name')}</span>
+
+<span class="cm"># Shell: pipe file to clamd via INSTREAM</span>
+{ echo -ne "zINSTREAM\x00"; SIZE=$(wc -c &lt; file.exe); \
+  printf '\x00\x00%04x' $SIZE | xxd -r -p; cat file.exe; \
+  printf '\x00\x00\x00\x00'; } | nc -U /var/run/clamav/clamd.ctl</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 11 -->
+<template id="tpl-lab">
+<article class="topic">
+  <h2>Investigation Lab — ClamAV Deployment &amp; Integration</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">This lab deploys a full L7 AV pipeline: ClamAV scans files and email attachments, YARA validates suspicious L7 content, and OSSEC routes L7 alert logs to Security Onion for SIEM correlation.</span>
+  </div>
+  <div class="callout lab">
+    <strong>Safe lab — uses EICAR test files only.</strong> All "malware" in this lab is the harmless EICAR test string, which all AV engines detect without risk.
+  </div>
+
+  <h3>Lab Environment</h3>
+  <table>
+    <thead><tr><th>VM</th><th>IP</th><th>Config</th></tr></thead>
+    <tbody>
+      <tr><td>Ubuntu Server (Security Onion)</td><td>192.168.56.20</td><td>ClamAV installation and Wazuh integration lab</td></tr>
+      <tr><td>Windows 10</td><td>192.168.56.30</td><td>File server target — simulate uploads and FIM scanning</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Exercise 1 — Install and Test ClamAV</h3>
+  <pre><code"># On Ubuntu (Security Onion / lab server)
+sudo apt update && sudo apt install -y clamav clamav-daemon
+sudo systemctl stop clamav-freshclam
+sudo freshclam                          # update signatures
+sudo systemctl start clamav-daemon
+
+# Create EICAR test file
+echo 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' \
+    > /tmp/eicar.com
+
+# Test detection
+clamscan /tmp/eicar.com
+# Expected: /tmp/eicar.com: Eicar-Signature FOUND
+
+# Test clamd
+clamdscan /tmp/eicar.com
+# Expected same result via daemon</code></pre>
+
+  <h3>Exercise 2 — Write and Test a Custom Signature</h3>
+  <pre><code"># Create a signature for a "custom malware" string
+echo -n "CUSTOM_MALWARE_C2_BEACON" | xxd -p
+# → 435553544f4d5f4d414c574152455f43325f424541434f4e
+
+# Write .ndb signature
+echo "Lab.CustomMalware:0:0:435553544f4d5f4d414c574152455f43325f424541434f4e" \
+    > /var/lib/clamav/lab_custom.ndb
+
+# Reload daemon
+sudo systemctl reload clamav-daemon
+
+# Create test file with the string
+echo "CUSTOM_MALWARE_C2_BEACON" > /tmp/fake_malware.txt
+
+# Test
+clamscan -d /var/lib/clamav/lab_custom.ndb /tmp/fake_malware.txt
+# Expected: /tmp/fake_malware.txt: Lab.CustomMalware FOUND</code></pre>
+
+  <h3>Exercise 3 — Wazuh FIM + ClamAV Active Response</h3>
+  <pre><code"># Step 1: Ensure Wazuh agent is installed and FIM is monitoring /tmp
+# Check ossec.conf has:
+# <directories check_all="yes">/tmp</directories>
+
+# Step 2: Create active-response script
+sudo tee /var/ossec/active-response/bin/clamav-scan.sh << 'EOF'
+#!/bin/bash
+FILENAME=$3
+LOG="/var/log/clamav_ar.log"
+echo "$(date) Scanning: $FILENAME" >> $LOG
+result=$(clamscan --no-summary "$FILENAME" 2>&1)
+echo "$result" >> $LOG
+if echo "$result" | grep -q FOUND; then
+    mv "$FILENAME" /quarantine/ 2>> $LOG
+    echo "$(date) QUARANTINED: $FILENAME" >> $LOG
+fi
+EOF
+sudo chmod +x /var/ossec/active-response/bin/clamav-scan.sh
+sudo mkdir -p /quarantine
+
+# Step 3: Drop EICAR in monitored directory and watch
+cp /tmp/eicar.com /tmp/eicar_test_$(date +%s).com
+
+# Wait for Wazuh FIM to detect (up to 2 minutes)
+# Check Wazuh alert in dashboard: Rule 550 (file added)
+# Active response should trigger ClamAV scan
+# Check /var/log/clamav_ar.log for scan results
+
+tail -f /var/log/clamav_ar.log</code></pre>
+
+  <h3>Exercise 4 — Mail Scanning Test</h3>
+  <pre><code"># If Postfix + Amavis are installed:
+# Create test email with EICAR attachment
+python3 << 'EOF'
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+
+msg = MIMEMultipart()
+msg['From'] = 'test@lab.local'
+msg['To'] = 'admin@lab.local'
+msg['Subject'] = 'ClamAV Mail Test'
+
+with open('/tmp/eicar.com', 'rb') as f:
+    attachment = MIMEBase('application', 'octet-stream')
+    attachment.set_payload(f.read())
+    encoders.encode_base64(attachment)
+    attachment.add_header('Content-Disposition', 'attachment', filename='test.com')
+    msg.attach(attachment)
+
+with smtplib.SMTP('localhost', 25) as smtp:
+    smtp.sendmail('test@lab.local', ['admin@lab.local'], msg.as_string())
+EOF
+
+# Check mail log for ClamAV rejection
+tail -f /var/log/mail.log | grep -i "infected\|clamav\|blocked"</code></pre>
+
+  <div class="callout lab">
+    <strong>Lab Extension:</strong> Download YARA rules from Neo23x0/signature-base, copy to /var/lib/clamav/, and confirm ClamAV detects the EICAR file with both its own rules and YARA rules. Set up a cronjob for nightly full-system scans and route alerts to Security Onion via syslog.
+    <a href="#" class="xref" onclick="loadTopic('ossec_int'); return false;">OSSEC/Wazuh integration ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('yara_int'); return false;">YARA integration ↗</a>
+  </div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Lab Setup &amp; EICAR Testing</summary>
+  <div class="tier-body">
+    <h4>Verify the L7 Detection Pipeline Works</h4>
+    <ul>
+      <li>EICAR test string: a safe, standardized L7 file that triggers all AV engines without being actual malware</li>
+      <li>All three test files: EICAR.com (plain), EICAR.zip (compressed), EICAR.zip.zip (double-compressed)</li>
+      <li>Test mail gateway: send EICAR as attachment — should be blocked by ClamAV milter</li>
+    </ul>
+    <pre><code><span class="cm"># Create EICAR test file (L7 AV test string)</span>
+echo 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' > /tmp/eicar.com
+<span class="cm"># Test clamscan detects it</span>
+clamscan /tmp/eicar.com
+<span class="cm"># Expected: /tmp/eicar.com: Eicar-Signature FOUND</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Integration Verification</summary>
+  <div class="tier-body">
+    <h4>Confirm Each L7 Pipeline Component Works</h4>
+    <ul>
+      <li>Test OSSEC integration: trigger ClamAV detection → check OSSEC alerts.log for rule 100900</li>
+      <li>Test mail gateway: send EICAR in email → verify rejection in /var/log/mail.log</li>
+      <li>Test active response: confirm infected file moved to /quarantine/ automatically</li>
+    </ul>
+    <pre><code><span class="cm"># Trigger detection and verify OSSEC picks it up</span>
+clamscan /tmp/eicar.com  <span class="cm"># generates log entry</span>
+sudo tail /var/ossec/logs/alerts/alerts.log | grep -i "clamav\|eicar"
+<span class="cm"># Verify quarantine response activated</span>
+ls -la /quarantine/ | head -5</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Nightly Scan + SIEM Forwarding</summary>
+  <div class="tier-body">
+    <h4>Production-Grade L7 Detection Automation</h4>
+    <ul>
+      <li>Schedule nightly full-system scans with results logged for SIEM ingestion</li>
+      <li>Forward ClamAV logs to Security Onion via rsyslog (L7 log data over L4 UDP/TCP syslog)</li>
+      <li>YARA rule updates: pull from signature-base nightly, reload ClamAV to pick up new L7 rules</li>
+    </ul>
+    <pre><code><span class="cm"># /etc/cron.d/clamav-nightly</span>
+0 2 * * * root clamscan -r --infected --log=/var/log/clamav/$(date +\%Y\%m\%d).log /
+<span class="cm"># Forward to Security Onion via rsyslog</span>
+<span class="cm"># /etc/rsyslog.d/50-clamav.conf</span>
+module(load="imfile")
+input(type="imfile" File="/var/log/clamav/clamav.log"
+      Tag="clamav" Severity="warning")
+*.warning @@192.168.56.20:514  <span class="cm"># L3 SO IP, L4 TCP:514</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: 'ClamAV',
+  topics: [
+    { id: 'overview',   badge: '01', label: 'Overview & Architecture'    },
+    { id: 'clamscan',   badge: '02', label: 'clamscan — On-Demand'       },
+    { id: 'clamd',      badge: '03', label: 'clamd Daemon & clamdscan'   },
+    { id: 'freshclam',  badge: '04', label: 'freshclam — Updates'        },
+    { id: 'signatures', badge: '05', label: 'Custom Signatures'          },
+    { id: 'mail',       badge: '06', label: 'Mail Gateway Integration'   },
+    { id: 'yara_int',   badge: '07', label: 'YARA Integration'           },
+    { id: 'ossec_int',  badge: '08', label: 'OSSEC / Wazuh Integration'  },
+    { id: 'tuning',     badge: '09', label: 'Tuning & False Positives'   },
+    { id: 'scripting',  badge: '10', label: 'Scripting & Automation'     },
+    { id: 'lab',        badge: '11', label: 'Investigation Lab'          },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

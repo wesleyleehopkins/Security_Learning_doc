@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Operating Modes — Snort — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" aria-label="Toggle sidebar">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 5h14M3 10h14M3 15h14"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html" class="active">Snort</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">Operating Modes</div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  </aside>
+  <main class="content" id="content-area"></main>
+</div>
+
+<!-- ════════════════════════ Sniffer Mode ═══════════════════════════════════ -->
+<template id="tpl-sniffer">
+<article class="topic">
+  <h2>Sniffer Mode</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l2">L2 Data Link</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-note">Sniffer mode captures raw L2 frames off the wire and displays L3 IP headers and L4 TCP/UDP/ICMP headers. The <code>-d</code> flag also shows L7 application payload data as ASCII hex.</span>
+  </div>
+  <p>Sniffer mode captures and displays packets to the console in real time. No rules are loaded — this is purely a packet display tool, similar to tcpdump but with Snort's output formatting. No <code>-c</code> config flag is used.</p>
+
+  <h3>Sniffer Mode Flags</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Flag</th><th>Description</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td><code>-v</code></td><td>Verbose — print packet headers (IP, TCP/UDP/ICMP)</td><td><code>snort -v</code></td></tr>
+        <tr><td><code>-d</code></td><td>Display application layer data (packet payload as ASCII)</td><td><code>snort -vd</code></td></tr>
+        <tr><td><code>-e</code></td><td>Display Ethernet/data link layer header</td><td><code>snort -vde</code></td></tr>
+        <tr><td><code>-i</code></td><td>Specify network interface</td><td><code>snort -v -i eth0</code></td></tr>
+        <tr><td><code>-n N</code></td><td>Exit after capturing N packets</td><td><code>snort -v -n 100</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Sniffer Mode Commands</h3>
+  <pre><code><span class="cm"># Most basic — print IP/TCP/UDP/ICMP headers</span>
+sudo snort -v
+
+<span class="cm"># Headers + payload data</span>
+sudo snort -vd
+
+<span class="cm"># Headers + payload + Ethernet frame header</span>
+sudo snort -vde
+
+<span class="cm"># Specify interface, limit to 50 packets</span>
+sudo snort -v -i eth0 -n 50
+
+<span class="cm"># Snort 3 sniffer equivalent</span>
+sudo snort --daq pcap --daq-var buffer_size=65535 -i eth0 -v</code></pre>
+
+  <h3>Example Sniffer Output</h3>
+  <pre><code>Running in packet dump mode
+
+        --== Initializing Snort ==--
+Initializing Output Plugins!
+Snort BPF option: (none)
+
+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
+
+04/15-14:22:33.541234 192.168.1.100:54321 -> 203.0.113.50:80
+TCP TTL:64 TOS:0x0 ID:12345 IpLen:20 DgmLen:520 DF
+***AP*** Seq: 0x1A2B3C4D  Ack: 0x5E6F7A8B  Win: 0x8000 TcpLen: 20
+47 45 54 20 2F 69 6E 64 65 78 2E 68 74 6D 6C 20  GET /index.html
+48 54 54 50 2F 31 2E 31 0D 0A 48 6F 73 74 3A 20  HTTP/1.1..Host:
+32 30 33 2E 30 2E 31 31 33 2E 35 30 0D 0A        203.0.113.50..
+
+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
+
+Snort exiting</code></pre>
+
+  <div class="callout note">
+    <strong>Sniffer mode use cases:</strong> Quickly verify that Snort can see traffic on an interface before configuring NIDS mode. Use tcpdump or Wireshark for serious packet analysis — sniffer mode is mainly a sanity-check tool.
+  </div>
+</article>
+</template>
+
+<!-- ════════════════════════ Packet Logger Mode ═════════════════════════════ -->
+<template id="tpl-packet-logger">
+<article class="topic">
+  <h2>Packet Logger Mode</h2>
+  <p>Packet logger mode captures packets to disk without applying detection rules. Useful for capturing traffic for offline analysis or building test PCAPs. Activated by specifying a log directory with <code>-l</code>.</p>
+
+  <h3>Packet Logger Flags</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Flag</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>-l /path</code></td><td>Set log directory — enables packet logger mode</td></tr>
+        <tr><td><code>-b</code></td><td>Log in binary tcpdump format (faster, smaller files)</td></tr>
+        <tr><td><code>-K ascii</code></td><td>Log in ASCII text format (human readable, larger)</td></tr>
+        <tr><td><code>-K pcap</code></td><td>Log in pcap format (same as <code>-b</code>)</td></tr>
+        <tr><td><code>-L filename</code></td><td>Specify log filename (used with <code>-b</code>)</td></tr>
+        <tr><td><code>-n N</code></td><td>Stop after N packets</td></tr>
+        <tr><td><code>-F BPF</code></td><td>Apply BPF capture filter</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Packet Logger Commands</h3>
+  <pre><code><span class="cm"># Log to directory in ASCII format (default)</span>
+sudo snort -vde -l /var/log/snort/
+
+<span class="cm"># Log in binary tcpdump format (best for large captures)</span>
+sudo snort -b -l /var/log/snort/ -i eth0
+
+<span class="cm"># Log with specific filename</span>
+sudo snort -b -L /var/log/snort/capture.pcap -i eth0
+
+<span class="cm"># Log only traffic from/to 192.168.1.100 (BPF filter)</span>
+sudo snort -b -l /var/log/snort/ -i eth0 -F "host 192.168.1.100"
+
+<span class="cm"># Log only HTTP traffic with BPF filter</span>
+sudo snort -b -l /var/log/snort/ -i eth0 -F "tcp port 80"
+
+<span class="cm"># Read a logged binary file back in sniffer mode</span>
+sudo snort -vde -r /var/log/snort/capture.pcap</code></pre>
+
+  <h3>Log Directory Structure (ASCII mode)</h3>
+  <pre><code>/var/log/snort/
+├── 192.168.1.100/          <span class="cm"># One directory per source IP</span>
+│   ├── TCP:54321-80        <span class="cm"># File per session (src_port-dst_port)</span>
+│   └── UDP:5353-53
+├── 10.0.0.5/
+│   └── TCP:22-54892
+└── alert                   <span class="cm"># Alert file (fast format)</span>
+
+<span class="cm"># Binary pcap logs:</span>
+/var/log/snort/snort.log.1234567890  <span class="cm"># Epoch timestamp suffix</span></code></pre>
+</article>
+</template>
+
+<!-- ════════════════════════ NIDS Mode ══════════════════════════════════════ -->
+<template id="tpl-nids">
+<article class="topic">
+  <h2>NIDS Mode (Detection Mode)</h2>
+  <p>NIDS mode is the primary operational mode. Snort loads a configuration file and rule set, inspects traffic, and generates alerts when rules match. Activated by the <code>-c</code> flag. Snort runs as a daemon or foreground process.</p>
+
+  <h3>Key NIDS Flags</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Flag</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>-c /path/snort.conf</code></td><td>Load configuration file — enables NIDS mode</td></tr>
+        <tr><td><code>-i eth0</code></td><td>Listen on interface</td></tr>
+        <tr><td><code>-r file.pcap</code></td><td>Read from PCAP instead of live interface</td></tr>
+        <tr><td><code>-A fast</code></td><td>Fast alert mode (default — one-line alert)</td></tr>
+        <tr><td><code>-A full</code></td><td>Full alert (includes packet dump)</td></tr>
+        <tr><td><code>-A console</code></td><td>Print alerts to console (stdout)</td></tr>
+        <tr><td><code>-A none</code></td><td>Disable alerting (log only)</td></tr>
+        <tr><td><code>-A unified2</code></td><td>Binary unified2 format (barnyard2 input)</td></tr>
+        <tr><td><code>-l /path</code></td><td>Log directory</td></tr>
+        <tr><td><code>-L filename</code></td><td>Log filename (with <code>-b</code>)</td></tr>
+        <tr><td><code>-q</code></td><td>Quiet mode — suppress banner and stats</td></tr>
+        <tr><td><code>-D</code></td><td>Run as daemon (background)</td></tr>
+        <tr><td><code>-T</code></td><td>Test config and rules, then exit (don't capture)</td></tr>
+        <tr><td><code>-u username</code></td><td>Drop privileges to this user after startup</td></tr>
+        <tr><td><code>-g groupname</code></td><td>Drop privileges to this group after startup</td></tr>
+        <tr><td><code>-m umask</code></td><td>Set file creation mask for log files</td></tr>
+        <tr><td><code>-s</code></td><td>Log alerts to syslog</td></tr>
+        <tr><td><code>-F BPF</code></td><td>Apply BPF pre-filter before rule evaluation</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>NIDS Mode Commands</h3>
+  <pre><code><span class="cm"># Basic NIDS — live interface, fast alerts to /var/log/snort/</span>
+sudo snort -c /etc/snort/snort.conf -i eth0 -A fast -l /var/log/snort/
+
+<span class="cm"># NIDS — read from PCAP, console output (testing)</span>
+sudo snort -c /etc/snort/snort.conf -r /tmp/capture.pcap -A console -q
+
+<span class="cm"># NIDS — run as daemon, log to standard dir</span>
+sudo snort -c /etc/snort/snort.conf -i eth0 -A fast -l /var/log/snort/ -D
+
+<span class="cm"># NIDS — run daemonized with privilege drop</span>
+sudo snort -c /etc/snort/snort.conf -i eth0 -A fast \
+  -l /var/log/snort/ -D -u snort -g snort
+
+<span class="cm"># NIDS — unified2 output for barnyard2</span>
+sudo snort -c /etc/snort/snort.conf -i eth0 \
+  -A unified2 -l /var/log/snort/ -D
+
+<span class="cm"># Validate config syntax (no traffic capture)</span>
+sudo snort -T -c /etc/snort/snort.conf
+
+<span class="cm"># Snort 3 NIDS mode</span>
+sudo snort -c /etc/snort/snort.lua -i eth0 -A alert_fast -l /var/log/snort/</code></pre>
+
+  <h3>Snort as a Service</h3>
+  <pre><code><span class="cm"># Create systemd service file</span>
+cat /etc/systemd/system/snort.service
+[Unit]
+Description=Snort NIDS
+After=network.target
+
+[Service]
+Type=forking
+ExecStart=/usr/sbin/snort -c /etc/snort/snort.conf -i eth0 \
+  -A fast -l /var/log/snort/ -D -u snort -g snort
+PIDFile=/var/run/snort_eth0.pid
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+
+<span class="cm"># Enable and start</span>
+sudo systemctl daemon-reload
+sudo systemctl enable snort
+sudo systemctl start snort
+sudo systemctl status snort
+
+<span class="cm"># Monitor alerts live</span>
+tail -f /var/log/snort/alert</code></pre>
+</article>
+</template>
+
+<!-- ════════════════════════ IPS Mode ═══════════════════════════════════════ -->
+<template id="tpl-ips">
+<article class="topic">
+  <h2>IPS Mode (Inline Prevention)</h2>
+  <p>IPS mode places Snort inline in the traffic path so it can actively <strong>drop</strong> malicious packets, not just alert on them. Requires a compatible DAQ module and either a network bridge or NFQ (iptables NFQUEUE) setup.</p>
+
+  <div class="callout warn">
+    <strong>IPS mode drops real traffic.</strong> A misconfigured rule or hardware issue can block legitimate traffic and cause an outage. Always test rules in NIDS mode first. Use <code>-K none</code> (alert without drop) in IPS mode during initial deployment to verify rule quality before enabling active drops.
+  </div>
+
+  <h3>IPS Setup — NFQ Method (Linux)</h3>
+  <pre><code><span class="cm"># Method 1: iptables NFQUEUE (most common on Linux)</span>
+
+<span class="cm"># Step 1: Set iptables rules to send traffic to NFQUEUE</span>
+sudo iptables -I FORWARD -j NFQUEUE --queue-num 1
+sudo iptables -I INPUT -j NFQUEUE --queue-num 1
+sudo iptables -I OUTPUT -j NFQUEUE --queue-num 1
+
+<span class="cm"># Step 2: Run Snort in IPS mode with NFQ DAQ</span>
+sudo snort -c /etc/snort/snort.conf \
+  --daq nfq --daq-var queue=1 \
+  -A fast -l /var/log/snort/ \
+  -Q  <span class="cm"># -Q enables IPS/inline mode</span>
+
+<span class="cm"># Cleanup when done</span>
+sudo iptables -D FORWARD -j NFQUEUE --queue-num 1
+sudo iptables -D INPUT -j NFQUEUE --queue-num 1
+sudo iptables -D OUTPUT -j NFQUEUE --queue-num 1</code></pre>
+
+  <h3>IPS Setup — AF_PACKET Bridge Method</h3>
+  <pre><code><span class="cm"># Method 2: Inline bridge with two NICs (eth0 external, eth1 internal)</span>
+<span class="cm"># Snort sits between two interfaces — all traffic passes through it</span>
+
+<span class="cm"># Run Snort bridging eth0 and eth1</span>
+sudo snort -c /etc/snort/snort.conf \
+  --daq afpacket --daq-var fanout_type=hash \
+  -i eth0:eth1 \   <span class="cm"># Colon syntax = bridge mode</span>
+  -A fast -l /var/log/snort/ -Q
+
+<span class="cm"># Snort 3 IPS mode</span>
+sudo snort -c /etc/snort/snort.lua \
+  --daq afpacket \
+  -i eth0:eth1 \
+  -Q --warn-all</code></pre>
+
+  <h3>IPS Actions in Rules</h3>
+  <pre><code><span class="cm"># In NIDS mode, only: alert, log, pass</span>
+<span class="cm"># In IPS mode, these are ALSO valid:</span>
+
+drop tcp $EXTERNAL_NET any -> $HOME_NET 22 (
+  msg:"SSH Brute Force Blocked";
+  flow:to_server,established;
+  detection_filter:track by_src, count 5, seconds 60;
+  classtype:attempted-admin;
+  sid:1000600; rev:1;
+)
+
+reject tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  msg:"SQL Injection Rejected";
+  flow:established,to_server;
+  content:"UNION"; nocase; content:"SELECT"; nocase; distance:0;
+  classtype:web-application-attack;
+  sid:1000601; rev:1;
+)
+<span class="cm"># reject = drop + send TCP RST to both endpoints</span>
+
+sdrop icmp $EXTERNAL_NET any -> $HOME_NET any (
+  msg:"ICMP Flood Silently Dropped";
+  itype:8;
+  threshold:type both, track by_src, count 200, seconds 10;
+  sid:1000602; rev:1;
+)
+<span class="cm"># sdrop = drop silently, no alert generated</span></code></pre>
+
+  <h3>DAQ Modules</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>DAQ Module</th><th>Use Case</th><th>Performance</th></tr></thead>
+      <tbody>
+        <tr><td><code>pcap</code></td><td>Default — passive capture, no IPS capability</td><td>Low — kernel copy overhead</td></tr>
+        <tr><td><code>afpacket</code></td><td>Inline bridge — high performance passive or IPS</td><td>High — zero-copy AF_PACKET</td></tr>
+        <tr><td><code>nfq</code></td><td>Linux Netfilter Queue — IPS via iptables</td><td>Medium — user/kernel transition</td></tr>
+        <tr><td><code>ipfw</code></td><td>BSD/macOS inline IPS via IPFW</td><td>Medium</td></tr>
+        <tr><td><code>dpdk</code></td><td>High-speed IPS (10Gbps+) via Intel DPDK</td><td>Very High — kernel bypass</td></tr>
+        <tr><td><code>file</code></td><td>Read from PCAP file (testing)</td><td>N/A</td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+</template>
+
+<!-- ════════════════════════ Command Reference ══════════════════════════════ -->
+<template id="tpl-command-reference">
+<article class="topic">
+  <h2>Command Flag Reference</h2>
+
+  <h3>Complete Flag Table</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Flag</th><th>Argument</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>-A</code></td><td>fast|full|console|none|unified2|syslog</td><td>Alert output mode</td></tr>
+        <tr><td><code>-b</code></td><td>—</td><td>Log in binary (tcpdump/pcap) format</td></tr>
+        <tr><td><code>-c</code></td><td>/path/snort.conf</td><td>Configuration file (enables NIDS mode)</td></tr>
+        <tr><td><code>-C</code></td><td>—</td><td>Print ASCII chars only (no hex dump)</td></tr>
+        <tr><td><code>-d</code></td><td>—</td><td>Display application data</td></tr>
+        <tr><td><code>-D</code></td><td>—</td><td>Daemonize (background)</td></tr>
+        <tr><td><code>-e</code></td><td>—</td><td>Display data link layer headers</td></tr>
+        <tr><td><code>-F</code></td><td>"BPF expression"</td><td>Apply BPF pre-filter</td></tr>
+        <tr><td><code>-g</code></td><td>groupname</td><td>Run as this group</td></tr>
+        <tr><td><code>-h</code></td><td>network/mask</td><td>Home network (overrides snort.conf HOME_NET)</td></tr>
+        <tr><td><code>-i</code></td><td>interface</td><td>Listen on this interface</td></tr>
+        <tr><td><code>-k</code></td><td>none|all|noip|notcp|noudp|noicmp</td><td>Checksum mode</td></tr>
+        <tr><td><code>-K</code></td><td>ascii|pcap|none</td><td>Logging mode</td></tr>
+        <tr><td><code>-l</code></td><td>/path/to/dir</td><td>Log directory</td></tr>
+        <tr><td><code>-L</code></td><td>filename</td><td>Binary log filename</td></tr>
+        <tr><td><code>-m</code></td><td>0022</td><td>Umask for log file creation</td></tr>
+        <tr><td><code>-n</code></td><td>N</td><td>Process N packets then exit</td></tr>
+        <tr><td><code>-o</code></td><td>—</td><td>Change detection order: pass → alert → log</td></tr>
+        <tr><td><code>-p</code></td><td>—</td><td>Disable promiscuous mode</td></tr>
+        <tr><td><code>-P</code></td><td>bytes</td><td>Set snap length (max packet size to capture)</td></tr>
+        <tr><td><code>-q</code></td><td>—</td><td>Quiet — suppress banner and stats</td></tr>
+        <tr><td><code>-Q</code></td><td>—</td><td>Inline (IPS) mode</td></tr>
+        <tr><td><code>-r</code></td><td>file.pcap</td><td>Read from PCAP file</td></tr>
+        <tr><td><code>-s</code></td><td>—</td><td>Log alerts to syslog</td></tr>
+        <tr><td><code>-S</code></td><td>variable=value</td><td>Set snort.conf variable from CLI</td></tr>
+        <tr><td><code>-T</code></td><td>—</td><td>Test config and exit</td></tr>
+        <tr><td><code>-u</code></td><td>username</td><td>Run as this user</td></tr>
+        <tr><td><code>-v</code></td><td>—</td><td>Verbose packet output</td></tr>
+        <tr><td><code>-V</code></td><td>—</td><td>Print version and exit</td></tr>
+        <tr><td><code>-x</code></td><td>—</td><td>Exit on config errors (strict mode)</td></tr>
+        <tr><td><code>-X</code></td><td>—</td><td>Dump raw packet data (hex)</td></tr>
+        <tr><td><code>-y</code></td><td>—</td><td>Include year in alert timestamps</td></tr>
+        <tr><td><code>-?</code></td><td>—</td><td>Show help</td></tr>
+        <tr><td><code>--daq</code></td><td>module</td><td>Specify DAQ module (pcap, afpacket, nfq)</td></tr>
+        <tr><td><code>--daq-var</code></td><td>key=value</td><td>DAQ module option</td></tr>
+        <tr><td><code>--rule-path</code></td><td>/path</td><td>Additional rule search path</td></tr>
+        <tr><td><code>--warn-all</code></td><td>—</td><td>Show all warnings (Snort 3)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Mode Quick-Select</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Goal</th><th>Command Pattern</th></tr></thead>
+      <tbody>
+        <tr><td>View packets on interface</td><td><code>snort -vde -i eth0</code></td></tr>
+        <tr><td>Capture to pcap file</td><td><code>snort -b -L output.pcap -i eth0</code></td></tr>
+        <tr><td>Test rules against PCAP</td><td><code>snort -c snort.conf -r test.pcap -A console -q</code></td></tr>
+        <tr><td>Validate config syntax</td><td><code>snort -T -c snort.conf</code></td></tr>
+        <tr><td>Run NIDS — foreground, alerts to file</td><td><code>snort -c snort.conf -i eth0 -A fast -l /var/log/snort/</code></td></tr>
+        <tr><td>Run NIDS — daemon</td><td><code>snort -c snort.conf -i eth0 -A fast -l /var/log/snort/ -D</code></td></tr>
+        <tr><td>Run IPS — inline NFQ</td><td><code>snort -c snort.conf --daq nfq --daq-var queue=1 -Q -l /var/log/snort/</code></td></tr>
+        <tr><td>Run IPS — inline bridge</td><td><code>snort -c snort.conf --daq afpacket -i eth0:eth1 -Q -l /var/log/snort/</code></td></tr>
+        <tr><td>Override HOME_NET from CLI</td><td><code>snort -c snort.conf -i eth0 -S "HOME_NET=[192.168.1.0/24]"</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: "Snort — Operating Modes",
+  topics: [
+    { id: "sniffer",           badge: "01", label: "Sniffer Mode" },
+    { id: "packet-logger",     badge: "02", label: "Packet Logger" },
+    { id: "nids",              badge: "03", label: "NIDS Mode" },
+    { id: "ips",               badge: "04", label: "IPS Mode" },
+    { id: "command-reference", badge: "05", label: "Command Reference" },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

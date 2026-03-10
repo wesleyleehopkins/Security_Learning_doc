@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Autopsy — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .xref {
+      display: inline-block;
+      font-size: 0.78rem;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      padding: 1px 7px;
+      margin: 2px 3px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s, color 0.15s;
+    }
+    .xref:hover {
+      background: var(--accent);
+      color: #fff;
+    }
+    .xref-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+    }
+    td .xref-group {
+      margin-top: 2px;
+    }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="index.html" class="nav-brand">
+    <span class="icon">⬡</span> SOC Notes
+  </a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html" class="active">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()">☰</button>
+
+<aside id="sb" class="sidebar"></aside>
+
+<main id="main" class="main">
+  <div id="content-area"></div>
+</main>
+
+<!-- ============================================================
+     SECTION 01 — Overview & Architecture
+     ============================================================ -->
+<template id="tpl-overview">
+  <h1>Autopsy — Digital Forensics Platform</h1>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Autopsy is a disk image forensics tool that operates entirely at L7 — it parses application-layer file system structures, browser databases, email stores, and registry hives within offline disk images.</span>
+  </div>
+  <p>Autopsy is a free, open-source digital forensics GUI built on top of The Sleuth Kit (TSK). It is used by law enforcement, incident responders, and forensic analysts to investigate disk images, file systems, and memory artifacts. Autopsy runs on Windows, Linux, and macOS and can process E01, DD/RAW, L01, and virtual disk formats.</p>
+
+  <h2>Core Architecture</h2>
+  <table>
+    <tr><th>Component</th><th>Role</th></tr>
+    <tr><td>The Sleuth Kit (TSK)</td><td>C library underlying Autopsy — file system parsing, deleted file recovery, metadata extraction</td></tr>
+    <tr><td>Autopsy GUI</td><td>Java-based frontend; case management, module pipeline, keyword search, timeline, reporting</td></tr>
+    <tr><td>Ingest Modules</td><td>Pluggable analysis pipeline — hash calc, file type ID, EXIF, browser history, email, YARA, etc.</td></tr>
+    <tr><td>Central Repository</td><td>SQLite or PostgreSQL database storing hashes, artifacts, and tags across cases</td></tr>
+    <tr><td>Communications</td><td>Module for extracting email/chat/contacts from evidence sources</td></tr>
+  </table>
+
+  <h2>Supported Evidence Formats</h2>
+  <table>
+    <tr><th>Format</th><th>Extension</th><th>Notes</th></tr>
+    <tr><td>EnCase Image</td><td>.E01, .Ex01</td><td>Industry standard, supports compression &amp; encryption</td></tr>
+    <tr><td>Raw/DD Image</td><td>.dd, .img, .raw</td><td>Bit-for-bit copy; no compression</td></tr>
+    <tr><td>Logical Evidence File</td><td>.L01</td><td>EnCase logical container (directories/files only)</td></tr>
+    <tr><td>VMware Disk</td><td>.vmdk</td><td>Virtual machine disk images</td></tr>
+    <tr><td>VirtualBox</td><td>.vhd, .vhdx</td><td>VHD/VHDX virtual disk</td></tr>
+    <tr><td>APFS / HFS+</td><td>—</td><td>Mac file systems (Autopsy 4.x)</td></tr>
+    <tr><td>Logical Folder</td><td>—</td><td>Analyze a directory directly (no image)</td></tr>
+  </table>
+
+  <h2>Supported File Systems</h2>
+  <ul>
+    <li><strong>FAT12/16/32</strong> — USB drives, older media</li>
+    <li><strong>exFAT</strong> — Flash drives, SD cards</li>
+    <li><strong>NTFS</strong> — Windows system drives (MFT, USN journal, ADS)</li>
+    <li><strong>EXT2/3/4</strong> — Linux file systems</li>
+    <li><strong>HFS+, APFS</strong> — macOS</li>
+    <li><strong>ISO 9660 / UDF</strong> — CD/DVD images</li>
+  </ul>
+
+  <h2>Forensic Soundness Principles</h2>
+  <div class="callout">
+    <strong>Write-Blocker Required</strong> — Always attach physical evidence through a hardware or software write-blocker. Autopsy itself is read-only against images, but acquisitions must be protected at the hardware layer.
+  </div>
+  <ul>
+    <li><strong>Hash Verification</strong>: Autopsy calculates MD5/SHA-1/SHA-256 on ingest and displays them in the case summary. Verify against acquisition hash before analysis.</li>
+    <li><strong>Chain of Custody</strong>: Document every person who handles evidence, timestamps, and storage conditions.</li>
+    <li><strong>Non-Destructive Analysis</strong>: Autopsy never writes to the evidence image — all analysis is performed on a copy or read-only mount.</li>
+    <li><strong>Court-Ready Reports</strong>: Generated reports include examiner name, case number, hash values, and timestamped findings.</li>
+  </ul>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('ingest'); return false;">Ingest Modules ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('timeline'); return false;">Timeline Analysis ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('reporting'); return false;">Report Generation ↗</a>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Understanding what Autopsy does and when to use it</h4>
+      <ul>
+        <li>Autopsy is a GUI front-end for The Sleuth Kit — it makes forensic analysis accessible without command-line expertise</li>
+        <li>Use Autopsy for disk image analysis: E01 (EnCase), DD/RAW, VMDK, and VHD formats are all supported</li>
+        <li>Always work on a forensic image, never the original evidence — Autopsy is read-only against the image file</li>
+        <li>Hash verification (MD5/SHA-256) is performed automatically on ingest — compare to acquisition hash before proceeding</li>
+      </ul>
+      <pre><code><span class="cm"># Verify evidence hash before opening in Autopsy</span>
+sha256sum suspect_drive.E01
+<span class="cm"># Compare output to the hash recorded during acquisition</span>
+<span class="cm"># If they match, the image is forensically sound</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Choosing the right evidence format and ingest configuration</h4>
+      <ul>
+        <li>E01 is preferred for most cases — supports compression, checksumming, and metadata; DD/RAW has no overhead but no built-in integrity</li>
+        <li>For mobile evidence use XRY export or Android backup formats that Autopsy can directly ingest</li>
+        <li>Configure ingest modules carefully before adding a data source — modules cannot be added retroactively without re-ingesting</li>
+      </ul>
+      <pre><code><span class="cm"># Recommended ingest module selection for incident response</span>
+<span class="cm"># [x] Hash Lookup (NSRL + custom IOC set)</span>
+<span class="cm"># [x] File Type Identification</span>
+<span class="cm"># [x] Recent Activity (browser, MRU, downloads)</span>
+<span class="cm"># [x] Keyword Search (add IOC strings before ingest)</span>
+<span class="cm"># [x] Windows Registry + Windows Event Logs</span></code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Multi-user cases, Central Repository, and custom ingest modules</h4>
+      <ul>
+        <li>Use multi-user mode (PostgreSQL + shared NFS) for team investigations — multiple examiners work the same case simultaneously</li>
+        <li>The Central Repository stores hashes and artifact correlations across cases — use it to link artifacts from different investigations</li>
+        <li>Write custom Java ingest modules (Autopsy plugin API) for organization-specific artifact parsing not covered by built-in modules</li>
+      </ul>
+      <pre><code><span class="cm"># Multi-user setup requires PostgreSQL and shared storage</span>
+<span class="cm"># New Case → Case Type: Multi-user</span>
+<span class="cm"># PostgreSQL host: forensic-db.lab.local</span>
+<span class="cm"># Case data directory: \\forensic-nas\cases\CaseName\</span>
+<span class="cm"># All team members add the same case.aut file from shared storage</span></code></pre>
+    </div>
+  </details>
+</template>
+
+<!-- ============================================================
+     SECTION 02 — Case Creation & Evidence Ingest
+     ============================================================ -->
+<template id="tpl-case">
+  <h1>Case Creation &amp; Evidence Ingest</h1>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Case creation and evidence ingest are application-layer (L7) operations — Autopsy reads disk image files, calculates application-layer hashes, and initializes its case database without any live network interaction.</span>
+  </div>
+  <p>Every Autopsy investigation starts with a case. Cases store all analysis results, tags, bookmarks, and reports. Evidence sources (data sources) are added to the case and processed through the ingest pipeline.</p>
+
+  <h2>Creating a New Case</h2>
+  <ol>
+    <li><strong>File → New Case</strong> — set case name, base directory, optional case number and examiner name</li>
+    <li>Choose <strong>Single-user</strong> (SQLite) or <strong>Multi-user</strong> (PostgreSQL + shared storage) mode</li>
+    <li>Case directory is created: <code>CaseName/</code> containing <code>case.aut</code>, <code>ModuleOutput/</code>, <code>Reports/</code></li>
+    <li>Add data source immediately or later via <strong>Case → Add Data Source</strong></li>
+  </ol>
+
+  <h2>Adding a Data Source</h2>
+  <table>
+    <tr><th>Source Type</th><th>When to Use</th></tr>
+    <tr><td>Disk Image or VM File</td><td>E01, DD, VMDK, VHD — full disk or partition images</td></tr>
+    <tr><td>Local Disk</td><td>Directly attached drive (forensically unsound without write-blocker)</td></tr>
+    <tr><td>Logical Files</td><td>Individual files or folders (triage situations, cloud storage exports)</td></tr>
+    <tr><td>Unallocated Space Image</td><td>Carve artifacts from slack/unallocated space only</td></tr>
+    <tr><td>XRY Export</td><td>Mobile forensics export from XRY tool</td></tr>
+  </table>
+
+  <h2>Ingest Configuration Wizard</h2>
+  <p>When adding a data source, Autopsy presents the ingest module selection panel. Key decisions:</p>
+  <ul>
+    <li><strong>Select All vs. Custom</strong>: Running all modules is thorough but slow. For quick triage, enable only: Hash Lookup, File Type ID, Recent Activity, Keyword Search.</li>
+    <li><strong>Hash Database</strong>: Configure NSRL (known good) and custom hash sets (known malware, IOCs). Files matching NSRL are marked as "known" and de-prioritized.</li>
+    <li><strong>Keyword Search</strong>: Pre-configure keyword lists before ingest to find strings, regex patterns, and credit card numbers during file extraction.</li>
+    <li><strong>Ingest Threads</strong>: Autopsy defaults to using all available CPU cores. Reduce threads on low-spec systems.</li>
+  </ul>
+
+  <h2>Hash Verification Workflow</h2>
+  <pre><code># Before adding image, record the acquisition hash:
+sha256sum suspect_drive.E01
+
+# Autopsy calculates hash on ingest
+# Verify in: Case → Data Source Summary → Hash Values
+# MD5 and SHA-1 shown; compare manually to acquisition report</code></pre>
+
+  <div class="callout warn">
+    <strong>Hash Mismatch</strong> — If Autopsy's calculated hash does not match the acquisition hash, the image may be corrupted or tampered. Do not proceed without investigating the discrepancy. Document the mismatch in your case notes.
+  </div>
+
+  <h2>Time Zone Configuration</h2>
+  <p>Always configure the correct time zone for the evidence source before analysis. Autopsy displays all timestamps in the case time zone.</p>
+  <ul>
+    <li>Set during data source addition: <strong>Select Time Zone</strong> dropdown</li>
+    <li>Windows system time zone can be found in registry: <code>HKLM\SYSTEM\CurrentControlSet\Control\TimeZoneInformation</code></li>
+    <li>All Autopsy timestamps are stored internally as UTC — display is adjusted per case time zone</li>
+  </ul>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('ingest'); return false;">Ingest Modules ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('filesystem'); return false;">File System Analysis ↗</a>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Creating a case and adding a disk image</h4>
+      <ul>
+        <li>Every investigation requires a case first — it stores all analysis results, tags, and reports in one directory</li>
+        <li>Single-user mode uses SQLite (portable, no server needed); multi-user mode requires PostgreSQL</li>
+        <li>After creating the case, add a data source: File → Add Data Source → Disk Image or VM File</li>
+        <li>Always set the correct time zone for the evidence system before proceeding — affects all displayed timestamps</li>
+      </ul>
+      <pre><code><span class="cm"># Case directory structure created by Autopsy:</span>
+<span class="cm"># CaseName/case.aut          — case configuration</span>
+<span class="cm"># CaseName/ModuleOutput/     — ingest module results</span>
+<span class="cm"># CaseName/Reports/          — generated reports</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Hash verification and time zone configuration</h4>
+      <ul>
+        <li>Record the acquisition hash before opening Autopsy — verify it matches Autopsy's calculated hash in Case → Data Source Summary</li>
+        <li>A hash mismatch means the image is corrupted or altered — document the discrepancy and do not proceed without investigating</li>
+        <li>Find the evidence system's time zone from the registry: <code>HKLM\SYSTEM\CurrentControlSet\Control\TimeZoneInformation</code></li>
+      </ul>
+      <pre><code><span class="cm"># Hash verification workflow</span>
+sha256sum suspect_drive.E01
+<span class="cm"># Then in Autopsy: Case → Data Source Summary → Hash Values</span>
+<span class="cm"># Compare: Autopsy hash must equal acquisition hash exactly</span></code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Optimizing ingest for speed on large evidence sources</h4>
+      <ul>
+        <li>Reduce ingest threads to 2-4 on SSDs to prevent I/O saturation when analyzing large E01 images</li>
+        <li>Pre-configure keyword lists and hash databases before adding data sources — they cannot be added to a running ingest</li>
+        <li>Use <code>Tools → Options → Application Settings</code> to set the maximum JVM heap size — increase to 8-16 GB for large cases to prevent OutOfMemory errors</li>
+      </ul>
+      <pre><code><span class="cm"># Autopsy JVM heap tuning (autopsy.conf)</span>
+<span class="cm"># Windows: C:\Program Files\Autopsy-x.x.x\etc\autopsy.conf</span>
+default_options="--branding Autopsy -J-Xms512m -J-Xmx16g"
+<span class="cm"># -Xmx sets the maximum heap — increase for large E01 images</span></code></pre>
+    </div>
+  </details>
+</template>
+
+<!-- ============================================================
+     SECTION 03 — Ingest Module Pipeline
+     ============================================================ -->
+<template id="tpl-ingest">
+  <h1>Ingest Module Pipeline</h1>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">All ingest modules process application-layer content — browser history databases, email stores, registry hives, event logs, and file metadata are L7 artifacts read from the static disk image.</span>
+  </div>
+  <p>Ingest modules are the analysis engine of Autopsy. They run automatically after data source addition, processing each file and extracting artifacts. Modules run in parallel across the ingest thread pool.</p>
+
+  <h2>Core Ingest Modules</h2>
+  <table>
+    <tr><th>Module</th><th>What It Does</th><th>Key Artifacts</th></tr>
+    <tr><td>Hash Lookup</td><td>MD5/SHA-1 against NSRL, known malware sets, custom sets</td><td>Known/Notable/Unknown tags on files</td></tr>
+    <tr><td>File Type Identification</td><td>Magic byte-based type detection (not extension-based)</td><td>MIME type for every file; detects mismatched extensions</td></tr>
+    <tr><td>Embedded File Extractor</td><td>Extracts files from archives (ZIP, RAR, 7z), Office docs, PDFs</td><td>Nested files added to case as child items</td></tr>
+    <tr><td>EXIF Parser</td><td>Reads EXIF metadata from JPEG, TIFF, PNG images</td><td>GPS coordinates, camera model, timestamps</td></tr>
+    <tr><td>Keyword Search</td><td>Indexed full-text search + regex over all file content</td><td>Credit card numbers, email addresses, custom strings</td></tr>
+    <tr><td>Recent Activity</td><td>Parses browser history, downloads, cookies, searches, MRU</td><td>URLs visited, files opened, typed paths, user activity</td></tr>
+    <tr><td>Windows Registry</td><td>Parses registry hives (SAM, SYSTEM, SOFTWARE, NTUSER.DAT)</td><td>User accounts, installed software, USB history, run keys</td></tr>
+    <tr><td>Windows Event Logs</td><td>Parses .evtx files</td><td>Logon events, process creation, service installs</td></tr>
+    <tr><td>Email Parser</td><td>Parses PST, MBOX, EML, MSG, Thunderbird profiles</td><td>Email messages, attachments, contacts, calendar events</td></tr>
+    <tr><td>Android Analyzer</td><td>Parses SQLite databases from Android backups</td><td>Contacts, SMS, call logs, app data</td></tr>
+    <tr><td>YARA Analyzer</td><td>Runs YARA rules against all files</td><td>Rule matches with file path and rule name</td></tr>
+    <tr><td>Virtual Machine Extractor</td><td>Detects and mounts VM disk files inside evidence</td><td>Nested VMs analyzed as additional data sources</td></tr>
+    <tr><td>Plaso/Log2Timeline</td><td>Creates super-timeline from all artifacts</td><td>Combined chronological artifact timeline</td></tr>
+    <tr><td>PhotoRec Carver</td><td>Signature-based file carving from unallocated space</td><td>Deleted/carved files: JPEG, PDF, ZIP, DOCX, etc.</td></tr>
+  </table>
+
+  <h2>Recent Activity — Browser Artifacts</h2>
+  <table>
+    <tr><th>Browser</th><th>History DB</th><th>Location (relative to user profile)</th></tr>
+    <tr><td>Chrome / Edge</td><td>SQLite</td><td><code>AppData\Local\Google\Chrome\User Data\Default\History</code></td></tr>
+    <tr><td>Firefox</td><td>SQLite</td><td><code>AppData\Roaming\Mozilla\Firefox\Profiles\*.default\places.sqlite</code></td></tr>
+    <tr><td>Internet Explorer</td><td>ESE/DAT</td><td><code>AppData\Local\Microsoft\Windows\History\</code></td></tr>
+    <tr><td>Edge Legacy</td><td>ESE</td><td><code>AppData\Local\Microsoft\Windows\WebCache\WebCacheV01.dat</code></td></tr>
+  </table>
+
+  <h2>Windows Registry Module — Key Artifacts</h2>
+  <table>
+    <tr><th>Registry Key</th><th>Artifact</th></tr>
+    <tr><td><code>HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run</code></td><td>Persistence — programs that run at startup</td></tr>
+    <tr><td><code>HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\RecentDocs</code></td><td>Most Recently Used (MRU) documents</td></tr>
+    <tr><td><code>HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\TypedPaths</code></td><td>Typed path history in Explorer</td></tr>
+    <tr><td><code>HKLM\SYSTEM\CurrentControlSet\Enum\USBSTOR</code></td><td>USB device history (VID/PID, serial number)</td></tr>
+    <tr><td><code>HKLM\SAM\Domains\Account\Users</code></td><td>Local user accounts, last logon times, failed logins</td></tr>
+    <tr><td><code>HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon</code></td><td>Auto-logon credentials (plaintext if configured)</td></tr>
+    <tr><td><code>HKCU\Software\Microsoft\Windows\Shell\Bags</code></td><td>ShellBags — folder access history (even for deleted folders)</td></tr>
+  </table>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('filesystem'); return false;">File System Analysis ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('keyword'); return false;">Keyword Search ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('browser'); return false;">Browser Artifacts ↗</a>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Selecting and running the right ingest modules</h4>
+      <ul>
+        <li>For quick triage, enable only: Hash Lookup, File Type ID, Recent Activity, and Keyword Search — full ingest can take hours</li>
+        <li>The Recent Activity module automatically parses Chrome, Firefox, IE/Edge history, downloads, and registry MRU entries</li>
+        <li>Hash Lookup tags files as Known (NSRL), Notable (malware), or Unknown — focus on Notable hits first</li>
+        <li>Modules run in parallel across CPU cores — do not cancel ingest partway through, as partial results may be inconsistent</li>
+      </ul>
+      <pre><code><span class="cm"># Quick triage module selection (fastest meaningful analysis)</span>
+<span class="cm"># [x] Hash Lookup</span>
+<span class="cm"># [x] File Type Identification</span>
+<span class="cm"># [x] Recent Activity</span>
+<span class="cm"># [x] Keyword Search</span>
+<span class="cm"># [ ] PhotoRec Carver  (skip for speed — add later if needed)</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Registry module artifacts and browser database locations</h4>
+      <ul>
+        <li>The Windows Registry module parses SAM, SYSTEM, SOFTWARE, and all NTUSER.DAT hives from the image automatically</li>
+        <li>Key artifacts: USB device history (<code>USBSTOR</code>), run keys (persistence), user accounts (SAM), and ShellBags (folder access history)</li>
+        <li>Browser databases are SQLite files — Autopsy parses them and presents results in <code>Results → Extracted Content</code></li>
+      </ul>
+      <pre><code><span class="cm"># ShellBags reveal folders the user accessed — even deleted ones</span>
+<span class="cm"># Results → Extracted Content → Shell Bags</span>
+<span class="cm"># HKCU\Software\Microsoft\Windows\Shell\Bags</span>
+
+<span class="cm"># USB history — who plugged in what device</span>
+<span class="cm"># Results → Extracted Content → Devices Attached</span>
+<span class="cm"># HKLM\SYSTEM\CurrentControlSet\Enum\USBSTOR</span></code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>YARA module integration and Plaso super-timeline</h4>
+      <ul>
+        <li>Load custom YARA rule sets in the YARA Analyzer module before ingest — matches appear in <code>Results → YARA Hits</code></li>
+        <li>The Virtual Machine Extractor module detects VMDK/VHD files inside the evidence and mounts them as nested data sources for analysis</li>
+        <li>Use the Plaso/Log2Timeline module to create a super-timeline CSV from all artifact timestamps for import into SIEM or external analysis tools</li>
+      </ul>
+      <pre><code><span class="cm"># Run log2timeline against image for super-timeline (outside Autopsy)</span>
+log2timeline.py --parsers winevt,mft,prefetch,winreg \
+    suspect_drive.E01 | psort.py - \
+    --output-format l2tcsv > supertimeline.csv</code></pre>
+    </div>
+  </details>
+</template>
+
+<!-- ============================================================
+     SECTION 04 — File System Analysis
+     ============================================================ -->
+<template id="tpl-filesystem">
+  <h1>File System Analysis</h1>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">File system analysis examines L7 application-layer structures — NTFS MFT records, USN journals, Alternate Data Streams, and MACB timestamps are all parsed from the disk image at the file system abstraction layer.</span>
+  </div>
+  <p>Autopsy's file system view provides a tree-based exploration of the evidence image, including allocated files, deleted files, orphan files, and unallocated space. The Sleuth Kit layers expose raw metadata for forensic precision.</p>
+
+  <h2>File System Tree Views</h2>
+  <table>
+    <tr><th>View</th><th>Contents</th></tr>
+    <tr><td>Data Sources</td><td>Root of the evidence tree; shows all volumes and partitions</td></tr>
+    <tr><td>File Views → File Types</td><td>Files grouped by MIME type (images, documents, executables, etc.)</td></tr>
+    <tr><td>File Views → Deleted Files</td><td>Files marked as deleted in MFT/$MFT or FAT directory entries</td></tr>
+    <tr><td>File Views → File Size</td><td>Filter by file size ranges for large file review</td></tr>
+    <tr><td>Results → Extracted Content</td><td>All artifacts extracted by ingest modules</td></tr>
+    <tr><td>Results → Keyword Hits</td><td>Files matching keyword search terms</td></tr>
+    <tr><td>Results → Hash Set Hits</td><td>Files matching known/notable hash sets</td></tr>
+    <tr><td>Results → YARA Hits</td><td>Files matching loaded YARA rules</td></tr>
+  </table>
+
+  <h2>NTFS-Specific Artifacts</h2>
+  <table>
+    <tr><th>Artifact</th><th>Description</th><th>Forensic Value</th></tr>
+    <tr><td>$MFT</td><td>Master File Table — metadata for every file/dir</td><td>Timestamps, file size, data runs, deleted entries</td></tr>
+    <tr><td>$LogFile</td><td>NTFS journal — recent file system transactions</td><td>Detect timestomping; recent file operations</td></tr>
+    <tr><td>$UsnJrnl:$J</td><td>USN Change Journal — rolling log of all changes</td><td>File creation, rename, delete events with timestamps</td></tr>
+    <tr><td>Alternate Data Streams (ADS)</td><td>Hidden data streams attached to files</td><td>Malware hiding payloads or Mark of the Web (Zone.Identifier)</td></tr>
+    <tr><td>$Extend\$ObjId</td><td>Object ID index — tracks file movement</td><td>LNK file correlation to source files</td></tr>
+    <tr><td>Slack Space</td><td>Unused space between EOF and cluster boundary</td><td>Data fragments from previously stored files</td></tr>
+  </table>
+
+  <h2>Alternate Data Streams (ADS)</h2>
+  <pre><code># Autopsy shows ADS as child items under the parent file
+# Example: malware.exe:payload.dll
+# Zone.Identifier stream reveals download source:
+[ZoneTransfer]
+ZoneId=3       # 3 = Internet zone (downloaded from web)
+HostUrl=https://malicious.example.com/payload.exe</code></pre>
+
+  <h2>File Timestamps — NTFS MACB</h2>
+  <table>
+    <tr><th>Letter</th><th>Timestamp</th><th>$MFT Record Location</th></tr>
+    <tr><td>M</td><td>Modified — last content change</td><td>$STANDARD_INFORMATION and $FILE_NAME</td></tr>
+    <tr><td>A</td><td>Accessed — last read</td><td>$STANDARD_INFORMATION (often disabled)</td></tr>
+    <tr><td>C</td><td>Changed — MFT entry changed (metadata)</td><td>$STANDARD_INFORMATION only</td></tr>
+    <tr><td>B</td><td>Born — file creation time</td><td>$STANDARD_INFORMATION and $FILE_NAME</td></tr>
+  </table>
+
+  <div class="callout warn">
+    <strong>Timestomping Detection</strong> — If $STANDARD_INFORMATION timestamps predate $FILE_NAME timestamps for the same file, timestomping is likely. Tools like <code>timestomp</code> modify $STANDARD_INFO but not $FILE_NAME. Autopsy shows both; compare them in the file metadata view.
+  </div>
+
+  <h2>Deleted File Recovery</h2>
+  <p>Autopsy automatically lists deleted files in <strong>File Views → Deleted Files</strong>. Files are recoverable if:</p>
+  <ul>
+    <li>The directory entry still references the file (FAT) or the MFT entry is not reused (NTFS)</li>
+    <li>The data clusters have not been overwritten with new data</li>
+    <li>The file can be carved from unallocated space by PhotoRec even without metadata</li>
+  </ul>
+  <p>Right-click any file → <strong>Extract File(s)</strong> to export to the case output directory.</p>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('recovery'); return false;">File Recovery & Carving ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('timeline'); return false;">Timeline Analysis ↗</a>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Navigating the file system tree and finding deleted files</h4>
+      <ul>
+        <li>The Data Sources tree shows every partition and volume in the image — expand to browse files like Windows Explorer</li>
+        <li>Deleted files are listed in <code>File Views → Deleted Files</code> — right-click any file to extract it</li>
+        <li>Use <code>File Views → File Types</code> to quickly find all executables, documents, or images without browsing directories</li>
+        <li>The Results node contains all artifacts found by ingest modules — check Extracted Content and Hash Set Hits first</li>
+      </ul>
+      <pre><code><span class="cm"># Finding executables in unusual locations</span>
+<span class="cm"># File Views → File Types → Executable</span>
+<span class="cm"># Sort by Path — look for executables in Temp, AppData, ProgramData</span>
+<span class="cm"># Right-click suspicious file → Extract File(s) for external analysis</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>NTFS forensic artifacts — MFT, ADS, and timestomping</h4>
+      <ul>
+        <li>The MFT ($MFT) contains two timestamp sets per file — $STANDARD_INFORMATION (user-modifiable) and $FILE_NAME (kernel-maintained)</li>
+        <li>Timestomping is detected when $STANDARD_INFORMATION timestamps predate $FILE_NAME timestamps — view both in Autopsy's file metadata panel</li>
+        <li>Alternate Data Streams (ADS) appear as child items under the parent file — the <code>Zone.Identifier</code> stream reveals the download origin URL</li>
+      </ul>
+      <pre><code><span class="cm"># ADS Zone.Identifier reveals where a file was downloaded from</span>
+<span class="cm"># Autopsy shows: malware.exe → malware.exe:Zone.Identifier</span>
+[ZoneTransfer]
+ZoneId=3       <span class="cm"># 3 = Internet zone</span>
+HostUrl=https://malicious.example.com/payload.exe</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Slack space analysis and raw NTFS journal examination</h4>
+      <ul>
+        <li>Slack space (between file EOF and cluster end) can contain fragments of previously stored data — carve from raw image with PhotoRec</li>
+        <li>The USN Change Journal ($UsnJrnl:$J) records every file create/rename/delete event — use <code>fsutil</code> or Autopsy to extract all entries even from cleared journals</li>
+        <li>The $LogFile (NTFS transaction log) can reconstruct recent file system changes that predate the $J journal window</li>
+      </ul>
+      <pre><code><span class="cm"># Extract USN journal entries from image (outside Autopsy)</span>
+python3 usn.py -f /mnt/evidence/\$Extend/\$UsnJrnl:\$J \
+    --output usnjrnl_entries.csv
+<span class="cm"># Look for FileCreate/FileDelete events matching the incident window</span></code></pre>
+    </div>
+  </details>
+</template>
+
+<!-- ============================================================
+     SECTION 05 — Keyword Search & Hash Lookup
+     ============================================================ -->
+<template id="tpl-keyword">
+  <h1>Keyword Search &amp; Hash Lookup</h1>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Keyword search and hash lookup operate on L7 application-layer content — pattern matching against file text, email body content, and binary file signatures within the static disk image.</span>
+  </div>
+  <p>Keyword search and hash lookup are two of the most productive triage techniques. Keyword search finds strings and patterns across all file content; hash lookup identifies files by known signatures.</p>
+
+  <h2>Keyword Search Configuration</h2>
+  <p>Configure keyword lists before ingest via <strong>Tools → Options → Keyword Search</strong>. Lists can be:</p>
+  <ul>
+    <li><strong>Exact Match</strong>: literal string, case-insensitive</li>
+    <li><strong>Substring Match</strong>: finds the string anywhere within a word</li>
+    <li><strong>Regular Expression</strong>: full regex; use for IPs, emails, hashes, credit cards</li>
+  </ul>
+
+  <h2>Built-In Keyword Lists</h2>
+  <table>
+    <tr><th>List Name</th><th>Pattern Examples</th></tr>
+    <tr><td>Credit Card Numbers</td><td><code>\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14})\b</code></td></tr>
+    <tr><td>Email Addresses</td><td><code>[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}</code></td></tr>
+    <tr><td>IP Addresses</td><td><code>\b(?:\d{1,3}\.){3}\d{1,3}\b</code></td></tr>
+    <tr><td>Phone Numbers</td><td>Multiple formats: US, international</td></tr>
+    <tr><td>URLs</td><td><code>https?://[^\s"'&lt;&gt;]+</code></td></tr>
+  </table>
+
+  <h2>Custom Keyword Search</h2>
+  <pre><code># Ad-hoc search during analysis:
+# Keyword Search panel (right side) → type term → Search
+
+# For regex — IOC hunting examples:
+# Find Base64 strings (possible encoded payloads):
+[A-Za-z0-9+/]{40,}={0,2}
+
+# Find potential C2 domains (DGA pattern):
+\b[a-z]{8,16}\.(xyz|top|click|tk|ru)\b
+
+# Find PowerShell encoded commands:
+-[Ee]nc(odedCommand)?\s+[A-Za-z0-9+/=]{20,}
+
+# Find Windows pipe-style named pipes (lateral movement):
+\\\\\.\\pipe\\[a-zA-Z0-9_\-]{4,}</code></pre>
+
+  <h2>Hash Set Configuration</h2>
+  <p>Hash sets are imported via <strong>Tools → Options → Hash Sets</strong>. Autopsy supports MD5 hash databases in three formats:</p>
+  <table>
+    <tr><th>Format</th><th>Extension</th><th>Notes</th></tr>
+    <tr><td>Autopsy Hash Database</td><td>.kdb</td><td>Autopsy-native format; created via Tools → Options</td></tr>
+    <tr><td>NSRL HashSet</td><td>.txt</td><td>Download from <code>www.nsrl.nist.gov</code>; marks known-good files</td></tr>
+    <tr><td>Plain text MD5 list</td><td>.txt</td><td>One hash per line; import as custom set</td></tr>
+  </table>
+
+  <h2>Hash Type Meanings</h2>
+  <table>
+    <tr><th>Tag</th><th>Meaning</th><th>Action</th></tr>
+    <tr><td>Known</td><td>File matches NSRL — known-good OS/software file</td><td>De-prioritize; still review if in unusual location</td></tr>
+    <tr><td>Notable</td><td>File matches known malware hash set</td><td>High priority — tag, bookmark, extract, document</td></tr>
+    <tr><td>Unknown</td><td>Hash not in any database</td><td>Apply keyword search, YARA, and manual review</td></tr>
+    <tr><td>No Match</td><td>Hash lookup not run on this file</td><td>Run module or check module configuration</td></tr>
+  </table>
+
+  <h2>Exporting Keyword Results</h2>
+  <pre><code># Right-click result → Extract File(s)
+# Or: File → Generate Report → select "Keyword Hits" module
+# Exports HTML or CSV listing file path, hit count, keyword matched</code></pre>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('ingest'); return false;">Ingest Modules ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('reporting'); return false;">Report Generation ↗</a>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Running keyword searches and interpreting hash results</h4>
+      <ul>
+        <li>Configure keyword lists before ingest — ad-hoc searches during analysis are slower as they re-scan unindexed content</li>
+        <li>Use the Keyword Search panel (right side of UI) for ad-hoc searches during analysis after ingest completes</li>
+        <li>Notable hash hits are your highest-priority findings — these match known malware files from your hash database</li>
+        <li>NSRL Known files are de-prioritized — they are verified OS/software files that are almost never malicious</li>
+      </ul>
+      <pre><code><span class="cm"># Hash tag meanings</span>
+<span class="cm"># Known   → NSRL match — verified OS/software file, low priority</span>
+<span class="cm"># Notable → malware hash match — HIGH PRIORITY, investigate immediately</span>
+<span class="cm"># Unknown → not in any database — apply manual review and YARA</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>IOC hunting with regex keyword patterns</h4>
+      <ul>
+        <li>Build regex keyword lists for IOC types: IP addresses, C2 domain patterns (DGA), base64 encoded payloads, and named pipe paths</li>
+        <li>Run targeted searches post-ingest for campaign-specific strings: mutex names, ransom note text, C2 URLs from threat intel</li>
+        <li>Export keyword hits to CSV for analyst review and inclusion in the final report</li>
+      </ul>
+      <pre><code><span class="cm"># IOC regex patterns for keyword list</span>
+<span class="cm"># DGA domain pattern:</span>
+\b[a-z]{8,16}\.(xyz|top|click|tk|ru)\b
+<span class="cm"># Base64 encoded payloads:</span>
+[A-Za-z0-9+/]{40,}={0,2}
+<span class="cm"># PowerShell encoded commands:</span>
+-[Ee]nc(odedCommand)?\s+[A-Za-z0-9+/=]{20,}</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Custom hash sets and Central Repository correlation</h4>
+      <ul>
+        <li>Maintain a custom malware hash set (MD5 .txt, one per line) and import via <code>Tools → Options → Hash Sets</code> for Notable tagging across all cases</li>
+        <li>The Central Repository automatically correlates Notable hash hits and keyword patterns across different cases — useful for identifying related campaigns</li>
+        <li>Export your case's Notable hash hits to a MISP event or STIX feed for sharing with the wider security community</li>
+      </ul>
+      <pre><code><span class="cm"># Build custom malware hash set from VirusTotal results</span>
+<span class="cm"># File format: one MD5 per line</span>
+echo "44d88612fea8a8f36de82e1278abb02f" >> malware_hashes.txt
+echo "098f6bcd4621d373cade4e832627b4f6" >> malware_hashes.txt
+<span class="cm"># Import: Tools → Options → Hash Sets → New → Import → malware_hashes.txt</span>
+<span class="cm"># Type: Notable | Add to Central Repository: Yes</span></code></pre>
+    </div>
+  </details>
+</template>
+
+<!-- ============================================================
+     SECTION 06 — Timeline Analysis
+     ============================================================ -->
+<template id="tpl-timeline">
+  <h1>Timeline Analysis</h1>
+  <p>Timeline analysis visualizes artifact activity over time, enabling analysts to reconstruct attacker actions in chronological order. Autopsy's Timeline module combines file system timestamps, browser history, registry writes, and event logs into a single view.</p>
+
+  <h2>Opening the Timeline</h2>
+  <p><strong>Tools → Timeline</strong> (or Ctrl+T). The timeline renders after ingest completes. It may take several minutes to build on large evidence sources.</p>
+
+  <h2>Timeline Views</h2>
+  <table>
+    <tr><th>View</th><th>Description</th><th>Best For</th></tr>
+    <tr><td>Counts</td><td>Bar chart — event frequency over time</td><td>Identifying activity spikes (initial access, exfil)</td></tr>
+    <tr><td>Details</td><td>Tree of events at selected time range</td><td>Drill-down to specific artifact types and file paths</td></tr>
+    <tr><td>List</td><td>Flat list of events sorted by time</td><td>Exporting to CSV for external analysis</td></tr>
+  </table>
+
+  <h2>Event Types in Timeline</h2>
+  <table>
+    <tr><th>Event Type</th><th>Source</th></tr>
+    <tr><td>File System — Modified</td><td>$STANDARD_INFORMATION $MFT Modified timestamp</td></tr>
+    <tr><td>File System — Accessed</td><td>$STANDARD_INFORMATION Accessed timestamp</td></tr>
+    <tr><td>File System — Changed</td><td>$STANDARD_INFORMATION MFT Changed timestamp</td></tr>
+    <tr><td>File System — Created</td><td>$STANDARD_INFORMATION Born timestamp</td></tr>
+    <tr><td>Log Entry</td><td>Windows Event Log entries (Security, System, Application)</td></tr>
+    <tr><td>Web Activity</td><td>Browser history URLs and download times</td></tr>
+    <tr><td>Recent Document</td><td>LNK files, registry MRU entries</td></tr>
+    <tr><td>GPS Track Point</td><td>EXIF GPS data from images</td></tr>
+    <tr><td>Message</td><td>Email timestamps, chat logs</td></tr>
+  </table>
+
+  <h2>Filtering the Timeline</h2>
+  <ul>
+    <li><strong>Time Range Selector</strong>: Drag to zoom into specific date/time windows</li>
+    <tr>
+    <li><strong>Event Type Filter</strong>: Show/hide file system, log, web, message events</li>
+    <li><strong>File Type Filter</strong>: Restrict to executable, document, archive, image categories</li>
+    <li><strong>Known Files Filter</strong>: Hide NSRL-known files to reduce noise (recommended)</li>
+    <li><strong>Tags Filter</strong>: Show only bookmarked/tagged items</li>
+  </ul>
+
+  <h2>Investigative Timeline Workflow</h2>
+  <ol>
+    <li><strong>Identify the incident window</strong>: Use known IOC dates (phishing email timestamp, alert time) to anchor the view</li>
+    <li><strong>Zoom to ±24 hours</strong> around the suspected compromise time</li>
+    <li><strong>Switch to Details view</strong> and hide known files — look for:
+      <ul>
+        <li>Executable files written in non-standard locations (<code>%TEMP%</code>, <code>%APPDATA%</code>)</li>
+        <li>New services or scheduled tasks created</li>
+        <li>Registry run keys modified</li>
+        <li>Suspicious web downloads</li>
+      </ul>
+    </li>
+    <li><strong>Bookmark significant events</strong> (right-click → Add Tag)</li>
+    <li><strong>Export timeline</strong> for report: Timeline → Export Events CSV</li>
+  </ol>
+
+  <div class="callout note">
+    <strong>Tip — Plaso Integration:</strong> For a richer super-timeline, run <code>log2timeline.py</code> against the image and import the resulting Plaso storage file into Autopsy's Timeline module. This adds hundreds of additional artifact types.
+  </div>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('filesystem'); return false;">File System Analysis ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('reporting'); return false;">Report Generation ↗</a>
+  </div>
+</template>
+
+<!-- ============================================================
+     SECTION 07 — File Recovery & Carving
+     ============================================================ -->
+<template id="tpl-recovery">
+  <h1>File Recovery &amp; Carving</h1>
+  <p>Autopsy can recover deleted files that still have intact metadata, and carve files from unallocated space even when metadata is gone. File carving is signature-based — it identifies file headers and footers to reconstruct files.</p>
+
+  <h2>Deleted File Recovery</h2>
+  <p>Autopsy automatically lists deleted files under <strong>File Views → Deleted Files</strong>. These are files where:</p>
+  <ul>
+    <li><strong>NTFS</strong>: MFT entry has $FILE_NAME marked as deleted (bit flipped in directory entry), but data runs still referenced</li>
+    <li><strong>FAT</strong>: First byte of directory entry replaced with 0xE5, cluster chain still intact</li>
+    <li><strong>Recycle Bin</strong>: Files in <code>$Recycle.Bin\$I[uid]</code> (info) and <code>$R[uid]</code> (content) pairs</li>
+  </ul>
+
+  <h2>File Carving with PhotoRec</h2>
+  <p>The PhotoRec Carver ingest module carves files from unallocated space using signature detection. Enabled via <strong>Ingest → PhotoRec Carver</strong>.</p>
+  <table>
+    <tr><th>File Type</th><th>Header (hex)</th><th>Extension</th></tr>
+    <tr><td>JPEG</td><td><code>FF D8 FF</code></td><td>.jpg</td></tr>
+    <tr><td>PNG</td><td><code>89 50 4E 47</code></td><td>.png</td></tr>
+    <tr><td>PDF</td><td><code>25 50 44 46</code></td><td>.pdf</td></tr>
+    <tr><td>ZIP/DOCX/XLSX</td><td><code>50 4B 03 04</code></td><td>.zip, .docx, .xlsx</td></tr>
+    <tr><td>RAR</td><td><code>52 61 72 21</code></td><td>.rar</td></tr>
+    <tr><td>Windows EXE/DLL</td><td><code>4D 5A</code> (MZ)</td><td>.exe, .dll</td></tr>
+    <tr><td>SQLite DB</td><td><code>53 51 4C 69 74 65</code></td><td>.sqlite, .db</td></tr>
+    <tr><td>MP4 video</td><td><code>66 74 79 70</code> at offset 4</td><td>.mp4</td></tr>
+  </table>
+
+  <h2>Recycle Bin Analysis</h2>
+  <p>Autopsy's Recent Activity module parses Recycle Bin metadata (<code>$I</code> files) automatically. The <code>$I</code> file records:</p>
+  <ul>
+    <li>Original file path</li>
+    <li>Original file size</li>
+    <li>Deletion timestamp (UTC)</li>
+  </ul>
+  <pre><code># $I file structure (Windows Vista+):
+# Header: 02 00 00 00 00 00 00 00  (version 2)
+# File size: 8 bytes (little endian)
+# Deletion time: 8 bytes (Windows FILETIME)
+# File name: UTF-16LE string
+
+# Corresponding $R file contains the actual file content</code></pre>
+
+  <h2>LNK File Analysis</h2>
+  <p>LNK (shortcut) files are created automatically by Windows when files are opened. They record the original file path, volume serial number, MAC address, creation/access/modification timestamps, and file size — even if the original file is deleted.</p>
+  <p>Autopsy's Recent Activity module parses LNK files from:</p>
+  <ul>
+    <li><code>%APPDATA%\Microsoft\Windows\Recent\</code></li>
+    <li>Desktop shortcuts</li>
+    <li>Taskbar pinned items</li>
+  </ul>
+  <p>Results appear under <strong>Results → Extracted Content → Recent Documents</strong>.</p>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('filesystem'); return false;">File System Analysis ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('browser'); return false;">Browser Artifacts ↗</a>
+  </div>
+</template>
+
+<!-- ============================================================
+     SECTION 08 — Browser & Email Artifacts
+     ============================================================ -->
+<template id="tpl-browser">
+  <h1>Browser &amp; Email Artifacts</h1>
+  <p>Browser history and email are frequently the most valuable artifacts in investigations involving phishing, insider threat, data exfiltration, and malware download. Autopsy's Recent Activity and Email Parser modules extract these automatically.</p>
+
+  <h2>Chrome / Edge (Chromium) Artifacts</h2>
+  <table>
+    <tr><th>Artifact</th><th>File</th><th>Table / Key</th></tr>
+    <tr><td>History</td><td><code>History</code> (SQLite)</td><td><code>urls</code>, <code>visits</code></td></tr>
+    <tr><td>Downloads</td><td><code>History</code> (SQLite)</td><td><code>downloads</code>, <code>downloads_url_chains</code></td></tr>
+    <tr><td>Cookies</td><td><code>Cookies</code> (SQLite)</td><td><code>cookies</code></td></tr>
+    <tr><td>Autofill</td><td><code>Web Data</code> (SQLite)</td><td><code>autofill</code>, <code>autofill_profile_addresses</code></td></tr>
+    <tr><td>Saved Passwords</td><td><code>Login Data</code> (SQLite)</td><td><code>logins</code> — encrypted with DPAPI</td></tr>
+    <tr><td>Bookmarks</td><td><code>Bookmarks</code> (JSON)</td><td>Full bookmark tree</td></tr>
+    <tr><td>Extensions</td><td><code>Extensions\</code> directory</td><td>Manifest.json per extension</td></tr>
+    <tr><td>Search Terms</td><td><code>History</code></td><td><code>keyword_search_terms</code></td></tr>
+    <tr><td>Favicons</td><td><code>Favicons</code> (SQLite)</td><td>URL → favicon mapping</td></tr>
+  </table>
+
+  <h2>Firefox Artifacts</h2>
+  <table>
+    <tr><th>Artifact</th><th>File</th><th>Table</th></tr>
+    <tr><td>History</td><td><code>places.sqlite</code></td><td><code>moz_places</code>, <code>moz_historyvisits</code></td></tr>
+    <tr><td>Downloads</td><td><code>places.sqlite</code></td><td><code>moz_annos</code> (annotations)</td></tr>
+    <tr><td>Cookies</td><td><code>cookies.sqlite</code></td><td><code>moz_cookies</code></td></tr>
+    <tr><td>Saved Passwords</td><td><code>logins.json</code> + <code>key4.db</code></td><td>Encrypted with master password</td></tr>
+    <tr><td>Bookmarks</td><td><code>places.sqlite</code></td><td><code>moz_bookmarks</code></td></tr>
+    <tr><td>Form History</td><td><code>formhistory.sqlite</code></td><td><code>moz_formhistory</code></td></tr>
+  </table>
+
+  <h2>Email Analysis</h2>
+  <p>The Email Parser module supports: <strong>PST/OST</strong> (Outlook), <strong>MBOX/EML</strong> (Thunderbird, generic), <strong>MSG</strong> (individual Outlook messages).</p>
+  <p>Artifacts appear under <strong>Results → Extracted Content → E-Mail Messages</strong>. Each message shows:</p>
+  <ul>
+    <li>Sender, recipients (To/CC/BCC)</li>
+    <li>Subject, date/time (UTC)</li>
+    <li>Body text (plain and HTML)</li>
+    <li>Attachments (auto-added as child files and processed by other ingest modules)</li>
+    <li>Email headers (Received chain, X-Originating-IP)</li>
+  </ul>
+
+  <h2>Phishing Investigation Workflow</h2>
+  <ol>
+    <li>Find the phishing email in <strong>E-Mail Messages</strong> — note sender, timestamp, attachment name</li>
+    <li>Check attachment: was it extracted by Embedded File Extractor? Hash → notable?</li>
+    <li>Cross-reference in Timeline: when was the attachment opened (LNK file creation)?</li>
+    <li>Check browser history: did the user follow any embedded URLs near the email time?</li>
+    <li>Check Downloads for any files retrieved from URLs in the email body</li>
+    <li>Check Recent Activity for files executed from <code>%TEMP%</code> or Downloads folder</li>
+  </ol>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('recovery'); return false;">File Recovery ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('timeline'); return false;">Timeline Analysis ↗</a>
+  </div>
+</template>
+
+<!-- ============================================================
+     SECTION 09 — Report Generation
+     ============================================================ -->
+<template id="tpl-reporting">
+  <h1>Report Generation</h1>
+  <p>Autopsy can generate court-ready forensic reports in HTML, Excel (XLS), and text formats. Reports include case metadata, examiner information, hash values, and artifact tables scoped to tagged/bookmarked items or all extracted content.</p>
+
+  <h2>Generating a Report</h2>
+  <ol>
+    <li><strong>Tools → Generate Report</strong> (or Ctrl+R)</li>
+    <li>Select report module: <strong>HTML Report</strong>, <strong>Excel Report</strong>, <strong>KML Report</strong> (GPS), <strong>Body File</strong> (mactime-format timeline)</li>
+    <li>Configure scope:
+      <ul>
+        <li><strong>All Results</strong>: Every artifact extracted by ingest modules</li>
+        <li><strong>Tagged Results</strong>: Only items you bookmarked/tagged during analysis</li>
+      </ul>
+    </li>
+    <li>Reports saved to <code>CaseName/Reports/</code></li>
+  </ol>
+
+  <h2>HTML Report Sections</h2>
+  <table>
+    <tr><th>Section</th><th>Contents</th></tr>
+    <tr><td>Case Summary</td><td>Case name, number, examiner, ingest date, data source hashes</td></tr>
+    <tr><td>Data Sources</td><td>Evidence files, size, hash verification status</td></tr>
+    <tr><td>Keyword Hits</td><td>File path, hit term, context excerpt</td></tr>
+    <tr><td>Hash Set Hits</td><td>Notable files with MD5 hash</td></tr>
+    <tr><td>E-Mail Messages</td><td>All parsed emails with metadata</td></tr>
+    <tr><td>Web History</td><td>URLs with timestamps per browser</td></tr>
+    <tr><td>Recent Documents</td><td>LNK files, MRU list entries</td></tr>
+    <tr><td>Installed Programs</td><td>Software from registry uninstall keys</td></tr>
+    <tr><td>OS Info</td><td>Windows version, install date, computer name</td></tr>
+    <tr><td>Tags &amp; Bookmarks</td><td>All items manually tagged by examiner, with notes</td></tr>
+  </table>
+
+  <h2>Tagging System</h2>
+  <p>Tags are the primary mechanism for building a focused report. Best practices:</p>
+  <table>
+    <tr><th>Tag Name</th><th>Use Case</th></tr>
+    <tr><td>Follow Up</td><td>Items needing further investigation</td></tr>
+    <tr><td>Notable</td><td>Confirmed malicious or significant artifacts</td></tr>
+    <tr><td>Bookmark</td><td>Reference items for the report</td></tr>
+    <tr><td>TBD</td><td>Uncertain — review later</td></tr>
+  </table>
+  <p>Right-click any file or artifact → <strong>Add Tag</strong>. Add a comment to record your analysis note. Tags are stored in the case database and appear in reports.</p>
+
+  <h2>Body File Export (mactime timeline)</h2>
+  <pre><code># Autopsy → Tools → Generate Report → Body File
+# Format: md5|path|inode|perms|uid|gid|size|atime|mtime|ctime|crtime
+
+# Process with mactime (Sleuth Kit):
+mactime -b bodyfile.txt -d 2024-01-01 2024-02-01 > timeline.csv
+
+# Import into Excel or timeline analysis tools</code></pre>
+
+  <h2>Chain of Custody Documentation</h2>
+  <p>The HTML report includes all information needed for court presentation:</p>
+  <ul>
+    <li>Examiner name (set in case creation)</li>
+    <li>Case number and description</li>
+    <li>Data source hash values (MD5 + SHA-1)</li>
+    <li>Ingest start and end timestamps</li>
+    <li>Autopsy version used</li>
+    <li>All tagged artifacts with examiner comments</li>
+  </ul>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('keyword'); return false;">Keyword Search ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('timeline'); return false;">Timeline Analysis ↗</a>
+  </div>
+</template>
+
+<!-- ============================================================
+     SECTION 10 — Communications Module
+     ============================================================ -->
+<template id="tpl-comms">
+  <h1>Communications Module</h1>
+  <p>The Communications Visualization module provides a graph view of all communications found in evidence — email, phone calls, SMS, chat — with relationship mapping between accounts and devices.</p>
+
+  <h2>Accessing Communications</h2>
+  <p><strong>Tools → Communications</strong> — opens a dedicated window with:</p>
+  <ul>
+    <li><strong>Accounts panel</strong>: All identified accounts (email addresses, phone numbers, device IDs)</li>
+    <li><strong>Relationships graph</strong>: Visual edge graph showing communication patterns between accounts</li>
+    <li><strong>Messages panel</strong>: Filtered message list for selected account pairs</li>
+  </ul>
+
+  <h2>Account Types Detected</h2>
+  <table>
+    <tr><th>Account Type</th><th>Source</th></tr>
+    <tr><td>Email</td><td>PST/MBOX/MSG parsing, browser web email (Gmail HTML cache)</td></tr>
+    <tr><td>Phone</td><td>Android/iOS backups, call logs, SMS databases</td></tr>
+    <tr><td>Messaging</td><td>WhatsApp (msgstore.db), Skype (main.db), Signal</td></tr>
+    <tr><td>Social Media</td><td>Browser cached content (Twitter, Facebook HTML)</td></tr>
+    <tr><td>Device</td><td>Hardware device identifiers (IMEI, MAC address)</td></tr>
+  </table>
+
+  <h2>Filtering Communications</h2>
+  <ul>
+    <li><strong>Date Range Filter</strong>: Restrict to activity window</li>
+    <li><strong>Account Type Filter</strong>: Show only email or phone relationships</li>
+    <li><strong>Account Selection</strong>: Select specific accounts to see all their communications</li>
+    <li><strong>Minimum Relationship Threshold</strong>: Only show accounts with N+ messages (reduce noise)</li>
+  </ul>
+
+  <h2>WhatsApp Forensics</h2>
+  <pre><code># WhatsApp database locations:
+# Android: /data/data/com.whatsapp/databases/msgstore.db
+#           /sdcard/WhatsApp/Databases/msgstore.db.crypt15
+
+# Autopsy parses decrypted msgstore.db directly
+# Encrypted crypt15 databases require the key from the device keystore
+
+# Key tables in msgstore.db:
+# message     — message content, timestamps, sender
+# jid         — WhatsApp JID (phone@s.whatsapp.net)
+# chat        — conversation threads</code></pre>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('browser'); return false;">Browser Artifacts ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('reporting'); return false;">Report Generation ↗</a>
+  </div>
+</template>
+
+<!-- ============================================================
+     SECTION 11 — Investigation Lab
+     ============================================================ -->
+<template id="tpl-lab">
+  <h1>Investigation Lab — Ransomware Forensics</h1>
+
+  <div class="callout lab">
+    <strong>Lab Scenario</strong>: A Windows 10 workstation (192.168.56.30) has been encrypted by ransomware. A forensic image (E01) has been acquired. Perform disk forensics using Autopsy to determine the infection vector, timeline of compromise, and identify IOCs for detection engineering.
+  </div>
+
+  <h2>Lab Environment</h2>
+  <table>
+    <tr><th>Host</th><th>IP</th><th>Role</th></tr>
+    <tr><td>Forensic Workstation (Windows)</td><td>192.168.56.10</td><td>Autopsy analysis host</td></tr>
+    <tr><td>Evidence Source</td><td>192.168.56.30</td><td>Imaged Windows 10 victim — <code>victim.E01</code></td></tr>
+  </table>
+
+  <h2>Phase 1 — Case Setup</h2>
+  <pre><code># 1. Open Autopsy → New Case
+#    Name: RansomwareIR_2024
+#    Base Dir: D:\Cases\
+#    Case Number: IR-2024-001
+#    Examiner: SOC Analyst
+
+# 2. Add Data Source
+#    Type: Disk Image or VM File
+#    Path: D:\Evidence\victim.E01
+#    Time Zone: EST (America/New_York)
+#    Hash: SHA-256 (copy from acquisition report)
+
+# 3. Enable Ingest Modules:
+#    [x] Hash Lookup (NSRL + custom IOC set)
+#    [x] File Type Identification
+#    [x] Embedded File Extractor
+#    [x] Keyword Search (add: ransom, decrypt, bitcoin, tor, .onion)
+#    [x] Recent Activity
+#    [x] Windows Registry
+#    [x] Windows Event Logs
+#    [x] Email Parser
+#    [x] YARA Analyzer (load ransomware YARA rules)
+#    [x] PhotoRec Carver
+
+# 4. Click Finish and wait for ingest to complete (~20-60 min)</code></pre>
+
+  <h2>Phase 2 — Identify Infection Vector</h2>
+  <pre><code># 1. Check Email Parser results:
+#    Results → Extracted Content → E-Mail Messages
+#    Sort by date — look for emails just before encryption event
+#    Suspicious: messages with .zip, .doc, .js, .vbs attachments
+
+# 2. Check Web History:
+#    Results → Extracted Content → Web History
+#    Filter to date window — look for:
+#    - File download sites
+#    - Pastebins or anonymous text hosts
+#    - Unusual .onion URLs or tor2web proxies
+
+# 3. Check Downloads:
+#    Results → Extracted Content → Web Downloads
+#    Note filenames, source URLs, download timestamps</code></pre>
+
+  <h2>Phase 3 — Timeline Reconstruction</h2>
+  <pre><code># Tools → Timeline
+# 1. Set range to 48 hours around known encryption event
+# 2. Switch to Details view
+# 3. Hide Known files (NSRL filter ON)
+# 4. Look for:
+#    - Executable written to %TEMP% or %APPDATA%
+#    - New .dll files in system32 or user-writable paths
+#    - Scheduled task creation (TaskCache registry writes)
+#    - VSS shadow copy deletion (event ID 8222 or vssadmin.exe)
+#    - Mass file modification events (encrypted files extension change)
+
+# Export findings:
+# Timeline → Export Events → timeline_export.csv</code></pre>
+
+  <h2>Phase 4 — Malware Artifact Recovery</h2>
+  <pre><code># 1. File Views → Deleted Files
+#    Look for deleted executables in:
+#    - C:\Users\[user]\AppData\Local\Temp\
+#    - C:\Users\[user]\Downloads\
+#    - C:\ProgramData\
+
+# 2. Keyword Search → search for ransom note filenames:
+#    READ_ME.txt, DECRYPT_INSTRUCTIONS.html, HOW_TO_DECRYPT.txt
+#    Results → Keyword Hits → open and read ransom note
+
+# 3. File Views → Executable Files
+#    Sort by date modified — recently written executables are suspicious
+#    Right-click → Extract → submit to sandbox (ANY.RUN)
+#    Record SHA-256 hash for IOC reporting
+
+# 4. Check Registry:
+#    SOFTWARE\Microsoft\Windows\CurrentVersion\Run
+#    Look for new autorun entries added near infection time
+
+# 5. Check Prefetch:
+#    C:\Windows\Prefetch\ → .pf files
+#    Prefetch records first/last run time and DLLs loaded
+#    Extract malware .pf file → records what the malware loaded</code></pre>
+
+  <h2>Phase 5 — IOC Extraction &amp; Reporting</h2>
+  <pre><code># 1. Tag all significant artifacts: right-click → Add Tag → Notable
+#    Add comments: "Ransomware dropper — first seen 2024-01-15 09:42 UTC"
+
+# 2. Record IOCs:
+#    - Malware SHA-256 hash
+#    - C2 IP/domain from ransom note or network artifacts
+#    - Mutex name (from YARA strings if available)
+#    - Ransomware extension (.locked, .encrypted, .rnsmwr)
+#    - Ransom note filename
+
+# 3. Generate Report:
+#    Tools → Generate Report → HTML Report → Tagged Results Only
+#    Report saved to: D:\Cases\RansomwareIR_2024\Reports\
+
+# 4. Export IOCs to MISP:
+#    - Add event: "Ransomware IR-2024-001"
+#    - Add attributes: file|sha256, domain, ip-dst, filename
+#    - Tag with ATT&CK: T1486 (Data Encrypted for Impact)</code></pre>
+
+  <h2>Key Evidence Summary Table</h2>
+  <table>
+    <tr><th>Artifact</th><th>Location</th><th>Finding</th></tr>
+    <tr><td>Phishing Email</td><td>PST file → Inbox</td><td>Attachment: Invoice_Jan2024.zip — delivered 09:31 UTC</td></tr>
+    <tr><td>Dropper</td><td><code>%TEMP%\Invoice_Jan2024.exe</code></td><td>Extracted from ZIP — notable hash match</td></tr>
+    <tr><td>Persistence</td><td>HKCU\...\Run → "WindowsUpdate"</td><td>Points to <code>%APPDATA%\updater.exe</code></td></tr>
+    <tr><td>VSS Deletion</td><td>Event ID 8222 / vssadmin.exe</td><td>Timestamp 09:43 UTC — shadow copies deleted</td></tr>
+    <tr><td>Ransom Note</td><td>Multiple directories</td><td>READ_ME.html — contains .onion payment address</td></tr>
+    <tr><td>Encrypted Files</td><td>All user documents</td><td>Extension changed to <code>.locked</code></td></tr>
+  </table>
+
+  <div class="callout">
+    <strong>Lab Complete</strong> — You have reconstructed the infection chain from phishing email to encryption, extracted all IOCs, tagged artifacts, and generated a court-ready report. Export your IOCs to MISP and submit the malware sample to Cuckoo/ANY.RUN for dynamic analysis.
+  </div>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Autopsy',
+  topics: [
+    { id: 'overview',   badge: '01', label: 'Overview & Architecture'      },
+    { id: 'case',       badge: '02', label: 'Case Creation & Evidence Ingest' },
+    { id: 'ingest',     badge: '03', label: 'Ingest Module Pipeline'       },
+    { id: 'filesystem', badge: '04', label: 'File System Analysis'         },
+    { id: 'keyword',    badge: '05', label: 'Keyword Search & Hash Lookup'  },
+    { id: 'timeline',   badge: '06', label: 'Timeline Analysis'            },
+    { id: 'recovery',   badge: '07', label: 'File Recovery & Carving'      },
+    { id: 'browser',    badge: '08', label: 'Browser & Email Artifacts'    },
+    { id: 'reporting',  badge: '09', label: 'Report Generation'            },
+    { id: 'comms',      badge: '10', label: 'Communications Module'        },
+    { id: 'lab',        badge: '11', label: 'Investigation Lab'            },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SPL Basics — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Splunk</div>
+      <div class="sidebar-title">SPL Basics</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">📝</div>
+          <h2>SPL Basics</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+window.NOTEBOOK = {
+  title: 'SPL Basics',
+  topics: [
+    { id: 'spl-syntax',    badge: '01', label: 'Search Syntax & Operators'   },
+    { id: 'pipes',         badge: '02', label: 'Pipes & Key Commands'         },
+    { id: 'time',          badge: '03', label: 'Time Modifiers & _time'       },
+    { id: 'fields-where',  badge: '04', label: 'fields, where, rename'        },
+    { id: 'rex',           badge: '05', label: 'rex — Field Extraction'       },
+    { id: 'lookup',        badge: '06', label: 'Lookup Tables'                },
+  ]
+};
+</script>
+
+<template id="tpl-spl-syntax">
+<article class="topic">
+<h1>01 · SPL Search Syntax &amp; Operators</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">SPL search syntax operates exclusively on L7 application log content — every filter, field match, and keyword search applies to application-layer event data stored in Splunk indexes.</span>
+</div>
+<hr class="divider">
+
+<h2>Basic Search Structure</h2>
+<pre><code><span class="cm"># Every SPL search starts with a data filter, then pipes to commands</span>
+index=windows sourcetype=WinEventLog:Security EventCode=4625
+| stats count by src_ip, user
+| sort -count
+| head 20</code></pre>
+
+<h2>Field=Value Matching</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Syntax</th><th>Meaning</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><code>field=value</code></td><td>Exact match</td><td><code>EventCode=4625</code></td></tr>
+    <tr><td><code>field!=value</code></td><td>Not equal</td><td><code>user!="SYSTEM"</code></td></tr>
+    <tr><td><code>field=val*</code></td><td>Wildcard suffix</td><td><code>dest_ip=10.0.*</code></td></tr>
+    <tr><td><code>field=*val*</code></td><td>Wildcard anywhere</td><td><code>process=*powershell*</code></td></tr>
+    <tr><td><code>field&gt;N</code></td><td>Greater than (numeric)</td><td><code>bytes&gt;1000000</code></td></tr>
+    <tr><td><code>field&lt;N</code></td><td>Less than (numeric)</td><td><code>duration&lt;5</code></td></tr>
+    <tr><td><code>field IN (a,b,c)</code></td><td>Match any in list</td><td><code>EventCode IN (4624,4625,4648)</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Boolean Operators</h2>
+<pre><code><span class="cm"># AND is implicit — these are equivalent</span>
+index=windows EventCode=4625 user=jsmith
+index=windows AND EventCode=4625 AND user=jsmith
+
+<span class="cm"># OR — either condition</span>
+index=windows (EventCode=4624 OR EventCode=4625)
+
+<span class="cm"># NOT — exclude matches</span>
+index=windows EventCode=4625 NOT user=SYSTEM NOT user="ANONYMOUS LOGON"
+
+<span class="cm"># Grouping with parentheses</span>
+index=windows (EventCode=4624 OR EventCode=4625) src_ip!=127.0.0.1</code></pre>
+
+<h2>Keyword Search (Full-Text)</h2>
+<pre><code><span class="cm"># Search raw event text — slower, use with index filter</span>
+index=windows "mimikatz"
+
+<span class="cm"># Phrase in quotes</span>
+index=linux_secure "Failed password for root"
+
+<span class="cm"># Keyword OR</span>
+index=endpoint (mimikatz OR sekurlsa OR lsass)</code></pre>
+
+<h2>Search Modes</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Mode</th><th>Behavior</th><th>Use When</th></tr></thead>
+  <tbody>
+    <tr><td>Fast Mode</td><td>Returns field values only — no raw events</td><td>Transforming searches (stats, chart)</td></tr>
+    <tr><td>Smart Mode</td><td>Auto-selects fast or verbose based on search type</td><td>Default — good for most searches</td></tr>
+    <tr><td>Verbose Mode</td><td>Returns all field extractions and raw events</td><td>Debugging field extraction; event drill-down</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Subsearches</h2>
+<pre><code><span class="cm"># Subsearch — inner search result fed to outer search</span>
+<span class="cm"># Find IPs that had failed logins, then look for successful logins from same IPs</span>
+index=windows EventCode=4624
+    [search index=windows EventCode=4625 earliest=-1h
+     | stats count by src_ip
+     | where count &gt; 5
+     | fields src_ip]
+
+<span class="cm"># Output: logins from brute-force source IPs (success after failures)</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Basic field=value filtering</h4>
+    <ul>
+      <li>Always start with <code>index=</code> and <code>sourcetype=</code> to scope your search to specific L7 log data</li>
+      <li>AND is implicit — multiple field=value pairs space-separated are all required to match</li>
+      <li>Use parentheses to group OR conditions: <code>(EventCode=4624 OR EventCode=4625)</code></li>
+    </ul>
+    <pre><code>index=windows sourcetype=WinEventLog:Security EventCode=4625
+| head 20</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Boolean logic and keyword searching</h4>
+    <ul>
+      <li>Use <code>NOT field=value</code> to exclude noise (e.g., <code>NOT user=SYSTEM</code>)</li>
+      <li>Keyword search in quotes matches phrases in the raw event text — useful when fields aren't extracted</li>
+      <li><code>field IN (a,b,c)</code> is cleaner than multiple OR conditions for EventCode lists</li>
+    </ul>
+    <pre><code>index=windows EventCode IN (4624,4625,4648) earliest=-1h
+NOT user=SYSTEM NOT user="ANONYMOUS LOGON"
+| stats count by EventCode, src_ip, user
+| sort -count</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Subsearches for correlated threat detection</h4>
+    <ul>
+      <li>Subsearches let you dynamically feed results from one search into another — powerful for attack correlation</li>
+      <li>Limit subsearch result size with <code>| head N</code> — subsearch result set is capped at 10,000 by default</li>
+    </ul>
+    <pre><code>index=windows EventCode=4624 earliest=-1h
+    [search index=windows EventCode=4625 earliest=-1h
+     | stats count by src_ip
+     | where count > 50
+     | fields src_ip]
+| table _time, host, user, src_ip, LogonType
+<span class="cm"># Shows successful logins from brute-force IPs</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-pipes">
+<article class="topic">
+<h1>02 · SPL Pipes &amp; Key Commands</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">SPL pipe commands transform, filter, and aggregate L7 log event data — each command in the pipeline receives the output of the previous and processes application-layer fields.</span>
+</div>
+<hr class="divider">
+
+<div class="callout"><strong>Pipe order matters.</strong> Each <code>|</code> passes results from left to right. Commands that reduce result sets (where, head, dedup) should come early. Transforming commands (stats, chart) must come after raw search.</div>
+
+<h2>Essential Commands Reference</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Command</th><th>Purpose</th><th>Quick Example</th></tr></thead>
+  <tbody>
+    <tr><td><code>search</code></td><td>Filter events mid-pipeline</td><td><code>| search count &gt; 100</code></td></tr>
+    <tr><td><code>where</code></td><td>Filter with eval expressions</td><td><code>| where count &gt; 100</code></td></tr>
+    <tr><td><code>eval</code></td><td>Create or transform fields</td><td><code>| eval MB=bytes/1024/1024</code></td></tr>
+    <tr><td><code>fields</code></td><td>Keep or remove fields</td><td><code>| fields src_ip, user, count</code></td></tr>
+    <tr><td><code>rename</code></td><td>Rename a field</td><td><code>| rename src_ip AS attacker_ip</code></td></tr>
+    <tr><td><code>sort</code></td><td>Sort results</td><td><code>| sort -count</code> (desc)</td></tr>
+    <tr><td><code>head</code></td><td>Return first N results</td><td><code>| head 10</code></td></tr>
+    <tr><td><code>tail</code></td><td>Return last N results</td><td><code>| tail 10</code></td></tr>
+    <tr><td><code>dedup</code></td><td>Remove duplicate field combos</td><td><code>| dedup src_ip, user</code></td></tr>
+    <tr><td><code>rex</code></td><td>Extract fields with regex</td><td><code>| rex "Failed password for (?&lt;user&gt;\S+)"</code></td></tr>
+    <tr><td><code>stats</code></td><td>Aggregate statistics</td><td><code>| stats count by user</code></td></tr>
+    <tr><td><code>timechart</code></td><td>Time-based aggregation</td><td><code>| timechart count by action</code></td></tr>
+    <tr><td><code>chart</code></td><td>Pivot-style aggregation</td><td><code>| chart count over src by dest</code></td></tr>
+    <tr><td><code>lookup</code></td><td>Enrich with lookup table</td><td><code>| lookup threat_intel src_ip</code></td></tr>
+    <tr><td><code>join</code></td><td>Join two result sets</td><td><code>| join src_ip [search ...]</code></td></tr>
+    <tr><td><code>transaction</code></td><td>Group events into sessions</td><td><code>| transaction src_ip maxspan=1h</code></td></tr>
+    <tr><td><code>table</code></td><td>Format results as table</td><td><code>| table _time, src, dest, action</code></td></tr>
+    <tr><td><code>top</code></td><td>Most frequent values</td><td><code>| top limit=10 user</code></td></tr>
+    <tr><td><code>rare</code></td><td>Least frequent values</td><td><code>| rare limit=10 process</code></td></tr>
+    <tr><td><code>makeresults</code></td><td>Generate synthetic events (testing)</td><td><code>| makeresults count=5</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Pipeline Pattern Examples</h2>
+<pre><code><span class="cm"># Pattern 1: Filter → Aggregate → Sort → Limit</span>
+index=windows EventCode=4625
+| stats count by src_ip
+| sort -count
+| head 10
+
+<span class="cm"># Pattern 2: Filter → Enrich → Filter → Display</span>
+index=network sourcetype=pan:traffic
+| lookup geoip dest_ip OUTPUT country AS dest_country
+| where dest_country!="United States"
+| table _time, src_ip, dest_ip, dest_country, bytes_out
+
+<span class="cm"># Pattern 3: Filter → Extract → Aggregate</span>
+index=linux_secure "Failed password"
+| rex "Failed password for (?&lt;attempt_user&gt;\S+) from (?&lt;src_ip&gt;\S+)"
+| stats count by src_ip, attempt_user
+| where count &gt; 10
+| sort -count</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Essential pipeline commands</h4>
+    <ul>
+      <li>The most common pipeline: search filter → <code>stats count by field</code> → <code>sort -count</code> → <code>head N</code></li>
+      <li><code>table</code> controls which fields display and in what order — always use it for final output</li>
+      <li><code>sort -count</code> sorts descending (highest first); <code>sort count</code> sorts ascending</li>
+    </ul>
+    <pre><code>index=windows EventCode=4625 earliest=-1h
+| stats count by src_ip
+| sort -count
+| head 10</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Enrichment and filtering pipelines</h4>
+    <ul>
+      <li>Chain <code>lookup</code> after stats to enrich aggregated results with threat intel or asset context</li>
+      <li>Place <code>where</code> after transforming commands to filter on computed fields (e.g., <code>| where count > 50</code>)</li>
+    </ul>
+    <pre><code>index=network sourcetype=pan:traffic earliest=-24h
+| stats sum(bytes_out) AS total_bytes by src_ip, dest_ip
+| eval MB_out = round(total_bytes/1024/1024,2)
+| where MB_out > 100
+| lookup geoip dest_ip OUTPUT country
+| sort -MB_out</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>transaction command for session grouping</h4>
+    <ul>
+      <li><code>transaction</code> groups events into logical sessions — useful for building attack timelines across authentication events</li>
+      <li>Use <code>maxspan</code> and <code>maxpause</code> to define session boundaries; <code>startswith</code>/<code>endswith</code> for event anchors</li>
+    </ul>
+    <pre><code>index=windows EventCode IN (4624,4625) src_ip=185.220.101.34 earliest=-2h
+| sort _time
+| transaction src_ip maxspan=30m startswith="EventCode=4625" endswith="EventCode=4624"
+| eval duration_min = round(duration/60,1)
+| table _time, src_ip, duration_min, eventcount</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-time">
+<article class="topic">
+<h1>03 · SPL Time Modifiers &amp; _time</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Time modifiers constrain searches to specific L7 log event windows — scoping to the right time range is critical for performance and for correlating application-layer events across an incident timeline.</span>
+</div>
+<hr class="divider">
+
+<h2>Relative Time Syntax</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Modifier</th><th>Meaning</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><code>-15m</code></td><td>15 minutes ago</td><td><code>earliest=-15m</code></td></tr>
+    <tr><td><code>-1h</code></td><td>1 hour ago</td><td><code>earliest=-1h latest=now</code></td></tr>
+    <tr><td><code>-24h</code></td><td>24 hours ago</td><td><code>earliest=-24h</code></td></tr>
+    <tr><td><code>-7d</code></td><td>7 days ago</td><td><code>earliest=-7d</code></td></tr>
+    <tr><td><code>-30d@d</code></td><td>30 days ago, snapped to day boundary</td><td><code>earliest=-30d@d latest=@d</code></td></tr>
+    <tr><td><code>@h</code></td><td>Snap to current hour</td><td><code>earliest=-1h@h latest=@h</code></td></tr>
+    <tr><td><code>@w0</code></td><td>Beginning of current week (Sunday)</td><td><code>earliest=@w0</code></td></tr>
+    <tr><td><code>@mon</code></td><td>Beginning of current month</td><td><code>earliest=@mon</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Specifying Time in Search</h2>
+<pre><code><span class="cm"># In the search bar time picker (most common)</span>
+index=windows EventCode=4625
+<span class="cm"># Time picker set to: Last 24 hours</span>
+
+<span class="cm"># Inline in search string</span>
+index=windows EventCode=4625 earliest=-24h latest=now
+
+<span class="cm"># Absolute time with strptime format</span>
+index=windows EventCode=4625 earliest="01/01/2024:00:00:00" latest="01/02/2024:00:00:00"
+
+<span class="cm"># Epoch time</span>
+index=windows EventCode=4625 earliest=1704067200 latest=1704153600</code></pre>
+
+<h2>Working with _time in SPL</h2>
+<pre><code><span class="cm"># Convert _time to human-readable</span>
+index=windows EventCode=4625
+| eval event_time = strftime(_time, "%Y-%m-%d %H:%M:%S")
+| table event_time, user, src_ip
+
+<span class="cm"># Parse a string field to epoch time</span>
+| eval epoch_time = strptime(log_timestamp, "%d/%b/%Y:%H:%M:%S %z")
+
+<span class="cm"># Calculate time differences</span>
+| eval session_duration = end_time - start_time
+| where session_duration &gt; 3600
+
+<span class="cm"># Extract hour of day for heatmap analysis</span>
+| eval hour = strftime(_time, "%H")
+| stats count by hour</code></pre>
+
+<h2>timechart span Values</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>span</th><th>Bucket Size</th><th>Good For</th></tr></thead>
+  <tbody>
+    <tr><td><code>span=1m</code></td><td>1 minute</td><td>Real-time monitoring — last hour views</td></tr>
+    <tr><td><code>span=5m</code></td><td>5 minutes</td><td>Short-term trend detection</td></tr>
+    <tr><td><code>span=1h</code></td><td>1 hour</td><td>Daily patterns — typical for alert dashboards</td></tr>
+    <tr><td><code>span=1d</code></td><td>1 day</td><td>Weekly trends, compliance reports</td></tr>
+    <tr><td><code>span=1w</code></td><td>1 week</td><td>Monthly summaries</td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Using relative time modifiers</h4>
+    <ul>
+      <li>Most investigations start with <code>earliest=-24h</code> or <code>earliest=-1h</code> as the initial scope</li>
+      <li>Inline time modifiers override the time picker — use for reproducible searches saved as alerts</li>
+      <li>Always specify <code>earliest=</code> and <code>latest=</code> explicitly in scheduled alerts to avoid drift</li>
+    </ul>
+    <pre><code>index=windows EventCode=4625 earliest=-1h latest=now
+| stats count by src_ip
+| sort -count</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Working with _time in computations</h4>
+    <ul>
+      <li>Use <code>strftime(_time, "%H")</code> to extract hour of day — enables heatmap-style activity analysis</li>
+      <li><code>strptime()</code> parses a string timestamp into epoch for arithmetic like session duration</li>
+    </ul>
+    <pre><code>index=windows EventCode=4625 earliest=-7d
+| eval hour = strftime(_time, "%H")
+| eval day  = strftime(_time, "%A")
+| stats count by hour, day
+| sort hour
+<span class="cm"># Use chart visualization to create a login heatmap</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Snapped time ranges for scheduled alert consistency</h4>
+    <ul>
+      <li>Use <code>@d</code> snap notation in scheduled searches so the daily report always covers complete calendar days</li>
+      <li>Avoid time zone errors — Splunk stores <code>_time</code> in UTC epoch; use <code>strftime</code> with <code>%Z</code> to verify timezone in output</li>
+    </ul>
+    <pre><code><span class="cm"># Daily report: exactly yesterday's data</span>
+index=windows EventCode=4625 earliest=-1d@d latest=@d
+| timechart span=1h count AS failed_logins
+| eval time_label = strftime(_time, "%Y-%m-%d %H:%M %Z")</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-fields-where">
+<article class="topic">
+<h1>04 · SPL fields, where &amp; rename</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">fields, where, rename, and eval manipulate L7 log field values — shaping application-layer event data for cleaner analysis, reporting, and downstream pipeline commands.</span>
+</div>
+<hr class="divider">
+
+<h2>fields Command — Keep or Drop Fields</h2>
+<pre><code><span class="cm"># Keep only these fields (drop everything else)</span>
+index=windows EventCode=4625
+| fields _time, src_ip, user, dest, EventCode
+
+<span class="cm"># Drop specific fields (keep everything else)</span>
+index=windows EventCode=4625
+| fields - _raw, linecount, punct, splunk_server
+
+<span class="cm"># Note: _time is always kept even if not specified</span></code></pre>
+
+<h2>where Command — Filter with Expressions</h2>
+<pre><code><span class="cm"># where evaluates Boolean expressions (like SQL WHERE)</span>
+index=windows EventCode=4625
+| stats count by src_ip
+| where count &gt; 50
+
+<span class="cm"># String comparison — use like() for wildcard</span>
+| where like(user, "admin%")
+
+<span class="cm"># Null check</span>
+| where isnull(src_ip) OR src_ip=""
+
+<span class="cm"># Multiple conditions</span>
+| where count &gt; 10 AND user!="SYSTEM"
+
+<span class="cm"># search vs where — key differences:</span>
+<span class="cm">#   search field=value  → uses index bloom filters (faster for initial filter)</span>
+<span class="cm">#   | where field=value  → post-pipeline filter (use after stats/eval creates new fields)</span></code></pre>
+
+<h2>rename Command</h2>
+<pre><code><span class="cm"># Rename for cleaner dashboard output</span>
+index=windows EventCode=4625
+| stats count by src_ip, user
+| rename src_ip AS "Source IP", user AS "Username", count AS "Failed Attempts"
+
+<span class="cm"># Rename with wildcard (rename all fields matching pattern)</span>
+| rename *_ip AS *_address</code></pre>
+
+<h2>eval Command — Field Creation</h2>
+<pre><code><span class="cm"># Create new field</span>
+| eval severity = if(count &gt; 100, "HIGH", if(count &gt; 10, "MED", "LOW"))
+
+<span class="cm"># Math</span>
+| eval MB = round(bytes / 1024 / 1024, 2)
+
+<span class="cm"># String concatenation</span>
+| eval src_user = src_ip + " → " + user
+
+<span class="cm"># Conditional</span>
+| eval is_admin = if(match(user, "(?i)admin"), "yes", "no")</code></pre>
+
+<h2>table vs stats vs fields</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Command</th><th>Output</th><th>Use When</th></tr></thead>
+  <tbody>
+    <tr><td><code>| fields a, b</code></td><td>All events, only fields a and b</td><td>Reducing bandwidth on large event sets</td></tr>
+    <tr><td><code>| table a, b</code></td><td>All events displayed as table with columns a, b</td><td>Final display formatting for event listing</td></tr>
+    <tr><td><code>| stats count by a, b</code></td><td>Aggregated rows — one per unique a+b combo</td><td>Summarizing — collapses events into counts</td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Controlling output fields</h4>
+    <ul>
+      <li><code>| fields src_ip, user, count</code> keeps only those fields — reduces noise in investigation output</li>
+      <li><code>| table _time, src, dest, action</code> is the standard final display format for event listings</li>
+      <li><code>| rename src_ip AS "Source IP"</code> makes dashboard output readable for leadership reports</li>
+    </ul>
+    <pre><code>index=windows EventCode=4625 earliest=-1h
+| stats count AS "Failed Attempts" by src_ip, user
+| rename src_ip AS "Source IP", user AS "Username"
+| sort -"Failed Attempts"</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>eval for field enrichment and severity classification</h4>
+    <ul>
+      <li>Use <code>eval severity = case(count > 100, "HIGH", count > 10, "MEDIUM", true, "LOW")</code> to auto-classify results</li>
+      <li><code>| where isnull(field)</code> catches events with missing fields — useful for detecting data gaps</li>
+    </ul>
+    <pre><code>index=windows EventCode=4625 earliest=-1h
+| stats count by src_ip
+| eval severity = case(count > 500,"CRITICAL",count > 100,"HIGH",count > 20,"MEDIUM",true,"LOW")
+| where severity != "LOW"
+| sort -count</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>eval with match() for behavioral flagging</h4>
+    <ul>
+      <li>Combine <code>eval</code> + <code>match()</code> with regex to flag suspicious L7 application behaviors inline</li>
+      <li>Chain multiple evals — later ones can reference fields created by earlier ones in the same pipeline step</li>
+    </ul>
+    <pre><code>index=endpoint EventCode=4688 earliest=-24h
+| eval cmd_len = len(CommandLine)
+| eval is_encoded = if(match(CommandLine,"(?i)-enc|-EncodedCommand"),1,0)
+| eval is_download = if(match(CommandLine,"(?i)DownloadString|IEX|WebClient|curl|wget"),1,0)
+| eval risk_flags = is_encoded + is_download
+| where risk_flags > 0
+| table _time, host, user, cmd_len, risk_flags, CommandLine</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-rex">
+<article class="topic">
+<h1>05 · SPL rex — Field Extraction</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">rex extracts structured fields from unstructured L7 application log text — enabling analysis of events where vendor field extraction is incomplete or a custom log format is used.</span>
+</div>
+<hr class="divider">
+
+<div class="callout"><strong>rex</strong> uses named capture groups from Python regex syntax: <code>(?&lt;fieldname&gt;pattern)</code>. The extracted field is available for subsequent pipe commands.</div>
+
+<h2>Basic rex Extraction</h2>
+<pre><code><span class="cm"># Raw event: "Failed password for jsmith from 192.168.1.100 port 22 ssh2"</span>
+index=linux_secure "Failed password"
+| rex "Failed password for (?&lt;attempt_user&gt;\S+) from (?&lt;src_ip&gt;\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+| stats count by src_ip, attempt_user
+| sort -count
+
+<span class="cm"># Sample output:</span>
+<span class="cm"># src_ip          attempt_user    count</span>
+<span class="cm"># 185.220.101.34  root            2341</span>
+<span class="cm"># 185.220.101.34  admin           891</span>
+<span class="cm"># 45.33.32.156    ubuntu          234</span></code></pre>
+
+<h2>Extracting from a Specific Field</h2>
+<pre><code><span class="cm"># By default rex operates on _raw. Use field= to target a specific field</span>
+index=windows EventCode=4688
+| rex field=CommandLine "(?i)-enc(?:odedcommand)?\s+(?&lt;encoded_cmd&gt;[A-Za-z0-9+/=]{20,})"
+| where isnotnull(encoded_cmd)
+| table _time, host, ParentImage, CommandLine, encoded_cmd</code></pre>
+
+<h2>Common rex Patterns</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Pattern</th><th>Matches</th><th>Regex</th></tr></thead>
+  <tbody>
+    <tr><td>IPv4 address</td><td>192.168.1.100</td><td><code>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}</code></td></tr>
+    <tr><td>Domain name</td><td>evil.example.com</td><td><code>[\w.-]+\.\w{2,6}</code></td></tr>
+    <tr><td>Email</td><td>user@domain.com</td><td><code>[\w.+-]+@[\w.-]+\.\w+</code></td></tr>
+    <tr><td>Hash (MD5)</td><td>d41d8cd98f00b204...</td><td><code>[a-fA-F0-9]{32}</code></td></tr>
+    <tr><td>Hash (SHA256)</td><td>64-char hex</td><td><code>[a-fA-F0-9]{64}</code></td></tr>
+    <tr><td>Windows path</td><td>C:\Users\...</td><td><code>[A-Za-z]:\\(?:[^\\\n]+\\)*[^\\\n]*</code></td></tr>
+    <tr><td>Non-whitespace token</td><td>word, IP, hash</td><td><code>\S+</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>rex with mode=sed — Find and Replace</h2>
+<pre><code><span class="cm"># Redact or transform field values (sed-style substitution)</span>
+| rex field=url mode=sed "s/\?.*$//"
+<span class="cm"># Strips query strings from URLs: /path?query=x → /path</span>
+
+<span class="cm"># Case-insensitive replace</span>
+| rex field=CommandLine mode=sed "s/(?i)powershell\.exe/[PS]/g"</code></pre>
+
+<h2>Multivalue Extraction</h2>
+<pre><code><span class="cm"># Extract multiple matches into a multivalue field</span>
+<span class="cm"># Event: "Scanned ports: 22, 80, 443, 8080, 8443"</span>
+| rex max_match=0 "(?&lt;port&gt;\d{1,5})"
+| mvexpand port
+| stats count by port</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Basic named capture group extraction</h4>
+    <ul>
+      <li>rex syntax: <code>(?&lt;fieldname&gt;pattern)</code> — the field name becomes available downstream in the pipeline</li>
+      <li>By default rex operates on <code>_raw</code> — use <code>field=CommandLine</code> to target a specific field</li>
+      <li>Test your regex on sample raw events before deploying in a scheduled alert</li>
+    </ul>
+    <pre><code>index=linux_secure "Failed password" earliest=-1h
+| rex "Failed password for (?&lt;attempt_user&gt;\S+) from (?&lt;src_ip&gt;\S+)"
+| stats count by src_ip, attempt_user
+| sort -count</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Extracting from specific fields and using sed mode</h4>
+    <ul>
+      <li>Use <code>field=CommandLine</code> to extract sub-values like encoded payloads or argument flags</li>
+      <li><code>mode=sed</code> performs find-and-replace — useful for normalizing or redacting field content</li>
+    </ul>
+    <pre><code>index=windows EventCode=4688 earliest=-24h
+| rex field=CommandLine "(?i)-enc(?:odedcommand)?\s+(?&lt;b64_payload&gt;[A-Za-z0-9+/=]{20,})"
+| where isnotnull(b64_payload)
+| table _time, host, user, CommandLine, b64_payload</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Multi-value extraction and mvexpand for port analysis</h4>
+    <ul>
+      <li><code>max_match=0</code> extracts ALL matches of a pattern as a multivalue field — essential for scanning detection</li>
+      <li>Combine with <code>mvexpand</code> to explode multivalue fields into separate events for per-value aggregation</li>
+    </ul>
+    <pre><code>index=network sourcetype=pan:traffic dest_ip=192.168.56.30 earliest=-1h
+| rex max_match=0 "dest_port=(?&lt;port&gt;\d{1,5})"
+| mvexpand port
+| stats count by port
+| sort -count
+<span class="cm"># Reveals all ports scanned against the Windows VM target</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-lookup">
+<article class="topic">
+<h1>06 · SPL Lookup Tables</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Lookup tables enrich L7 log events with context — matching application-layer fields like src_ip or file_hash against threat intel, geolocation, or asset inventory to add investigative value.</span>
+</div>
+<hr class="divider">
+
+<h2>What are Lookups?</h2>
+<p>Lookup tables enrich search results by joining against a CSV file or KV store based on a matching field. Used for threat intel matching, geolocation, asset data, and user context.</p>
+
+<h2>lookup Command</h2>
+<pre><code><span class="cm"># Basic lookup — match src_ip against threat intel CSV</span>
+index=network
+| lookup threat_intel_ips src_ip OUTPUT threat_category, confidence, description
+| where isnotnull(threat_category)
+| table _time, src_ip, dest_ip, threat_category, confidence
+
+<span class="cm"># Sample output:</span>
+<span class="cm"># _time                src_ip          dest_ip      threat_category    confidence</span>
+<span class="cm"># 2024-01-15 14:22:31  185.220.101.34  10.0.1.50   Tor Exit Node      High</span>
+<span class="cm"># 2024-01-15 14:31:12  45.33.32.156    10.0.1.82   Known Scanner      Medium</span></code></pre>
+
+<h2>lookup with OUTPUT vs OUTPUTNEW</h2>
+<pre><code><span class="cm"># OUTPUT — always writes lookup values (overwrites existing field)</span>
+| lookup geoip src_ip OUTPUT country, city, latitude, longitude
+
+<span class="cm"># OUTPUTNEW — only writes if field doesn't already exist</span>
+| lookup asset_inventory dest_ip OUTPUTNEW asset_owner, criticality, business_unit</code></pre>
+
+<h2>inputlookup — Query Lookup Directly</h2>
+<pre><code><span class="cm"># Search the lookup table itself</span>
+| inputlookup threat_intel_ips
+| where confidence="High"
+| stats count by threat_category
+
+<span class="cm"># Filter inputlookup with where</span>
+| inputlookup threat_intel_ips WHERE threat_category="C2 Server"
+| table src_ip, description, last_seen</code></pre>
+
+<h2>outputlookup — Write Results to Lookup</h2>
+<pre><code><span class="cm"># Save search results to a CSV lookup for later use</span>
+index=windows EventCode=4625 earliest=-24h
+| stats count by src_ip
+| where count &gt; 100
+| outputlookup brute_force_ips.csv
+
+<span class="cm"># Now usable in other searches:</span>
+index=windows EventCode=4624
+| lookup brute_force_ips.csv src_ip
+| where isnotnull(count)
+| table _time, host, user, src_ip, count</code></pre>
+
+<h2>Common Lookup Use Cases</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Lookup Table</th><th>Match Field</th><th>Adds</th></tr></thead>
+  <tbody>
+    <tr><td>geoip</td><td>src_ip / dest_ip</td><td>country, city, lat, lon</td></tr>
+    <tr><td>threat_intel_ips</td><td>src_ip</td><td>threat_category, confidence</td></tr>
+    <tr><td>asset_inventory</td><td>dest_ip / host</td><td>owner, criticality, business_unit</td></tr>
+    <tr><td>user_roles</td><td>user</td><td>department, manager, is_admin</td></tr>
+    <tr><td>malware_hashes</td><td>file_hash</td><td>malware_name, family, severity</td></tr>
+    <tr><td>VT_lookup (VirusTotal)</td><td>file_hash / url</td><td>positives, scan_date</td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Basic threat intel lookup</h4>
+    <ul>
+      <li>A lookup joins your search results against a CSV or KV store by a matching field (e.g., src_ip)</li>
+      <li><code>OUTPUT</code> writes lookup fields to results even if null; <code>OUTPUTNEW</code> only writes if field doesn't already exist</li>
+      <li>Use <code>| where isnotnull(threat_category)</code> after lookup to filter only matched (enriched) results</li>
+    </ul>
+    <pre><code>index=network earliest=-1h
+| lookup threat_intel_ips src_ip OUTPUT threat_category, confidence
+| where isnotnull(threat_category)
+| table _time, src_ip, dest_ip, threat_category, confidence</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>outputlookup for dynamic threat tracking</h4>
+    <ul>
+      <li>Save search results to a CSV lookup with <code>outputlookup</code> — builds a rolling list of attacker IPs or suspicious hashes</li>
+      <li>Schedule the outputlookup search to refresh daily so other searches benefit from fresh threat data</li>
+    </ul>
+    <pre><code>index=windows EventCode=4625 earliest=-24h
+| stats count by src_ip
+| where count > 50
+| outputlookup brute_force_ips.csv
+<span class="cm"># Now reference in other searches:</span>
+<span class="cm"># | lookup brute_force_ips.csv src_ip | where isnotnull(count)</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>KV store lookups for real-time state tracking</h4>
+    <ul>
+      <li>KV Store lookups update in real time (unlike CSV) — use for maintaining dynamic state like open incident IPs</li>
+      <li>Combine <code>inputlookup</code> + <code>| join</code> or subsearch to correlate active threat intel against live log streams</li>
+    </ul>
+    <pre><code><span class="cm"># Check all network traffic against active brute-force IP list</span>
+index=windows EventCode=4624 earliest=-1h
+| lookup brute_force_ips.csv src_ip OUTPUT count AS bf_count
+| where isnotnull(bf_count)
+| table _time, host, user, src_ip, bf_count, LogonType
+<span class="cm"># Successful logins from known brute-force sources = likely compromise</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<script src="js/app.js"></script>
+</body>
+</html>

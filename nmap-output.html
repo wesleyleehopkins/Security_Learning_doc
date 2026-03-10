@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nmap Output & Parsing — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Nmap</div>
+      <div class="sidebar-title">Output &amp; Parsing</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">📄</div>
+          <h2>Output &amp; Parsing</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Output & Parsing',
+  topics: [
+    { id: 'output-formats',  badge: '01', label: 'Output Formats'           },
+    { id: 'verbosity',       badge: '02', label: 'Verbosity & Reason Flags' },
+    { id: 'grep-tips',       badge: '03', label: 'Grep / AWK Parsing'       },
+    { id: 'xml-ndiff',       badge: '04', label: 'XML Output & ndiff'       },
+    { id: 'scan-management', badge: '05', label: 'Scan Management'          },
+  ]
+};
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EMBEDDED CONTENT TEMPLATES — no server required
+     ═══════════════════════════════════════════════════════════════ -->
+
+<template id="tpl-output-formats">
+<article class="topic">
+<h1>01 · Output Formats</h1>
+<hr class="divider">
+
+<div class="callout"><strong>Best practice:</strong> Always use <code>-oA &lt;basename&gt;</code> on real scans — it saves all three formats simultaneously with no extra overhead, giving you human-readable, machine-parsable, and grep-friendly outputs.</div>
+
+<h2>Format Overview</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Flag</th><th>Format</th><th>Extension</th><th>Best For</th></tr></thead>
+  <tbody>
+    <tr><td><code>-oN &lt;file&gt;</code></td><td>Normal (human-readable)</td><td>.nmap</td><td>Documentation, reports, quick reading</td></tr>
+    <tr><td><code>-oX &lt;file&gt;</code></td><td>XML (machine-parsable)</td><td>.xml</td><td>ndiff, Metasploit import, custom scripts, xsltproc HTML</td></tr>
+    <tr><td><code>-oG &lt;file&gt;</code></td><td>Grepable (one line per host)</td><td>.gnmap</td><td>grep/awk parsing, quick host extraction</td></tr>
+    <tr><td><code>-oS &lt;file&gt;</code></td><td>Script kiddie</td><td>.nmap</td><td>N/A — lEEt speak, not operationally useful</td></tr>
+    <tr><td><code>-oA &lt;basename&gt;</code></td><td>All three formats</td><td>.nmap + .xml + .gnmap</td><td>Always — saves everything at once</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>-oN Normal Format</h2>
+<pre><code><span class="cm"># Save normal output</span>
+nmap -sS -sV -p- -oN scan.nmap 192.168.1.10
+
+<span class="cm"># Normal output file contents:</span>
+# Nmap 7.94 scan initiated Thu Mar 07 09:15:00 2024
+# Nmap scan report for 192.168.1.10
+# Host is up (0.00045s latency).
+# Not shown: 65529 closed tcp ports (reset)
+# PORT     STATE SERVICE      VERSION
+# 22/tcp   open  ssh          OpenSSH 8.9p1 Ubuntu 3ubuntu0.6
+# 80/tcp   open  http         Apache httpd 2.4.52
+# 443/tcp  open  ssl/http     Apache httpd 2.4.52
+# 3306/tcp open  mysql        MySQL 8.0.36
+# 8080/tcp open  http-proxy   Squid http proxy 5.2
+# 8443/tcp open  ssl/http-alt nginx 1.24.0
+# OS details: Linux 5.4 - 5.11
+# Nmap done: 1 IP address (1 host up) scanned in 128.34 seconds</code></pre>
+
+<h2>-oG Grepable Format</h2>
+<pre><code><span class="cm"># Save grepable output</span>
+nmap -sS -sV -oG scan.gnmap 192.168.1.10
+
+<span class="cm"># Grepable output file contents (one line per host):</span>
+# Host: 192.168.1.10 ()  Status: Up
+# Host: 192.168.1.10 ()  Ports: 22/open/tcp//ssh//OpenSSH 8.9p1 Ubuntu/,
+#   80/open/tcp//http//Apache httpd 2.4.52/,
+#   443/open/tcp//ssl|http//Apache httpd 2.4.52/,
+#   3306/open/tcp//mysql//MySQL 8.0.36/,
+#   8080/open/tcp//http-proxy//Squid http proxy 5.2/
+# Nmap done: 1 IP addresses (1 hosts up) scanned in 128.34 seconds
+
+<span class="cm"># Each port entry format:</span>
+<span class="cm"># port/state/protocol//service//version/</span></code></pre>
+
+<h2>-oX XML Format</h2>
+<pre><code><span class="cm"># Save XML output</span>
+nmap -sS -sV -oX scan.xml 192.168.1.10
+
+<span class="cm"># XML structure (abbreviated):</span>
+&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;nmaprun scanner="nmap" args="nmap -sS -sV" start="1709808000"&gt;
+  &lt;host starttime="1709808001" endtime="1709808129"&gt;
+    &lt;status state="up" reason="arp-response"/&gt;
+    &lt;address addr="192.168.1.10" addrtype="ipv4"/&gt;
+    &lt;address addr="28:CF:E9:11:22:33" addrtype="mac" vendor="Apple"/&gt;
+    &lt;ports&gt;
+      &lt;port protocol="tcp" portid="22"&gt;
+        &lt;state state="open" reason="syn-ack" reason_ttl="64"/&gt;
+        &lt;service name="ssh" product="OpenSSH" version="8.9p1"
+                 extrainfo="Ubuntu" ostype="Linux"/&gt;
+      &lt;/port&gt;
+    &lt;/ports&gt;
+    &lt;os&gt;
+      &lt;osmatch name="Linux 5.4 - 5.11" accuracy="97"/&gt;
+    &lt;/os&gt;
+  &lt;/host&gt;
+&lt;/nmaprun&gt;</code></pre>
+
+<h2>-oA — Save All Formats</h2>
+<pre><code><span class="cm"># Recommended for any real scan — saves .nmap, .xml, and .gnmap</span>
+nmap -sS -sV -p- -oA scan_results 192.168.1.10
+<span class="cm"># Creates: scan_results.nmap, scan_results.xml, scan_results.gnmap</span>
+
+<span class="cm"># With directory prefix</span>
+mkdir -p scans/192.168.1.10
+nmap -sS -sV -p- -oA scans/192.168.1.10/full 192.168.1.10
+<span class="cm"># Creates: scans/192.168.1.10/full.nmap, .xml, .gnmap</span>
+
+<span class="cm"># Output to stdout + save to file simultaneously</span>
+nmap -sV -oA scan 192.168.1.10 | tee /dev/tty</code></pre>
+</article>
+</template>
+
+<template id="tpl-verbosity">
+<article class="topic">
+<h1>02 · Verbosity &amp; Reason Flags</h1>
+<hr class="divider">
+
+<h2>Verbosity Levels</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Flag</th><th>Level</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td>(none)</td><td>0</td><td>Default — shows summary at end only</td></tr>
+    <tr><td><code>-v</code></td><td>1</td><td>Shows open ports as discovered; progress updates; host state</td></tr>
+    <tr><td><code>-vv</code></td><td>2</td><td>Also shows closed/filtered ports; more detail during scan</td></tr>
+    <tr><td><code>-d</code></td><td>Debug 1</td><td>Detailed internal debugging (RTT, parallelism, timing adjustments)</td></tr>
+    <tr><td><code>-dd</code></td><td>Debug 2</td><td>Very detailed — packet details, socket events</td></tr>
+    <tr><td><code>-ddd</code></td><td>Debug 3+</td><td>Maximum — overwhelming detail; rarely needed</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Useful Output Modifiers</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Flag</th><th>Description</th><th>Example Use</th></tr></thead>
+  <tbody>
+    <tr><td><code>--reason</code></td><td>Show the reason for each port state</td><td>Diagnose why ports are filtered vs closed</td></tr>
+    <tr><td><code>--open</code></td><td>Only show open (or open|filtered) ports</td><td>Clean output when scanning large subnets</td></tr>
+    <tr><td><code>--packet-trace</code></td><td>Print every packet sent and received</td><td>Deep debugging of probe/response behavior</td></tr>
+    <tr><td><code>--iflist</code></td><td>List network interfaces and routes, then exit</td><td>Verify scanner is using correct interface/route</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>--reason Output Examples</h2>
+<pre><code>$ nmap -sS -p 22,80,443,3306,3389 --reason 192.168.1.10
+
+PORT     STATE    SERVICE  REASON
+22/tcp   open     ssh      syn-ack ttl 64    ← SYN/ACK received
+80/tcp   open     http     syn-ack ttl 64
+443/tcp  open     https    syn-ack ttl 64
+3306/tcp filtered mysql    no-response       ← no reply (firewall drops)
+3389/tcp closed   ms-wbt   reset ttl 128     ← RST received (Windows)
+
+<span class="cm"># State reasons:</span>
+<span class="cm"># syn-ack       = SYN/ACK received → open</span>
+<span class="cm"># reset         = RST received → closed</span>
+<span class="cm"># no-response   = timeout → filtered</span>
+<span class="cm"># admin-prohibited = ICMP type 3 code 9/10/13 → filtered</span>
+<span class="cm"># unreachable   = ICMP type 3 code 1/2/3 → filtered or closed</span>
+<span class="cm"># arp-response  = ARP reply (discovery)</span>
+<span class="cm"># echo-reply    = ICMP echo reply (discovery)</span></code></pre>
+
+<h2>--open Flag</h2>
+<pre><code><span class="cm"># Without --open: shows all 1000 scanned ports (mostly closed)</span>
+nmap 192.168.1.10
+# Not shown: 994 closed ports
+# PORT    STATE SERVICE
+# 22/tcp  open  ssh
+# 80/tcp  open  http
+# ...
+
+<span class="cm"># With --open: only open and open|filtered ports shown</span>
+nmap --open 192.168.1.10
+# PORT    STATE SERVICE
+# 22/tcp  open  ssh
+# 80/tcp  open  http
+<span class="cm"># Much cleaner — use when scanning subnets to reduce noise</span>
+
+<span class="cm"># --open with subnet scan</span>
+nmap -sS --open 192.168.1.0/24
+<span class="cm"># Only shows hosts with open ports — skips fully closed/filtered hosts</span></code></pre>
+
+<h2>Interactive Runtime Commands</h2>
+<pre><code><span class="cm"># While nmap is running, press these keys:</span>
+v / V      <span class="cm"># increase / decrease verbosity</span>
+d / D      <span class="cm"># increase / decrease debug level</span>
+p / P      <span class="cm"># enable / disable packet trace</span>
+?          <span class="cm"># show help</span>
+Enter      <span class="cm"># print current status (hosts scanned, ports done)</span>
+
+<span class="cm"># Example: press Enter while scan runs to see progress</span>
+# Stats: 0:00:45 elapsed; 0 hosts completed (1 up), 1 undergoing SYN Stealth Scan
+# SYN Stealth Scan Timing: About 23.45% done; ETC: 09:18 (0:02:28 remaining)</code></pre>
+</article>
+</template>
+
+<template id="tpl-grep-tips">
+<article class="topic">
+<h1>03 · Grep / AWK Parsing</h1>
+<hr class="divider">
+
+<p>The grepable format (<code>-oG</code>) is designed for easy parsing with standard Unix text tools. The normal format (<code>-oN</code>) also has predictable enough structure for quick greps.</p>
+
+<h2>Extracting Live Hosts</h2>
+<pre><code><span class="cm"># From grepable output — all live hosts</span>
+grep "Status: Up" scan.gnmap | awk '{print $2}'
+
+<span class="cm"># From grepable — hosts with specific port open</span>
+grep "22/open" scan.gnmap | awk '{print $2}'
+
+<span class="cm"># From grepable — hosts with port 80 OR 443 open</span>
+grep -E "80/open|443/open" scan.gnmap | awk '{print $2}'
+
+<span class="cm"># From normal output — all live IPs</span>
+grep "Nmap scan report" scan.nmap | awk '{print $NF}'</code></pre>
+
+<h2>Extracting Open Ports</h2>
+<pre><code><span class="cm"># List all open TCP ports from normal output</span>
+grep "/tcp.*open" scan.nmap
+
+<span class="cm"># Get just the port numbers from normal output</span>
+grep "/tcp.*open" scan.nmap | awk -F/ '{print $1}'
+
+<span class="cm"># From grepable — extract all ports for each host</span>
+grep "Ports:" scan.gnmap | awk '{print $2, $5}'
+
+<span class="cm"># Find hosts with MySQL exposed</span>
+grep "3306/open" scan.gnmap | awk '{print $2}'
+
+<span class="cm"># Find hosts with SMB exposed</span>
+grep "445/open" scan.gnmap | awk '{print $2}'
+
+<span class="cm"># Extract all open ports as comma-list (useful for follow-up scan)</span>
+grep "/tcp.*open" scan.nmap | awk -F/ '{printf "%s,", $1}' | sed 's/,$/\n/'</code></pre>
+
+<h2>Version Information Extraction</h2>
+<pre><code><span class="cm"># Find all hosts running Apache</span>
+grep -i "apache" scan.nmap | grep "open"
+
+<span class="cm"># Find hosts with specific service versions</span>
+grep "OpenSSH" scan.nmap
+
+<span class="cm"># Extract host:port:service from grepable</span>
+grep "Ports:" scan.gnmap | while read line; do
+    ip=$(echo "$line" | awk '{print $2}')
+    echo "$line" | grep -oP '\d+/open/tcp//\w+' | while read port; do
+        portnum=$(echo "$port" | cut -d/ -f1)
+        svc=$(echo "$port" | cut -d/ -f5)
+        echo "$ip:$portnum ($svc)"
+    done
+done</code></pre>
+
+<h2>Quick Discovery Parsing</h2>
+<pre><code><span class="cm"># Full pipeline: discover → extract live IPs → full port scan</span>
+sudo nmap -sn 192.168.1.0/24 -oG - | \
+  grep "Status: Up" | \
+  awk '{print $2}' | \
+  sudo nmap -sS -sV -iL - -oA full_scan
+
+<span class="cm"># Find all open ports across subnet (deduplicate, sort)</span>
+grep "/open/tcp" scan.gnmap | \
+  grep -oP '\d+/open/tcp' | \
+  awk -F/ '{print $1}' | \
+  sort -n | uniq -c | sort -rn
+
+<span class="cm"># Output: frequency count of open ports across all hosts</span>
+# 47  80      ← 47 hosts have port 80 open
+# 45  443
+# 38  22
+# 12  3389
+# 5   3306</code></pre>
+
+<h2>One-Liners for SOC Workflow</h2>
+<pre><code><span class="cm"># Find all hosts with RDP exposed (potential lateral movement)</span>
+grep "3389/open" scan.gnmap | awk '{print $2}'
+
+<span class="cm"># Find all hosts with Telnet (unencrypted admin access)</span>
+grep "23/open" scan.gnmap | awk '{print $2}'
+
+<span class="cm"># Find hosts where SNMP community string 'public' works</span>
+<span class="cm"># (use after running --script=snmp-info)</span>
+grep -A5 "snmp-info" scan.nmap | grep "sysDescr"
+
+<span class="cm"># Count unique services across all hosts</span>
+grep "/open/tcp" scan.gnmap | grep -oP '//\w+//' | \
+  sort | uniq -c | sort -rn
+
+<span class="cm"># Create host:port list for vulnerability scanner import</span>
+grep "/open/tcp" scan.gnmap | \
+  awk '{ip=$2; gsub(/\/open.*/, "", $5); print ip ":" $5}'</code></pre>
+</article>
+</template>
+
+<template id="tpl-xml-ndiff">
+<article class="topic">
+<h1>04 · XML Output &amp; ndiff</h1>
+<hr class="divider">
+
+<h2>XML Output Uses</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Tool</th><th>Command</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td>ndiff</td><td><code>ndiff baseline.xml new.xml</code></td><td>Compare two scans; detect changes</td></tr>
+    <tr><td>xsltproc</td><td><code>xsltproc scan.xml -o report.html</code></td><td>Convert XML to HTML report</td></tr>
+    <tr><td>Metasploit</td><td><code>db_import scan.xml</code></td><td>Import hosts/services into msf database</td></tr>
+    <tr><td>python-nmap</td><td><code>nm.analyse_nmap_xml_scan()</code></td><td>Parse XML in Python for custom automation</td></tr>
+    <tr><td>nmaptocsv</td><td><code>nmaptocsv -i scan.xml -o scan.csv</code></td><td>Convert to CSV for spreadsheet analysis</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>ndiff — Scan Change Detection</h2>
+<pre><code><span class="cm"># Compare two XML scan files and show differences</span>
+ndiff baseline.xml new_scan.xml
+
+<span class="cm"># ndiff output example:</span>
+-Nmap 7.94 scan of 192.168.1.0/24       ← baseline
++Nmap 7.94 scan of 192.168.1.0/24       ← new scan
+
+ 192.168.1.10:
+  Host is up.
+  22/tcp  open  ssh     OpenSSH 8.9p1
+  80/tcp  open  http    Apache httpd 2.4.52
++3389/tcp open  ms-wbt  Microsoft Remote Desktop  ← NEW — RDP appeared!
+-3306/tcp open  mysql   MySQL 8.0.36              ← REMOVED — MySQL closed
+
+ 192.168.1.99:
++Host is up.             ← NEW HOST appeared on network!
++22/tcp open ssh OpenSSH 7.4
+
+<span class="cm"># + = added since baseline  - = removed since baseline</span>
+<span class="cm"># New hosts, new ports, changed versions all flagged automatically</span></code></pre>
+
+<h2>Automated Baseline Workflow</h2>
+<pre><code><span class="cm"># Step 1: Create baseline scan (save as XML)</span>
+sudo nmap -sS -sV 192.168.1.0/24 -oX baseline_$(date +%Y%m%d).xml
+
+<span class="cm"># Step 2: Run periodic scan</span>
+sudo nmap -sS -sV 192.168.1.0/24 -oX current_$(date +%Y%m%d).xml
+
+<span class="cm"># Step 3: Compare</span>
+ndiff baseline_20240101.xml current_20240307.xml
+
+<span class="cm"># Step 4: Alert on differences (simple wrapper script)</span>
+DIFF=$(ndiff baseline.xml current.xml | grep -E "^\+" | grep -v "^+Nmap")
+if [ -n "$DIFF" ]; then
+    echo "Network changes detected:" &gt;&gt; /var/log/nmap_changes.log
+    echo "$DIFF" &gt;&gt; /var/log/nmap_changes.log
+fi</code></pre>
+
+<h2>HTML Report via xsltproc</h2>
+<pre><code><span class="cm"># Convert XML scan results to HTML report</span>
+xsltproc /usr/share/nmap/nmap.xsl scan.xml -o report.html
+
+<span class="cm"># View in browser</span>
+firefox report.html
+
+<span class="cm"># Nmap can generate with --stylesheet</span>
+nmap -sS -sV --webxml -oX scan.xml 192.168.1.10
+<span class="cm"># --webxml = link to online stylesheet (requires internet)</span>
+<span class="cm"># --stylesheet /path/to/nmap.xsl = use local stylesheet</span></code></pre>
+
+<h2>Python XML Parsing</h2>
+<pre><code><span class="cm"># Simple Python XML parser for nmap output</span>
+import xml.etree.ElementTree as ET
+
+tree = ET.parse('scan.xml')
+root = tree.getroot()
+
+for host in root.findall('host'):
+    addr = host.find('address[@addrtype="ipv4"]').get('addr')
+    status = host.find('status').get('state')
+    print(f"\nHost: {addr} ({status})")
+
+    for port in host.findall('.//port'):
+        portid = port.get('portid')
+        proto  = port.get('protocol')
+        state  = port.find('state').get('state')
+        svc    = port.find('service')
+        name   = svc.get('name', '') if svc is not None else ''
+        ver    = svc.get('version', '') if svc is not None else ''
+        if state == 'open':
+            print(f"  {portid}/{proto}  {name}  {ver}")</code></pre>
+</article>
+</template>
+
+<template id="tpl-scan-management">
+<article class="topic">
+<h1>05 · Scan Management</h1>
+<hr class="divider">
+
+<h2>Resuming Aborted Scans</h2>
+<pre><code><span class="cm"># If a scan is interrupted (Ctrl+C, network drop, system crash)</span>
+<span class="cm"># and you saved output with -oN or -oG, you can resume:</span>
+
+<span class="cm"># Resume from normal (.nmap) or grepable (.gnmap) output file</span>
+nmap --resume scan_results.gnmap
+
+<span class="cm"># Nmap reads which hosts were already scanned and skips them</span>
+<span class="cm"># Continues from where it left off — very useful for large subnets</span>
+
+<span class="cm"># Note: original scan options are embedded in the output file</span>
+<span class="cm"># You CANNOT change scan parameters when resuming</span>
+
+<span class="cm"># Best practice: always save to file when scanning large networks</span>
+sudo nmap -sS -sV -p- 10.0.0.0/24 -oA large_scan</code></pre>
+
+<h2>Appending to Output Files</h2>
+<pre><code><span class="cm"># Append results to existing output file (instead of overwriting)</span>
+nmap -sS 192.168.1.10 -oG scan.gnmap --append-output
+nmap -sS 192.168.1.20 -oG scan.gnmap --append-output
+
+<span class="cm"># Useful for scanning multiple targets in separate runs</span>
+<span class="cm"># and consolidating into a single file for analysis</span></code></pre>
+
+<h2>Output to stdout (-)</h2>
+<pre><code><span class="cm"># Send output to stdout for piping</span>
+nmap -sS -oG - 192.168.1.0/24 | grep "Status: Up"
+
+<span class="cm"># Save to file AND display on screen</span>
+nmap -sV 192.168.1.10 -oN - | tee scan.txt
+
+<span class="cm"># Use - as filename to output to stdout for any format</span>
+nmap -oX - 192.168.1.10 | python3 parse_scan.py</code></pre>
+
+<h2>Excluding Hosts Mid-Scan</h2>
+<pre><code><span class="cm"># Static exclusions (specified at start)</span>
+nmap 192.168.1.0/24 --exclude 192.168.1.1,192.168.1.255
+
+<span class="cm"># From exclude file</span>
+nmap 192.168.1.0/24 --excludefile /etc/nmap/excluded_hosts.txt
+
+<span class="cm"># Exclude file format (one target per line):</span>
+# 192.168.1.1         ← gateway
+# 192.168.1.254       ← management interface
+# 10.0.0.0/8          ← entire range</code></pre>
+
+<h2>Scan Workflow Best Practices</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Practice</th><th>Command / Approach</th></tr></thead>
+  <tbody>
+    <tr><td>Always save output</td><td>Use <code>-oA &lt;basename&gt;</code> for every real scan</td></tr>
+    <tr><td>Name files with date/target</td><td><code>-oA scans/192.168.1.0_24_$(date +%Y%m%d)</code></td></tr>
+    <tr><td>Run discovery before port scan</td><td>Separate <code>-sn</code> first, then <code>-iL live_hosts.txt</code></td></tr>
+    <tr><td>Start fast, go deep</td><td>Quick <code>-F</code> scan → full <code>-p-</code> on interesting hosts</td></tr>
+    <tr><td>Document scan commands</td><td>Nmap embeds full command in all output formats</td></tr>
+    <tr><td>Create baselines for change detection</td><td>Weekly <code>-sV -oX</code> + ndiff comparison</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Finding the Nmap Command Used</h2>
+<pre><code><span class="cm"># The original command is embedded in all output files</span>
+
+<span class="cm"># In normal (.nmap) output:</span>
+# Nmap 7.94 scan initiated Thu Mar  7 09:15:00 2024 as:
+# nmap -sS -sV -p- -oA full_scan 192.168.1.10
+
+<span class="cm"># In grepable (.gnmap) output (first line):</span>
+# Nmap 7.94 scan initiated Thu Mar  7 09:15:00 2024 as:
+# nmap -sS -sV -p- -oA full_scan 192.168.1.10
+
+<span class="cm"># In XML — args attribute of root nmaprun element:</span>
+# &lt;nmaprun args="nmap -sS -sV -p- -oA full_scan 192.168.1.10" ...&gt;
+
+<span class="cm"># Extract from XML:</span>
+grep -m1 'args=' scan.xml | sed 's/.*args="\([^"]*\)".*/\1/'</code></pre>
+</article>
+</template>
+
+<script src="js/app.js"></script>
+</body>
+</html>

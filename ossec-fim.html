@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>File Integrity Monitoring — OSSEC — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" aria-label="Toggle sidebar">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 5h14M3 10h14M3 15h14"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html" class="active">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">File Integrity Monitoring</div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  </aside>
+  <main class="content" id="content-area"></main>
+</div>
+
+<!-- ══════════════════════════ FIM Overview ══════════════════════════════════ -->
+<template id="tpl-fim-overview">
+<article class="topic">
+  <h2>FIM Overview</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">FIM operates entirely at the application layer — it inspects file content, permissions, and ownership on disk. Network indicators (source IPs) are derived from L7 log analysis, not direct packet inspection.</span>
+  </div>
+  <p>File Integrity Monitoring (FIM) tracks changes to files and directories. OSSEC/Wazuh FIM calculates checksums, records permissions, ownership, and timestamps for monitored files. When anything changes, an alert fires.</p>
+
+  <h3>What FIM Tracks</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Attribute</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><strong>MD5 / SHA1 / SHA256</strong></td><td>File content checksum — detects any modification to file contents</td></tr>
+        <tr><td><strong>Size</strong></td><td>File size in bytes</td></tr>
+        <tr><td><strong>Permissions</strong></td><td>Unix mode bits (e.g., 0644, 0755, 4755 for setuid)</td></tr>
+        <tr><td><strong>Ownership</strong></td><td>UID and GID of the file owner</td></tr>
+        <tr><td><strong>Inode</strong></td><td>Filesystem inode number — changes on file replacement (mv/rename)</td></tr>
+        <tr><td><strong>mtime</strong></td><td>Last modification time</td></tr>
+        <tr><td><strong>ACLs</strong></td><td>Access control list changes (Wazuh, with audit)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>FIM Alert Types (Rule IDs)</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Rule ID</th><th>Level</th><th>Trigger</th></tr></thead>
+      <tbody>
+        <tr><td>550</td><td>7</td><td>Integrity checksum changed</td></tr>
+        <tr><td>554</td><td>5</td><td>File added to monitored directory</td></tr>
+        <tr><td>553</td><td>7</td><td>File deleted from monitored directory</td></tr>
+        <tr><td>551</td><td>7</td><td>File permissions changed</td></tr>
+        <tr><td>552</td><td>7</td><td>File ownership changed</td></tr>
+        <tr><td>555</td><td>0</td><td>File added (new install baseline — info only)</td></tr>
+        <tr><td>556</td><td>0</td><td>File removed (uninstall baseline — info only)</td></tr>
+        <tr><td>598</td><td>7</td><td>File change detected (generic)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>FIM Modes</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Mode</th><th>Method</th><th>Latency</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Scheduled</strong></td><td>Default — scans directories on a timer (every 6 hours by default)</td><td>Up to hours</td></tr>
+        <tr><td><strong>Real-time</strong></td><td>Uses inotify (Linux) / ReadDirectoryChangesW (Windows) for instant detection</td><td>Seconds</td></tr>
+        <tr><td><strong>Who-data</strong></td><td>Uses Linux Audit or Windows Audit to record which user/process made the change</td><td>Seconds + attribution</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Know What FIM Monitors</summary>
+    <div class="tier-body">
+      <h4>Core FIM Concepts</h4>
+      <ul>
+        <li>FIM takes a baseline checksum (MD5/SHA1/SHA256) of monitored files; alerts when they change</li>
+        <li>Rule 550 = checksum changed; Rule 554 = file added; Rule 553 = file deleted</li>
+        <li>Scheduled mode scans every 6 hours by default — realtime mode alerts within seconds</li>
+        <li>Monitor: <code>/etc</code>, <code>/bin</code>, <code>/usr/bin</code>, <code>/var/www/html</code> at minimum</li>
+      </ul>
+      <pre><code><span class="cm"># View FIM alerts in real time</span>
+sudo tail -f /var/ossec/logs/alerts/alerts.log | grep syscheck</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Configure Real-time and Who-data</summary>
+    <div class="tier-body">
+      <h4>Increase Detection Speed and Attribution</h4>
+      <ul>
+        <li>Enable <code>realtime="yes"</code> on web root and /tmp — catches webshell drops within seconds</li>
+        <li>Enable <code>whodata="yes"</code> on /etc/passwd, /etc/shadow, /etc/sudoers — records which user/process made the change</li>
+        <li>Who-data requires <code>auditd</code> running on Linux — verify with <code>sudo auditctl -l | grep ossec</code></li>
+        <li>Use <code>report_changes="yes"</code> to include a diff of the actual change in the alert body</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Correlate FIM with Kill Chain Phases</summary>
+    <div class="tier-body">
+      <h4>Map FIM Alerts to ATT&amp;CK Techniques</h4>
+      <ul>
+        <li>T1565.001 (Stored Data Manipulation): FIM rule 550 on web root files → webshell injection</li>
+        <li>T1003.008 (Credential Access — /etc/passwd): FIM rule 550/551 on /etc/passwd, /etc/shadow → credential harvesting</li>
+        <li>T1548.001 (SUID/SGID): FIM rule 551 showing 4755 permissions → privilege escalation staging</li>
+        <li>Correlate FIM alerts with auth.log entries from the same timestamp to identify the attacker's source IP</li>
+      </ul>
+      <pre><code><span class="cm"># Kibana — correlate FIM alert with auth events (same 5-minute window)</span>
+rule.id:(550 OR 554) AND @timestamp:[now-5m TO now]
+<span class="cm"># Then pivot on agent.name to find related auth.log alerts</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ Configuration ══════════════════════════════════ -->
+<template id="tpl-fim-config">
+<article class="topic">
+  <h2>syscheck Configuration</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">syscheck configuration controls application-layer file monitoring — directory paths, checksum types, recursion depth, and audit integration are all L7 concerns.</span>
+  </div>
+  <p>FIM is configured in the <code>&lt;syscheck&gt;</code> block inside <code>ossec.conf</code> (or the agent's <code>ossec.conf</code>).</p>
+
+  <h3>Basic syscheck Configuration</h3>
+  <pre><code><span class="cm">&lt;!-- /var/ossec/etc/ossec.conf --&gt;</span>
+&lt;ossec_config&gt;
+  &lt;syscheck&gt;
+
+    <span class="cm">&lt;!-- How often to run a full scheduled scan (seconds) --&gt;</span>
+    &lt;frequency&gt;21600&lt;/frequency&gt;   <span class="cm">&lt;!-- 6 hours --&gt;</span>
+
+    <span class="cm">&lt;!-- Run a scan at daemon startup --&gt;</span>
+    &lt;scan_on_start&gt;yes&lt;/scan_on_start&gt;
+
+    <span class="cm">&lt;!-- Alert when new files appear in monitored dirs --&gt;</span>
+    &lt;alert_new_files&gt;yes&lt;/alert_new_files&gt;
+
+    <span class="cm">&lt;!-- Auto-ignore changes during the first N scans (baseline) --&gt;</span>
+    &lt;auto_ignore frequency="10" timeframe="3600"&gt;yes&lt;/auto_ignore&gt;
+
+    <span class="cm">&lt;!-- Directories to monitor (scheduled scan, all attributes) --&gt;</span>
+    &lt;directories check_all="yes"&gt;/etc,/usr/bin,/usr/sbin&lt;/directories&gt;
+    &lt;directories check_all="yes"&gt;/bin,/sbin,/boot&lt;/directories&gt;
+
+    <span class="cm">&lt;!-- Real-time monitoring (inotify on Linux) --&gt;</span>
+    &lt;directories check_all="yes" realtime="yes"&gt;/var/www/html&lt;/directories&gt;
+    &lt;directories check_all="yes" realtime="yes"&gt;/tmp&lt;/directories&gt;
+    &lt;directories check_all="yes" realtime="yes"&gt;/home&lt;/directories&gt;
+
+    <span class="cm">&lt;!-- Who-data: records which user/process made the change --&gt;</span>
+    &lt;directories check_all="yes" whodata="yes"&gt;/etc/passwd&lt;/directories&gt;
+    &lt;directories check_all="yes" whodata="yes"&gt;/etc/shadow&lt;/directories&gt;
+    &lt;directories check_all="yes" whodata="yes"&gt;/etc/sudoers&lt;/directories&gt;
+
+    <span class="cm">&lt;!-- Ignore patterns (regex or exact path) --&gt;</span>
+    &lt;ignore&gt;/etc/mtab&lt;/ignore&gt;
+    &lt;ignore&gt;/etc/mnttab&lt;/ignore&gt;
+    &lt;ignore&gt;/etc/hosts.deny&lt;/ignore&gt;
+    &lt;ignore&gt;/etc/mail/statistics&lt;/ignore&gt;
+    &lt;ignore&gt;/etc/random-seed&lt;/ignore&gt;
+    &lt;ignore type="sregex"&gt;.log$|.tmp$&lt;/ignore&gt;
+
+    <span class="cm">&lt;!-- Report file changes only when checksum changes (suppress noise) --&gt;</span>
+    &lt;nodiff&gt;/etc/ssl/private.key&lt;/nodiff&gt;
+
+    <span class="cm">&lt;!-- Windows-specific: monitor registry keys --&gt;</span>
+    &lt;windows_registry&gt;HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Run&lt;/windows_registry&gt;
+    &lt;windows_registry&gt;HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services&lt;/windows_registry&gt;
+
+  &lt;/syscheck&gt;
+&lt;/ossec_config&gt;</code></pre>
+
+  <h3>Directory Options Reference</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Attribute</th><th>Default</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr><td><code>check_all="yes"</code></td><td>No</td><td>Enable all checks: md5, sha1, sha256, size, owner, group, permissions, mtime, inode</td></tr>
+        <tr><td><code>check_md5sum="yes"</code></td><td>Yes</td><td>Check MD5 checksum</td></tr>
+        <tr><td><code>check_sha1sum="yes"</code></td><td>Yes</td><td>Check SHA1 checksum</td></tr>
+        <tr><td><code>check_sha256sum="yes"</code></td><td>No</td><td>Check SHA256 checksum</td></tr>
+        <tr><td><code>check_size="yes"</code></td><td>Yes</td><td>Check file size</td></tr>
+        <tr><td><code>check_owner="yes"</code></td><td>Yes</td><td>Check UID/GID</td></tr>
+        <tr><td><code>check_perm="yes"</code></td><td>Yes</td><td>Check permissions</td></tr>
+        <tr><td><code>check_mtime="yes"</code></td><td>No</td><td>Check modification time (can be noisy)</td></tr>
+        <tr><td><code>check_inode="yes"</code></td><td>No</td><td>Check inode number</td></tr>
+        <tr><td><code>realtime="yes"</code></td><td>No</td><td>Enable inotify/ReadDirectoryChangesW real-time monitoring</td></tr>
+        <tr><td><code>whodata="yes"</code></td><td>No</td><td>Enable audit-based who-data (requires auditd on Linux)</td></tr>
+        <tr><td><code>recursion_level="N"</code></td><td>256</td><td>Limit subdirectory recursion depth</td></tr>
+        <tr><td><code>restrict="regex"</code></td><td>—</td><td>Only monitor files matching this regex within the directory</td></tr>
+        <tr><td><code>report_changes="yes"</code></td><td>No</td><td>Include a diff of changed text file content in the alert</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Who-data Setup (Linux — auditd required)</h3>
+  <pre><code><span class="cm"># Install auditd if not present</span>
+sudo apt install auditd
+
+<span class="cm"># Wazuh automatically adds audit rules for whodata directories</span>
+<span class="cm"># Verify audit rules are loaded after restart:</span>
+sudo auditctl -l | grep ossec
+
+<span class="cm"># Example output:</span>
+<span class="cm"># -w /etc/passwd -p wa -k ossec_fim</span>
+<span class="cm"># -w /etc/shadow -p wa -k ossec_fim</span>
+
+<span class="cm"># If auditd isn't running, whodata falls back to realtime</span>
+sudo systemctl enable auditd
+sudo systemctl start auditd</code></pre>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Essential syscheck Blocks</summary>
+    <div class="tier-body">
+      <h4>Minimum Viable FIM Config</h4>
+      <ul>
+        <li>Monitor <code>/etc</code>, <code>/bin</code>, <code>/usr/bin</code>, <code>/usr/sbin</code>, <code>/sbin</code>, <code>/boot</code> with <code>check_all="yes"</code></li>
+        <li>Monitor <code>/var/www/html</code> and <code>/tmp</code> with <code>realtime="yes"</code> for quick webshell detection</li>
+        <li>Set <code>alert_new_files</code> to <code>yes</code> so dropped files in monitored dirs fire rule 554</li>
+        <li>Ignore high-churn files like <code>/etc/mtab</code>, <code>/etc/hosts.deny</code> to reduce noise</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Who-data and registry monitoring</summary>
+    <div class="tier-body">
+      <h4>Get User and Process Attribution</h4>
+      <ul>
+        <li>Set <code>whodata="yes"</code> on critical files — requires <code>auditd</code> running and auto-adds audit rules</li>
+        <li>Use <code>nodiff</code> on key files (<code>/etc/ssl/private.key</code>, <code>/etc/shadow</code>) to prevent secrets appearing in alert bodies</li>
+        <li>Add Windows registry monitoring for persistence keys under <code>HKLM\Software\Microsoft\Windows\CurrentVersion\Run</code></li>
+        <li>Use <code>restrict="sregex"</code> to limit monitoring to specific file types within large directories</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Tune for Performance and Coverage</summary>
+    <div class="tier-body">
+      <h4>Balance Detection Speed vs System Load</h4>
+      <ul>
+        <li>Limit <code>recursion_level</code> to 3–5 on large directories like <code>/home</code> — unlimited recursion is slow</li>
+        <li>Disable <code>check_mtime</code> unless needed — mtime updates on read can cause false positives</li>
+        <li>Use <code>auto_ignore frequency="10" timeframe="3600"</code> to suppress baseline noise during first scans</li>
+        <li>Tune <code>frequency</code> per criticality: 1800s (30 min) for critical dirs, 21600s (6h) for less sensitive paths</li>
+      </ul>
+      <pre><code><span class="cm">&lt;!-- High-frequency monitoring for critical files --&gt;</span>
+&lt;directories check_all="yes" whodata="yes"
+  frequency="300"&gt;/etc/cron.d,/etc/crontab&lt;/directories&gt;</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ Alert Output ══════════════════════════════════ -->
+<template id="tpl-fim-alerts">
+<article class="topic">
+  <h2>FIM Alert Output</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">FIM alerts describe application-layer events — file paths, checksums, ownership, and process names. Who-data adds process attribution (L7 process context), not network-layer information.</span>
+  </div>
+
+  <h3>Scheduled Scan Alert — File Modified (alerts.log)</h3>
+  <pre><code>** Alert 1710854400.12345: - ossec,syscheck,
+2024 Mar 19 10:00:00 webserver->/var/ossec/logs/syscheck.log
+Rule: 550 (level 7) -> 'Integrity checksum changed.'
+Integrity checksum changed for: '/var/www/html/index.php'
+Old md5sum was: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6'
+New md5sum is : 'f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1'
+Old sha1sum was: '1234567890abcdef1234567890abcdef12345678'
+New sha1sum is : 'fedcba0987654321fedcba0987654321fedcba09'
+Old size was: '4521'
+New size is  : '5109'
+Old modification time was: 'Tue Mar 19 09:00:00 2024'
+New modification time is : 'Tue Mar 19 09:58:43 2024'</code></pre>
+
+  <h3>Alert Fields Decoded</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>Value (from example)</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>Alert ID</td><td>1710854400.12345</td><td>Unix timestamp + sequence number</td></tr>
+        <tr><td>Source</td><td>webserver</td><td>Agent that generated the event</td></tr>
+        <tr><td>Rule ID</td><td>550</td><td>Integrity checksum changed rule</td></tr>
+        <tr><td>Level</td><td>7</td><td>Moderate — warrants investigation</td></tr>
+        <tr><td>File</td><td>/var/www/html/index.php</td><td>Monitored file that changed</td></tr>
+        <tr><td>Old md5sum</td><td>a1b2c3d...</td><td>Known-good baseline checksum</td></tr>
+        <tr><td>New md5sum</td><td>f6e5d4c...</td><td>Checksum after change (different = modified)</td></tr>
+        <tr><td>Old/New size</td><td>4521 → 5109</td><td>File grew by 588 bytes — webshell injection?</td></tr>
+        <tr><td>mtime</td><td>09:00 → 09:58</td><td>Modified ~1 minute before the scan ran</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Real-time Alert — File Added (who-data)</h3>
+  <pre><code>** Alert 1710854460.13000: - ossec,syscheck,
+2024 Mar 19 10:01:00 webserver->/var/ossec/logs/syscheck.log
+Rule: 554 (level 5) -> 'File added to the system.'
+New file '/var/www/html/shell.php' added.
+File: /var/www/html/shell.php
+Size: 1247
+Mode: rw-r--r--
+Owner: www-data (33)
+Group: www-data (33)
+MD5:   deadbeefdeadbeefdeadbeefdeadbeef
+SHA1:  cafebabecafebabecafebabecafebabecafebabe
+Who (user):  www-data
+Who (process): apache2 (PID: 12847)</code></pre>
+
+  <h3>Wazuh Dashboard FIM Fields (JSON alert)</h3>
+  <pre><code>{
+  "timestamp": "2024-03-19T10:01:00.000Z",
+  "rule": {
+    "id": "554",
+    "level": 5,
+    "description": "File added to the system.",
+    "groups": ["ossec","syscheck","syscheck_entry_added"]
+  },
+  "agent": {
+    "id": "003",
+    "name": "webserver",
+    "ip": "10.0.1.50"
+  },
+  "syscheck": {
+    "path": "/var/www/html/shell.php",
+    "event": "added",
+    "mode": "whodata",
+    "size_after": "1247",
+    "md5_after": "deadbeefdeadbeefdeadbeefdeadbeef",
+    "sha1_after": "cafebabecafebabecafebabecafebabecafebabe",
+    "sha256_after": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+    "uname_after": "www-data",
+    "gname_after": "www-data",
+    "perm_after": "rw-r--r--",
+    "audit": {
+      "user": { "name": "www-data" },
+      "process": { "name": "apache2", "id": "12847" }
+    }
+  }
+}</code></pre>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Read a FIM Alert</summary>
+    <div class="tier-body">
+      <h4>Understand the Key Fields</h4>
+      <ul>
+        <li><strong>Rule ID 550</strong>: checksum changed — compare Old/New md5sum to confirm file was modified</li>
+        <li><strong>Rule ID 554</strong>: new file added — check the file path for suspicious names (.php in web root, .sh in /tmp)</li>
+        <li>File size growing (e.g., 4521 → 5109 bytes) on a PHP file = strong webshell indicator</li>
+        <li>Who-data fields show <code>Who (user)</code> and <code>Who (process)</code> — apache2 writing PHP = exploitation</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Use JSON Alerts in Wazuh Dashboard</summary>
+    <div class="tier-body">
+      <h4>Query FIM Events in OpenSearch/Kibana</h4>
+      <ul>
+        <li>Filter by <code>rule.id:554</code> and <code>syscheck.path:/var/www/html*</code> to find file drops in web root</li>
+        <li>Pivot on <code>agent.name</code> to see all FIM events from a specific host</li>
+        <li>Use <code>syscheck.event:modified</code> + <code>syscheck.path:/etc/passwd</code> to hunt for credential tampering</li>
+        <li>The <code>audit.process.name</code> field reveals which process wrote the file — key for triage</li>
+      </ul>
+      <pre><code><span class="cm"># Kibana query — new PHP files in web root (last 24h)</span>
+rule.id:554 AND syscheck.path:*.php AND syscheck.path:/var/www*</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Automate Evidence Collection</summary>
+    <div class="tier-body">
+      <h4>Script FIM Alert Response</h4>
+      <ul>
+        <li>Use a Wazuh active response script triggered by rule 554 to automatically hash and quarantine the new file</li>
+        <li>Ship FIM JSON alerts to Splunk — create a correlation search for rule 554 + rule 5763 (web exploit) within 5 minutes</li>
+        <li>Use <code>syscheck.sha256_after</code> to query VirusTotal API automatically on new file additions</li>
+      </ul>
+      <pre><code><span class="cm"># Query VT for the SHA256 from a FIM alert</span>
+SHA256="deadbeef..."
+curl -s "https://www.virustotal.com/api/v3/files/$SHA256" \
+  -H "x-apikey: $VT_API_KEY" | jq '.data.attributes.last_analysis_stats'</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ FIM Scenarios ═════════════════════════════════ -->
+<template id="tpl-fim-scenarios">
+<article class="topic">
+  <h2>FIM Investigation Scenarios</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">FIM investigation scenarios involve application-layer artifacts: file paths, checksums, process names, and user accounts. Network-layer evidence (source IPs) comes from correlated auth.log entries.</span>
+  </div>
+
+  <h3>Scenario 1 — Webshell Drop</h3>
+  <div class="callout warn">
+    <strong>Indicator:</strong> Rule 554 (file added) fires for a .php file under /var/www/html. The who-data shows the writing process is apache2 (not a human admin session). Web server writing PHP = webshell upload via file upload vulnerability.
+  </div>
+  <pre><code><span class="cm"># Check the new file immediately</span>
+sudo cat /var/www/html/shell.php
+
+<span class="cm"># Check web server access logs around the same timestamp</span>
+sudo grep "shell.php" /var/log/apache2/access.log
+sudo grep "POST" /var/log/apache2/access.log | grep "$(date +%d/%b/%Y:%H:%M)"
+
+<span class="cm"># Check what uploaded it (Wazuh who-data gives process PID)</span>
+sudo ls -la /proc/12847/exe
+
+<span class="cm"># Isolate the file for analysis</span>
+sudo cp /var/www/html/shell.php /tmp/shell.php.evidence
+sudo rm /var/www/html/shell.php</code></pre>
+
+  <h3>Scenario 2 — /etc/passwd Modified</h3>
+  <div class="callout warn">
+    <strong>Indicator:</strong> Rule 550 fires for /etc/passwd. Normal reason: admin added a user via useradd. Suspicious reason: attacker added a backdoor account manually or modified root's shell.
+  </div>
+  <pre><code><span class="cm"># Check recent changes to /etc/passwd</span>
+sudo diff &lt;(sudo cat /var/ossec/queue/syscheck/.syscheck_old) /etc/passwd
+<span class="cm"># Or simply check last few lines</span>
+tail -5 /etc/passwd
+
+<span class="cm"># Check who ran useradd or made passwd changes</span>
+sudo grep "useradd\|usermod\|passwd" /var/log/auth.log | tail -20
+
+<span class="cm"># Check for UID 0 accounts (root-level backdoors)</span>
+awk -F: '$3==0 {print $1}' /etc/passwd
+
+<span class="cm"># Wazuh who-data: check the audit field in the alert JSON for user/process</span></code></pre>
+
+  <h3>Scenario 3 — SUID Binary Added</h3>
+  <div class="callout warn">
+    <strong>Indicator:</strong> Rule 551 (permissions changed) fires showing new permissions include setuid bit (mode 4755). Attacker has planted an SUID shell for privilege escalation.
+  </div>
+  <pre><code><span class="cm"># Find all SUID files for comparison</span>
+sudo find / -perm -4000 -type f 2>/dev/null
+
+<span class="cm"># Compare against known-good baseline</span>
+sudo find /usr/bin /usr/sbin /bin /sbin -perm -4000 -type f
+
+<span class="cm"># Check the specific file flagged by OSSEC</span>
+ls -la /tmp/rootshell
+<span class="cm"># Expected attacker pattern: -rwsr-xr-x 1 root root ... /tmp/rootshell</span>
+
+<span class="cm"># Check when it was created</span>
+stat /tmp/rootshell</code></pre>
+
+  <h3>FIM Best Practice — Key Directories</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Directory</th><th>Monitoring Mode</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>/etc</td><td>check_all + scheduled</td><td>Config files — passwd, shadow, sudoers, cron, SSH</td></tr>
+        <tr><td>/bin, /sbin, /usr/bin, /usr/sbin</td><td>check_all + scheduled</td><td>System binaries — detect trojanized commands</td></tr>
+        <tr><td>/var/www/html</td><td>check_all + realtime</td><td>Web root — webshell drops, content modification</td></tr>
+        <tr><td>/tmp, /var/tmp, /dev/shm</td><td>check_all + realtime</td><td>Malware staging areas</td></tr>
+        <tr><td>/home</td><td>realtime</td><td>User .bashrc, .ssh/authorized_keys modifications</td></tr>
+        <tr><td>/root</td><td>whodata + realtime</td><td>Root home — .bashrc, .ssh, history tampering</td></tr>
+        <tr><td>/boot</td><td>check_all + scheduled</td><td>Bootloader and kernel — detect bootkits</td></tr>
+        <tr><td>/lib, /lib64, /usr/lib</td><td>check_all + scheduled</td><td>Shared libraries — detect LD_PRELOAD rootkits</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Triage a FIM Alert</summary>
+    <div class="tier-body">
+      <h4>Steps to Investigate a File Change Alert</h4>
+      <ul>
+        <li>Note the rule ID: 554 (added) and 550 (modified) are highest priority for web directories</li>
+        <li>Check the file immediately: <code>sudo cat &lt;file&gt;</code> — look for eval(), base64_decode(), system() in PHP</li>
+        <li>Check who wrote it using who-data or correlated auth.log entries around the same timestamp</li>
+        <li>Preserve evidence before deleting: <code>sudo cp &lt;file&gt; /tmp/&lt;file&gt;.evidence</code></li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Correlate Across Log Sources</summary>
+    <div class="tier-body">
+      <h4>Connect FIM Alerts to Network Events</h4>
+      <ul>
+        <li>After webshell drop (rule 554): correlate with Apache access.log for POST requests to the upload endpoint</li>
+        <li>After /etc/passwd change (rule 550): correlate with auth.log for sudo/su usage at the same time</li>
+        <li>After SUID change (rule 551): run <code>find / -perm -4000 -type f</code> and compare to known-good list</li>
+      </ul>
+      <pre><code><span class="cm"># Find the upload request that dropped the webshell</span>
+sudo grep "POST.*upload" /var/log/apache2/access.log | \
+  grep "$(date -d '5 minutes ago' '+%d/%b/%Y:%H:%M')"</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Map Scenarios to MITRE ATT&amp;CK</summary>
+    <div class="tier-body">
+      <h4>ATT&amp;CK Technique Coverage via FIM</h4>
+      <ul>
+        <li><strong>T1505.003</strong> (Web Shell): rule 554 — PHP/ASP file added to web root by web server process</li>
+        <li><strong>T1548.001</strong> (SUID): rule 551 — permissions change shows 4755 (setuid root)</li>
+        <li><strong>T1070.003</strong> (Clear Command History): rule 550 — .bash_history truncated (size drops to 0)</li>
+        <li><strong>T1574.006</strong> (LD_PRELOAD): rule 554 — .so file added to /lib or /etc/ld.so.preload modified</li>
+      </ul>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ Tuning FIM ════════════════════════════════════ -->
+<template id="tpl-fim-tuning">
+<article class="topic">
+  <h2>Tuning FIM</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">FIM tuning reduces application-layer noise — suppressing alerts for frequently-changing log files, temp files, and package manager updates while preserving detection of malicious changes.</span>
+  </div>
+
+  <h3>Reducing False Positives</h3>
+  <pre><code><span class="cm">&lt;!-- Ignore high-churn files that change legitimately --&gt;</span>
+&lt;syscheck&gt;
+  &lt;ignore&gt;/etc/mtab&lt;/ignore&gt;
+  &lt;ignore&gt;/etc/mnttab&lt;/ignore&gt;
+  &lt;ignore&gt;/etc/hosts.deny&lt;/ignore&gt;          <span class="cm">&lt;!-- updated by active response --&gt;</span>
+  &lt;ignore&gt;/etc/mail/statistics&lt;/ignore&gt;
+  &lt;ignore&gt;/etc/random-seed&lt;/ignore&gt;
+  &lt;ignore&gt;/etc/adjtime&lt;/ignore&gt;
+  &lt;ignore&gt;/etc/httpd/logs&lt;/ignore&gt;
+  &lt;ignore type="sregex"&gt;^/proc&lt;/ignore&gt;
+  &lt;ignore type="sregex"&gt;.log$&lt;/ignore&gt;
+  &lt;ignore type="sregex"&gt;.swp$&lt;/ignore&gt;     <span class="cm">&lt;!-- vim swap files --&gt;</span>
+  &lt;ignore type="sregex"&gt;.pyc$&lt;/ignore&gt;     <span class="cm">&lt;!-- Python bytecode --&gt;</span>
+&lt;/syscheck&gt;</code></pre>
+
+  <h3>Suppressing FIM Alerts in rules (ossec.conf)</h3>
+  <pre><code><span class="cm">&lt;!-- Suppress rule 550 (checksum changed) for a specific file --&gt;</span>
+&lt;ossec_config&gt;
+  &lt;rules&gt;
+    &lt;decoder_output&gt;
+      &lt;rule id="100200" level="0"&gt;
+        &lt;if_sid&gt;550&lt;/if_sid&gt;
+        &lt;match&gt;/var/log/lastlog&lt;/match&gt;
+        &lt;description&gt;Ignore lastlog changes (updated on every login)&lt;/description&gt;
+      &lt;/rule&gt;
+    &lt;/decoder_output&gt;
+  &lt;/rules&gt;
+&lt;/ossec_config&gt;</code></pre>
+
+  <h3>Baseline Reset (after planned changes)</h3>
+  <pre><code><span class="cm"># After a software update or known-good change, update the FIM database</span>
+
+<span class="cm"># OSSEC: Stop OSSEC, wipe the syscheck DB, restart (full rescan)</span>
+sudo /var/ossec/bin/ossec-control stop
+sudo rm /var/ossec/queue/syscheck/*
+sudo /var/ossec/bin/ossec-control start
+<span class="cm"># First scan will rebuild the baseline — no alerts for existing files</span>
+
+<span class="cm"># Wazuh: Use the API or dashboard to clear the FIM DB for an agent</span>
+curl -k -X DELETE \
+  -H "Authorization: Bearer $TOKEN" \
+  "https://&lt;manager&gt;:55000/syscheck/003"
+<span class="cm"># 003 = agent ID</span>
+
+<span class="cm"># Trigger an immediate FIM scan</span>
+curl -k -X PUT \
+  -H "Authorization: Bearer $TOKEN" \
+  "https://&lt;manager&gt;:55000/syscheck/003"</code></pre>
+
+  <h3>FIM Performance Tuning</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Setting</th><th>Recommendation</th><th>Reason</th></tr></thead>
+      <tbody>
+        <tr><td><code>frequency</code></td><td>21600 (6 hrs) for most dirs</td><td>Balance detection latency vs CPU overhead</td></tr>
+        <tr><td><code>realtime</code></td><td>Only on high-value dirs (/var/www, /etc/passwd)</td><td>inotify watches consume kernel resources</td></tr>
+        <tr><td><code>check_mtime</code></td><td>Disabled unless needed</td><td>mtime changes on read access patterns — noisy</td></tr>
+        <tr><td><code>recursion_level</code></td><td>3–5 for large dirs</td><td>Unlimited recursion on /home can be slow</td></tr>
+        <tr><td><code>nodiff</code></td><td>On /etc/ssl, /etc/shadow</td><td>Prevents sensitive data appearing in alert body</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Reduce Noise With Ignores</summary>
+    <div class="tier-body">
+      <h4>Essential False-Positive Suppressions</h4>
+      <ul>
+        <li>Always ignore <code>/etc/mtab</code>, <code>/etc/hosts.deny</code>, <code>/etc/adjtime</code> — these change constantly and legitimately</li>
+        <li>Use <code>type="sregex"</code> to ignore patterns like <code>.log$</code>, <code>.swp$</code>, <code>.pyc$</code> globally</li>
+        <li>After a software update, reset the FIM baseline by clearing <code>/var/ossec/queue/syscheck/*</code> and restarting</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Suppress Specific Rules</summary>
+    <div class="tier-body">
+      <h4>Write Child Rules to Silence Known-Good Changes</h4>
+      <ul>
+        <li>Write a level-0 child rule with <code>&lt;if_sid&gt;550&lt;/if_sid&gt;</code> and <code>&lt;match&gt;</code> on the file path to suppress noisy FIM rules for specific files</li>
+        <li>Use <code>nodiff</code> on sensitive files like <code>/etc/shadow</code> — prevents plaintext credentials appearing in alert bodies</li>
+        <li>Use the Wazuh API to clear FIM DB per-agent after planned changes instead of stopping the full daemon</li>
+      </ul>
+      <pre><code><span class="cm"># Clear FIM DB for agent 003 via API, then trigger immediate scan</span>
+curl -k -X DELETE -H "Authorization: Bearer $TOKEN" \
+  "https://&lt;mgr&gt;:55000/syscheck/003"
+curl -k -X PUT -H "Authorization: Bearer $TOKEN" \
+  "https://&lt;mgr&gt;:55000/syscheck/003"</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Tiered Frequency Strategy</summary>
+    <div class="tier-body">
+      <h4>Different Scan Intervals per Risk Level</h4>
+      <ul>
+        <li>High-risk dirs (<code>/etc/cron.*</code>, <code>/etc/sudoers.d</code>): <code>frequency="300"</code> (5 min) with <code>whodata="yes"</code></li>
+        <li>Medium-risk dirs (<code>/etc</code>, <code>/bin</code>, <code>/usr/bin</code>): <code>frequency="3600"</code> (1 hr) with <code>check_all="yes"</code></li>
+        <li>Low-risk dirs (<code>/boot</code>, <code>/lib</code>): <code>frequency="21600"</code> (6 hr) scheduled only</li>
+        <li>Limit <code>recursion_level="3"</code> on <code>/home</code> to prevent scanning thousands of nested user files</li>
+      </ul>
+    </div>
+  </details>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: "File Integrity Monitoring",
+  topics: [
+    { id: "fim-overview",   badge: "01", label: "Overview" },
+    { id: "fim-config",     badge: "02", label: "Configuration" },
+    { id: "fim-alerts",     badge: "03", label: "Alert Output" },
+    { id: "fim-scenarios",  badge: "04", label: "Investigation" },
+    { id: "fim-tuning",     badge: "05", label: "Tuning FIM" },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

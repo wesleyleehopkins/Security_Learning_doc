@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snort — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" aria-label="Toggle sidebar">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 5h14M3 10h14M3 15h14"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html" class="active">Snort</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">Snort</div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  </aside>
+  <main class="content" id="content-area"></main>
+</div>
+
+<!-- ══════════════════════════ Overview ═════════════════════════════════════ -->
+<template id="tpl-overview">
+<article class="topic">
+  <h2>Snort Overview</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Snort inspects IP packets (L3), TCP/UDP segments (L4), and application-layer payloads (L7) to detect and prevent intrusions across the full network stack.</span>
+  </div>
+  <p><strong>Snort</strong> is an open-source network intrusion detection and prevention system (IDS/IPS) developed by Sourcefire (now Cisco). It inspects network traffic in real time, matching packets against a rule set to generate alerts, log traffic, or actively block threats in inline mode.</p>
+
+  <h3>Snort 2 vs Snort 3</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Feature</th><th>Snort 2.x</th><th>Snort 3.x</th></tr></thead>
+      <tbody>
+        <tr><td>Config format</td><td><code>snort.conf</code> (flat text)</td><td><code>snort.lua</code> (Lua scripting)</td></tr>
+        <tr><td>Threading</td><td>Single-threaded packet processing</td><td>Multi-threaded — scales to high-speed links</td></tr>
+        <tr><td>Preprocessors</td><td>Legacy preprocessors (http_inspect, frag3, stream5)</td><td>Replaced by Inspectors (http_server, stream, etc.)</td></tr>
+        <tr><td>Rule syntax</td><td>Fully compatible with community rules</td><td>Mostly compatible; some new options added</td></tr>
+        <tr><td>Detection engine</td><td>Single pass, MPSE pattern matching</td><td>Hyperscan/MPSE, improved multi-pattern search</td></tr>
+        <tr><td>DAQ (Data Acquisition)</td><td>DAQ 1.x (pcap, afpacket, nfq)</td><td>DAQ 3.x with improved module API</td></tr>
+        <tr><td>Output</td><td>Output plugins in snort.conf</td><td>alert_fast, alert_full, alert_json, alert_syslog</td></tr>
+        <tr><td>Community rules</td><td>snort2-community-rules.tar.gz</td><td>snort3-community-rules.tar.gz</td></tr>
+        <tr><td>Status</td><td>Legacy — no new features</td><td>Active development</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Core Concepts</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Rule</strong></td><td>A detection signature: header (action, protocol, IP, port) + options (content match, flags, metadata)</td></tr>
+        <tr><td><strong>Alert</strong></td><td>Output generated when traffic matches a rule</td></tr>
+        <tr><td><strong>SID</strong></td><td>Snort rule ID — unique integer identifying a rule (1–999999 reserved for official rules; 1000000+ for custom)</td></tr>
+        <tr><td><strong>GID</strong></td><td>Generator ID — identifies which Snort component generated the event (1 = rules engine)</td></tr>
+        <tr><td><strong>Preprocessor / Inspector</strong></td><td>Module that normalizes traffic before rule matching (HTTP decoding, stream reassembly, fragmentation handling)</td></tr>
+        <tr><td><strong>DAQ</strong></td><td>Data Acquisition library — abstracts the network interface (pcap, AF_PACKET, NFQ, DPDK)</td></tr>
+        <tr><td><strong>HOME_NET</strong></td><td>Variable defining the internal/protected network</td></tr>
+        <tr><td><strong>EXTERNAL_NET</strong></td><td>Variable defining traffic sources outside HOME_NET (typically <code>!$HOME_NET</code>)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>What Snort Protects Against</h3>
+  <ul>
+    <li>Network port scans and reconnaissance</li>
+    <li>Exploit attempts (buffer overflows, shellcode delivery)</li>
+    <li>Web application attacks (SQL injection, XSS, directory traversal)</li>
+    <li>Malware C2 communication patterns</li>
+    <li>Protocol anomalies and malformed packets</li>
+    <li>Brute force authentication attempts</li>
+    <li>DNS-based attacks (zone transfer, tunneling)</li>
+    <li>DoS/DDoS traffic patterns (ICMP flood, SYN flood)</li>
+  </ul>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Understanding what Snort does at each OSI layer</h4>
+      <ul>
+        <li>Snort captures packets at L3 (IP src/dst) and L4 (TCP/UDP ports) to determine who is talking to whom</li>
+        <li>L7 content inspection matches rule keywords like <code>content:"SELECT"</code> against the application payload</li>
+        <li>In NIDS mode, Snort alerts but does not block — IPS mode (inline) is required to drop packets</li>
+      </ul>
+      <pre><code>snort --version
+sudo snort -T -c /etc/snort/snort.conf</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Snort 2 vs Snort 3 pipeline differences</h4>
+      <ul>
+        <li>Snort 3 uses multi-threading for better throughput on 10Gbps+ links</li>
+        <li>Preprocessors (Snort 2) rebuild fragmented L3 packets and reassemble L4 streams before L7 rule matching</li>
+        <li>HTTP inspection normalizes L7 encoding (%xx, Unicode) so rules see clean content</li>
+      </ul>
+      <pre><code><span class="cm"># Snort 3 test config and list inspectors</span>
+sudo snort -c /etc/snort/snort.lua --dump-config-text | grep inspector</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Performance tuning and evasion awareness</h4>
+      <ul>
+        <li>Attackers fragment L3 packets or split L4 TCP segments to evade naive content matching — stream5/frag3 reassembly counters this</li>
+        <li>Use <code>fast_pattern</code> on the rarest content match to accelerate the MPSE detection engine</li>
+        <li>Profile rule performance with <code>config profile_rules: print 20, sort total_time</code> in snort.conf</li>
+      </ul>
+      <pre><code><span class="cm"># Snort 3: check perf stats after running against PCAP</span>
+sudo snort -c /etc/snort/snort.lua -r capture.pcap --perf-file /tmp/perf.csv</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ Architecture ══════════════════════════════════ -->
+<template id="tpl-architecture">
+<article class="topic">
+  <h2>Snort Architecture</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l2">L2 Data Link</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">The DAQ layer captures raw L2 frames; the decoder strips L3/L4 headers; preprocessors/inspectors reconstruct L4 streams; the detection engine matches L7 payload content against rules.</span>
+  </div>
+  <p>Snort processes packets through a pipeline of modules. Understanding the pipeline explains why certain configurations are needed and how rules interact with preprocessed traffic.</p>
+
+  <h3>Snort 2 Pipeline</h3>
+  <pre><code>Network Interface
+       ↓
+   DAQ Layer         <span class="cm"># Packet capture (pcap/AF_PACKET/NFQ)</span>
+       ↓
+ Packet Decoder      <span class="cm"># Decode Ethernet → IP → TCP/UDP/ICMP</span>
+       ↓
+  Preprocessors      <span class="cm"># frag3, stream5, http_inspect, sfportscan</span>
+       ↓
+Detection Engine     <span class="cm"># Match packets against loaded rules (MPSE)</span>
+       ↓
+ Output Plugins      <span class="cm"># alert_fast, unified2, log_tcpdump, syslog</span></code></pre>
+
+  <h3>Snort 3 Pipeline</h3>
+  <pre><code>Network Interface
+       ↓
+   DAQ Layer         <span class="cm"># DAQ 3.x (pcap, afpacket, dpdk)</span>
+       ↓
+ Packet Decoder      <span class="cm"># Codec plugins — modular protocol decoding</span>
+       ↓
+   Inspectors        <span class="cm"># stream, http_inspect, ftp, smtp, dns, ssl</span>
+       ↓
+  IPS (Rules)        <span class="cm"># ips{} block in snort.lua — loads rule files</span>
+       ↓
+  Event Queue        <span class="cm"># Queues and prioritizes events</span>
+       ↓
+  Alert Loggers      <span class="cm"># alert_fast, alert_full, alert_json, alert_syslog</span></code></pre>
+
+  <h3>Key Preprocessors (Snort 2)</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Preprocessor</th><th>Function</th><th>Why It Matters</th></tr></thead>
+      <tbody>
+        <tr><td><code>frag3</code></td><td>IP fragment reassembly</td><td>Attackers fragment packets to evade detection; frag3 reassembles before rule matching</td></tr>
+        <tr><td><code>stream5</code></td><td>TCP stream reassembly and state tracking</td><td>Enables flow-based rules and prevents evasion via packet splitting</td></tr>
+        <tr><td><code>http_inspect</code></td><td>HTTP normalization</td><td>Decodes %xx encoding, Unicode, IIS double-decode before rule matching</td></tr>
+        <tr><td><code>sfportscan</code></td><td>Port scan detection</td><td>Tracks connection attempts across ports/hosts to detect scan patterns</td></tr>
+        <tr><td><code>smtp</code></td><td>SMTP normalization</td><td>Decodes MIME, enables email-specific rules</td></tr>
+        <tr><td><code>ftp_telnet</code></td><td>FTP/Telnet decoding</td><td>Normalizes FTP commands, tracks data channels</td></tr>
+        <tr><td><code>dcerpc2</code></td><td>MS-RPC decoding</td><td>Enables SMB/RPC attack detection (MS08-067, EternalBlue)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Snort 3 Inspectors (Equivalents)</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Snort 3 Inspector</th><th>Replaces</th></tr></thead>
+      <tbody>
+        <tr><td><code>stream</code></td><td>stream5 (frag + TCP/UDP/ICMP reassembly)</td></tr>
+        <tr><td><code>http_inspect</code></td><td>http_inspect (completely rewritten, HTTP/2 support)</td></tr>
+        <tr><td><code>port_scan</code></td><td>sfportscan</td></tr>
+        <tr><td><code>ftp_server</code> / <code>ftp_client</code></td><td>ftp_telnet</td></tr>
+        <tr><td><code>smtp</code></td><td>smtp preprocessor</td></tr>
+        <tr><td><code>ssl</code></td><td>ssl preprocessor</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>The packet flows through the pipeline layer by layer</h4>
+      <ul>
+        <li>DAQ captures L2 frames off the wire; decoder extracts L3 IP header and L4 TCP/UDP header</li>
+        <li>Preprocessors (Snort 2) or inspectors (Snort 3) reconstruct fragmented L3 packets before the rules engine sees them</li>
+        <li>The detection engine only sees normalized traffic — not raw evasion attempts</li>
+      </ul>
+      <pre><code><span class="cm"># Verify Snort can see packets on your interface</span>
+sudo snort -v -i eth0 -n 10</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Preprocessor interactions with rule matching</h4>
+      <ul>
+        <li>http_inspect decodes L7 HTTP before rule matching — a rule with <code>http_uri</code> sees the normalized URI, not raw %xx encoding</li>
+        <li>stream5 maintains L4 TCP state — rules with <code>flow:established</code> only fire on complete 3-way handshake sessions</li>
+        <li>frag3 reassembles L3 fragments before L7 inspection — attackers can't evade by splitting a shellcode across fragments</li>
+      </ul>
+      <pre><code><span class="cm"># Check which preprocessors are loaded in Snort 2</span>
+sudo snort -T -c /etc/snort/snort.conf 2>&amp;1 | grep "Preprocessor"</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Choosing the right DAQ for your deployment</h4>
+      <ul>
+        <li>AF_PACKET DAQ offers zero-copy packet acquisition — significantly lower CPU overhead vs pcap for high-throughput links</li>
+        <li>DPDK DAQ bypasses the kernel entirely for 10Gbps+ wire-speed IPS deployments</li>
+        <li>NFQ DAQ integrates with iptables NFQUEUE for inline IPS without a dedicated bridge NIC</li>
+      </ul>
+      <pre><code><span class="cm"># Use AF_PACKET for better performance than pcap</span>
+sudo snort -c /etc/snort/snort.conf --daq afpacket -i eth0 -A fast -l /var/log/snort/</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ Installation ══════════════════════════════════ -->
+<template id="tpl-installation">
+<article class="topic">
+  <h2>Installation &amp; Verification</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Installation configures Snort to capture at L3/L4 and apply L7 detection rules; HOME_NET and HTTP_PORTS set which L3 addresses and L4 ports Snort protects.</span>
+  </div>
+
+  <h3>Snort 2 — Package Install (Debian/Ubuntu)</h3>
+  <pre><code><span class="cm"># Install Snort 2</span>
+sudo apt update
+sudo apt install snort
+
+<span class="cm"># During install, enter your HOME_NET (e.g., 192.168.1.0/24)</span>
+<span class="cm"># This writes the initial snort.conf</span>
+
+<span class="cm"># Verify installation</span>
+snort --version
+<span class="cm"># Output: Snort version 2.9.x.x GRE (Build xxx)</span>
+
+<span class="cm"># Test config file syntax</span>
+sudo snort -T -c /etc/snort/snort.conf
+<span class="cm"># Look for: Snort successfully validated the configuration!</span>
+
+<span class="cm"># File locations after apt install</span>
+/etc/snort/snort.conf        <span class="cm"># Main config</span>
+/etc/snort/rules/            <span class="cm"># Rule files</span>
+/etc/snort/rules/local.rules <span class="cm"># Your custom rules</span>
+/var/log/snort/              <span class="cm"># Alert and log output</span></code></pre>
+
+  <h3>Snort 3 — Package Install (Ubuntu 22.04+)</h3>
+  <pre><code><span class="cm"># Install dependencies</span>
+sudo apt install -y build-essential libpcap-dev libpcre3-dev \
+  libdumbnet-dev bison flex zlib1g-dev liblzma-dev openssl \
+  libssl-dev pkg-config hwloc libhwloc-dev cmake luajit \
+  libluajit-5.1-dev libunwind-dev libfl-dev
+
+<span class="cm"># Install via apt (Ubuntu 22.04 has Snort 3)</span>
+sudo apt install snort3
+
+<span class="cm"># Verify</span>
+snort --version
+<span class="cm"># Output: Snort++ 3.x.x.x</span>
+
+<span class="cm"># Test Snort 3 config</span>
+sudo snort -T -c /etc/snort/snort.lua
+<span class="cm"># Look for: Snort successfully validated the configuration (with 0 warnings).</span>
+
+<span class="cm"># Snort 3 file locations</span>
+/etc/snort/snort.lua         <span class="cm"># Main Lua config</span>
+/etc/snort/snort_defaults.lua <span class="cm"># Default variable values</span>
+/etc/snort/rules/            <span class="cm"># Rule files</span>
+/usr/share/snort/lua/        <span class="cm"># Snort 3 Lua libs</span>
+/var/log/snort/              <span class="cm"># Alert output</span></code></pre>
+
+  <h3>Downloading Community Rules</h3>
+  <pre><code><span class="cm"># Snort 2 community rules (free, no account needed)</span>
+wget https://www.snort.org/downloads/community/community-rules.tar.gz
+tar -xzf community-rules.tar.gz -C /etc/snort/rules/
+
+<span class="cm"># Registered rules (free Snort.org account required)</span>
+<span class="cm"># Download from snort.org after login, then:</span>
+tar -xzf snortrules-snapshot-29200.tar.gz -C /etc/snort/
+
+<span class="cm"># Snort 3 community rules</span>
+wget https://www.snort.org/downloads/community/snort3-community-rules.tar.gz
+tar -xzf snort3-community-rules.tar.gz -C /etc/snort/rules/
+
+<span class="cm"># Update with PulledPork (automated rule management)</span>
+sudo pulledpork -c /etc/pulledpork/pulledpork.conf -l</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Verify the install and test config syntax</h4>
+      <ul>
+        <li>After install, always run <code>snort -T -c snort.conf</code> before attempting live capture</li>
+        <li>The HOME_NET variable tells Snort which L3 subnet is "inside" — rules use <code>$HOME_NET</code> and <code>$EXTERNAL_NET</code></li>
+        <li>Community rules cover common L7 attacks (HTTP, DNS, SMTP) without requiring a paid subscription</li>
+      </ul>
+      <pre><code><span class="cm"># Quick post-install validation</span>
+snort --version
+sudo snort -T -c /etc/snort/snort.conf
+<span class="cm"># Expect: Snort successfully validated the configuration!</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Rule management with PulledPork</h4>
+      <ul>
+        <li>PulledPork automates downloading, merging, and updating registered/subscribed Snort rule sets</li>
+        <li>Run PulledPork via cron to keep L7 detection signatures current with new CVEs and attack patterns</li>
+        <li>Merge community rules with your local.rules — PulledPork handles SID conflict resolution</li>
+      </ul>
+      <pre><code><span class="cm"># Automate daily rule updates (run as root via cron)</span>
+sudo pulledpork -c /etc/pulledpork/pulledpork.conf -l
+sudo snort -T -c /etc/snort/snort.conf &amp;&amp; sudo systemctl restart snort</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Snort 3 build from source with Hyperscan</h4>
+      <ul>
+        <li>Hyperscan replaces MPSE for multi-pattern L7 matching — delivers 2–5x rule-matching throughput improvement</li>
+        <li>Compile libdaq with DPDK support for kernel-bypass L2/L3 capture at 10–40Gbps line rates</li>
+        <li>Use <code>--enable-tcmalloc</code> at compile time to reduce memory fragmentation in long-running NIDS deployments</li>
+      </ul>
+      <pre><code><span class="cm"># Build Snort 3 with Hyperscan support</span>
+sudo apt install libhyperscan-dev
+./configure_cmake.sh --prefix=/usr/local --enable-tcmalloc
+cd build &amp;&amp; make -j$(nproc) &amp;&amp; sudo make install</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ Quick Start ═══════════════════════════════════ -->
+<template id="tpl-quick-start">
+<article class="topic">
+  <h2>Quick Start Commands</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Quick start commands exercise the full Snort pipeline — reading L3/L4 headers and matching L7 content rules against live or captured traffic.</span>
+  </div>
+
+  <h3>Test Against a PCAP File</h3>
+  <pre><code><span class="cm"># Run Snort against a PCAP (no live capture — great for testing rules)</span>
+sudo snort -r /path/to/capture.pcap -c /etc/snort/snort.conf -A console
+
+<span class="cm"># Run with only local rules, output to console</span>
+sudo snort -r capture.pcap -c /etc/snort/snort.conf \
+  --rule-path /etc/snort/rules/local.rules -A console
+
+<span class="cm"># Snort 3 equivalent</span>
+sudo snort -r capture.pcap -c /etc/snort/snort.lua \
+  --rule-path /etc/snort/rules/local.rules -A alert_fast</code></pre>
+
+  <h3>Live Capture Quick Test</h3>
+  <pre><code><span class="cm"># Sniffer mode — print packets to console</span>
+sudo snort -v -i eth0
+
+<span class="cm"># NIDS mode — live capture with rules, fast alerts to console</span>
+sudo snort -c /etc/snort/snort.conf -i eth0 -A console
+
+<span class="cm"># NIDS mode — write alerts to file</span>
+sudo snort -c /etc/snort/snort.conf -i eth0 -A fast -l /var/log/snort/</code></pre>
+
+  <h3>Validate a Single Rule</h3>
+  <pre><code><span class="cm"># Write a test rule to /tmp/test.rules, then validate:</span>
+echo 'alert icmp any any -> any any (msg:"ICMP Ping"; sid:9000001; rev:1;)' \
+  > /tmp/test.rules
+
+sudo snort -T -c /etc/snort/snort.conf \
+  --rule-path /tmp/test.rules
+<span class="cm"># Look for: Snort successfully validated the configuration!</span>
+
+<span class="cm"># Test against ICMP traffic in a PCAP</span>
+sudo snort -r /tmp/ping.pcap \
+  -c /etc/snort/snort.conf \
+  --rule-path /tmp/test.rules \
+  -A console -q
+<span class="cm"># -q suppresses banner and stats, shows only alerts</span></code></pre>
+
+  <div class="callout note">
+    <strong>Testing workflow:</strong> Write rule → validate with <code>-T</code> → test against known PCAP with <code>-r</code> and <code>-A console</code> → confirm alert fires → deploy to live interface.
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Test rules safely against a PCAP before live deployment</h4>
+      <ul>
+        <li>Use <code>-r capture.pcap</code> to replay L3/L4/L7 traffic without touching a live interface</li>
+        <li><code>-A console</code> prints alerts to your terminal in real time — ideal for verifying a new rule fires</li>
+        <li><code>-q</code> suppresses the banner and statistics — only alerts are shown</li>
+      </ul>
+      <pre><code>sudo snort -c /etc/snort/snort.conf -r capture.pcap -A console -q</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Validate a single custom rule end-to-end</h4>
+      <ul>
+        <li>Write the rule to a temp file, validate syntax with <code>-T</code>, then test against a targeted PCAP</li>
+        <li>Create test PCAPs with <code>tcpreplay</code> or <code>hping3</code> to simulate specific L4/L7 attack payloads</li>
+        <li>Compare alert SID in console output against your rule's <code>sid:</code> value to confirm the right rule fired</li>
+      </ul>
+      <pre><code><span class="cm"># Validate and test a single rule</span>
+echo 'alert icmp any any -> any any (msg:"ICMP Test"; sid:9000001; rev:1;)' > /tmp/test.rules
+sudo snort -T -c /etc/snort/snort.conf --rule-path /tmp/test.rules
+sudo snort -r /tmp/ping.pcap -c /etc/snort/snort.conf --rule-path /tmp/test.rules -A console -q</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Scripted regression testing for rule changes</h4>
+      <ul>
+        <li>Maintain a library of attack PCAPs (one per CVE or attack pattern) and automate Snort rule regression tests</li>
+        <li>Use <code>snort -A csv</code> output and parse SIDs programmatically to assert rules fire on known-bad PCAPs and don't fire on known-good ones</li>
+        <li>Integrate rule testing into CI/CD — new rules must pass automated PCAP regression before deployment to production sensors</li>
+      </ul>
+      <pre><code><span class="cm"># Run against attack PCAP and assert SID fires</span>
+sudo snort -c /etc/snort/snort.conf -r /opt/pcap-tests/sqli-union.pcap \
+  -A csv -q -l /tmp/ 2>/dev/null
+grep "1000101" /tmp/alert.csv &amp;&amp; echo "PASS" || echo "FAIL"</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ Sub-pages ════════════════════════════════════ -->
+<template id="tpl-sub-pages">
+<article class="topic">
+  <h2>Snort Notebooks</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Each sub-notebook focuses on a specific aspect of Snort — rules target L3/L4/L7 traffic; modes control how packets are captured at L2/L3; alerts report L3 IPs, L4 ports, and L7 signature matches.</span>
+  </div>
+  <p>This section is organized into five focused notebooks covering all major aspects of Snort IDS/IPS deployment and analysis.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Notebook</th><th>Contents</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><a href="snort-rules.html" style="color:var(--accent-h)">Rule Syntax</a></td>
+          <td>Complete rule header and options breakdown — every field explained; content, pcre, flags, flow, threshold; real attack detection examples</td>
+        </tr>
+        <tr>
+          <td><a href="snort-modes.html" style="color:var(--accent-h)">Operating Modes</a></td>
+          <td>Sniffer mode, packet logger, NIDS mode, inline IPS — commands, flags, DAQ modules, deployment patterns</td>
+        </tr>
+        <tr>
+          <td><a href="snort-config.html" style="color:var(--accent-h)">Configuration</a></td>
+          <td>snort.conf variables (HOME_NET, EXTERNAL_NET, HTTP_SERVERS), preprocessor config, output plugins, include structure, Snort 3 Lua config</td>
+        </tr>
+        <tr>
+          <td><a href="snort-alerts.html" style="color:var(--accent-h)">Alert Formats</a></td>
+          <td>Alert modes (-A fast/full/console/unified2), anatomy of fast and full alert output, reading GID:SID:REV, barnyard2</td>
+        </tr>
+        <tr>
+          <td><a href="snort-lab.html" style="color:var(--accent-h)">Detection Lab</a></td>
+          <td>Static lab: write rules to detect a port scan and SQL injection, run Snort against simulated traffic, read and interpret realistic alert output, tune with threshold</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Rule File Quick Reference</h3>
+  <pre><code><span class="cm"># Snort rule categories (community + registered rules)</span>
+attack-responses.rules    <span class="cm"># Server responses indicating successful exploits</span>
+backdoor.rules            <span class="cm"># Known backdoor C2 traffic</span>
+bad-traffic.rules         <span class="cm"># Malformed or illegal packets</span>
+browser-firefox.rules     <span class="cm"># Firefox-specific vulnerabilities</span>
+chat.rules                <span class="cm"># Unauthorized IM/chat protocols</span>
+ddos.rules                <span class="cm"># DDoS attack patterns</span>
+dns.rules                 <span class="cm"># DNS protocol attacks and anomalies</span>
+dos.rules                 <span class="cm"># Denial of service attacks</span>
+exploit.rules             <span class="cm"># Generic exploit patterns</span>
+ftp.rules                 <span class="cm"># FTP protocol attacks</span>
+icmp.rules                <span class="cm"># ICMP-based attacks and tunneling</span>
+malware-backdoor.rules    <span class="cm"># Malware C2 patterns</span>
+malware-cnc.rules         <span class="cm"># Command and control traffic</span>
+policy-violation.rules    <span class="cm"># Policy enforcement (P2P, streaming, etc.)</span>
+scan.rules                <span class="cm"># Port scan and reconnaissance</span>
+server-apache.rules       <span class="cm"># Apache-specific vulnerabilities</span>
+server-iis.rules          <span class="cm"># IIS-specific vulnerabilities</span>
+server-mssql.rules        <span class="cm"># MS SQL Server attacks</span>
+server-mysql.rules        <span class="cm"># MySQL attacks</span>
+server-webapp.rules       <span class="cm"># Generic web application attacks</span>
+shellcode.rules           <span class="cm"># Shellcode payloads in traffic</span>
+smtp.rules                <span class="cm"># SMTP protocol attacks</span>
+snmp.rules                <span class="cm"># SNMP attacks</span>
+sql.rules                 <span class="cm"># SQL injection and database attacks</span>
+web-attacks.rules         <span class="cm"># Web attack patterns (traversal, injection)</span>
+web-cgi.rules             <span class="cm"># CGI-specific attacks</span>
+web-php.rules             <span class="cm"># PHP-specific attacks</span>
+local.rules               <span class="cm"># YOUR custom rules — write here</span></code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Know where to write custom rules and which notebooks to use</h4>
+      <ul>
+        <li>Always write custom rules to <code>local.rules</code> with SIDs starting at 1000001 — never edit community rule files directly</li>
+        <li>Start with the Rule Syntax notebook to understand the L3/L4 header and L7 options</li>
+        <li>Use the Detection Lab notebook to practice end-to-end rule writing and alert interpretation</li>
+      </ul>
+      <pre><code><span class="cm"># Start with a simple ICMP rule in local.rules</span>
+alert icmp any any -> $HOME_NET any (msg:"ICMP to Internal Net"; itype:8; sid:1000001; rev:1;)</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Organize rules by L7 protocol category</h4>
+      <ul>
+        <li>Group rules by service (HTTP, DNS, SMTP, SMB) matching the community rule file naming convention</li>
+        <li>Reference community rule files by category — <code>web-attacks.rules</code> covers L7 HTTP attacks; <code>scan.rules</code> covers L3/L4 reconnaissance</li>
+        <li>Load only the rule files relevant to your environment to reduce false positives and CPU overhead</li>
+      </ul>
+      <pre><code><span class="cm"># In snort.conf — load only relevant rule categories</span>
+include $RULE_PATH/local.rules
+include $RULE_PATH/scan.rules
+include $RULE_PATH/web-attacks.rules
+include $RULE_PATH/sql.rules</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Shared object (SO) rules for performance-sensitive detection</h4>
+      <ul>
+        <li>SO rules are precompiled C code that runs inside the Snort engine — no PCRE overhead, much faster for complex L7 protocol inspection</li>
+        <li>Used for protocols like Modbus, DNP3, and certain malware C2 patterns that are too complex or too slow to express in text rules</li>
+        <li>Requires matching Snort version and OS — SO rules are not cross-version compatible</li>
+      </ul>
+      <pre><code><span class="cm"># Enable SO rules in snort.conf</span>
+dynamicdetection directory /usr/lib/snort_dynamicrules/
+<span class="cm"># Load SO rule stubs (text wrappers that reference the .so library)</span>
+include $SO_RULE_PATH/browser-firefox.rules</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: "Snort — NIDS/IPS Reference",
+  topics: [
+    { id: "overview",      badge: "01", label: "Overview" },
+    { id: "architecture",  badge: "02", label: "Architecture" },
+    { id: "installation",  badge: "03", label: "Installation" },
+    { id: "quick-start",   badge: "04", label: "Quick Start" },
+    { id: "sub-pages",     badge: "05", label: "Notebooks" },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

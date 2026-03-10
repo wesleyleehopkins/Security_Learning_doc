@@ -1,0 +1,1588 @@
+<!DOCTYPE html>
+<html lang="eng">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Velociraptor — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .xref { display:inline; color:var(--accent,#3b82f6); font-size:.75em; font-weight:600; border:1px solid var(--accent,#3b82f6); border-radius:3px; padding:1px 5px; margin-left:4px; text-decoration:none; cursor:pointer; white-space:nowrap; opacity:.85; }
+    .xref:hover { background:rgba(59,130,246,.15); opacity:1; }
+    .xref-group { color:#8b949e; font-size:.82em; margin-left:2px; }
+    td .xref-group { display:block; margin-top:3px; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="index.html" class="nav-brand">
+    <span class="icon">⬡</span> SOC Notes
+  </a>
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()">☰</button>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html" class="active">Velociraptor</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sb-title">Velociraptor</div>
+    <nav id="sb-nav"></nav>
+  </aside>
+
+  <main id="main" class="main">
+    <div id="content-area"></div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 01 -->
+<template id="tpl-overview">
+<article class="topic">
+  <h2>Overview &amp; Architecture</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Velociraptor communicates over HTTPS (L7) between server and agents; all artifact collection and forensic data exchange occurs at the application layer.</span>
+  </div>
+
+  <p>Velociraptor is an advanced open-source DFIR (Digital Forensics and Incident Response) and endpoint visibility platform. It was built by Rapid7 engineers and is now community-maintained. Velociraptor uses VQL (Velociraptor Query Language) — a SQL-like language — to hunt across thousands of endpoints simultaneously, collect forensic artifacts, and perform live response actions in real time.</p>
+
+  <h3>What Velociraptor Does Better Than Traditional Tools</h3>
+  <table>
+    <thead><tr><th>Capability</th><th>Traditional IR</th><th>Velociraptor</th></tr></thead>
+    <tbody>
+      <tr><td>Scale</td><td>Manual triage one system at a time</td><td>Hunt 10,000+ endpoints simultaneously with one query</td></tr>
+      <tr><td>Speed</td><td>Hours to image and ship a disk</td><td>Live artifact collection in seconds per host</td></tr>
+      <tr><td>Forensics depth</td><td>Requires physical access or agent deployment</td><td>Built-in artifact library covers NTFS, MFT, USN journal, prefetch, shimcache, amcache, registry hives</td></tr>
+      <tr><td>Flexibility</td><td>Fixed tools, fixed outputs</td><td>Custom VQL queries for any data on the endpoint</td></tr>
+      <tr><td>Memory forensics</td><td>Full memory dump (4-16 GB)</td><td>Targeted process memory scan with YARA in seconds</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Architecture</h3>
+  <pre><code># Components:
+# Velociraptor Server  → central management, GUI, data store, hunt coordinator
+# Velociraptor Client  → lightweight agent on endpoints (~10 MB binary)
+# VQL Engine           → query processor (runs on both server and client)
+# Artifact Repository  → library of pre-built collection specs (YAML)
+# Data Store           → file-based storage (no external DB required)
+
+# Communication:
+# Client ←→ Server over HTTPS (port 443 or 8000)
+# Mutual TLS — certificates generated at server setup
+# Clients poll server for new tasks
+# Results streamed back in chunks
+
+# Single binary deployment:
+# One binary = server mode OR client mode OR offline collector
+# velociraptor --config server.config.yaml frontend
+# velociraptor --config client.config.yaml client</code></pre>
+
+  <h3>Lab Network Reference</h3>
+  <table>
+    <thead><tr><th>Host</th><th>IP</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td>Ubuntu Server</td><td>192.168.56.20</td><td>Velociraptor server + GUI (port 8889)</td></tr>
+      <tr><td>Windows 10</td><td>192.168.56.30</td><td>Velociraptor client — primary hunt target</td></tr>
+      <tr><td>Kali Linux</td><td>192.168.56.10</td><td>Attacker — generates artifacts to hunt</td></tr>
+    </tbody>
+  </table>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Understanding Velociraptor's purpose and components</h4>
+      <ul>
+        <li>Velociraptor is a DFIR tool that deploys lightweight agents to endpoints and collects forensic artifacts at L7 (HTTPS API)</li>
+        <li>The server is the central coordinator — clients poll it for tasks and stream results back over HTTPS</li>
+        <li>A single binary handles all roles: server, client, and offline collector</li>
+        <li>No external database is required — Velociraptor uses a file-based data store</li>
+      </ul>
+      <pre><code><span class="cm"># Generate initial server config (interactive)</span>
+./velociraptor config generate -i
+<span class="cm"># Start the server</span>
+sudo ./velociraptor --config server.config.yaml frontend
+<span class="cm"># Access the GUI at https://192.168.56.20:8889</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Deploying agents and managing clients at scale</h4>
+      <ul>
+        <li>Build MSI installer packages for silent GPO-based Windows deployment</li>
+        <li>Use mutual TLS certificates (auto-generated at setup) to authenticate clients securely</li>
+        <li>Clients poll the server on a configurable interval — adjust for high-latency networks</li>
+      </ul>
+      <pre><code><span class="cm"># Build Windows client package on the server</span>
+./velociraptor --config server.config.yaml client_config_package --output client_package.zip
+<span class="cm"># Add an admin user</span>
+./velociraptor --config server.config.yaml user add analyst --role administrator</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Production hardening and API integration</h4>
+      <ul>
+        <li>Use a reverse proxy (nginx/Caddy) in front of the GUI with proper TLS cert for production deployments</li>
+        <li>Integrate with SIEM via Velociraptor's built-in syslog and Elastic event output plugins</li>
+        <li>Use the gRPC API for automated hunt scheduling and result retrieval from external orchestration systems</li>
+      </ul>
+      <pre><code><span class="cm"># Export hunt results via API (Python velociraptor-api client)</span>
+python3 -c "
+import pyvelociraptor
+cfg = pyvelociraptor.LoadConfigFile('api.config.yaml')
+stub = pyvelociraptor.connect(cfg)
+# Stream hunt results
+for row in stub.Query(request):
+    print(row)
+"</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 02 -->
+<template id="tpl-vql">
+<article class="topic">
+  <h2>VQL — Velociraptor Query Language</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">VQL queries run inside the Velociraptor agent and collect application-layer artifacts — process lists, file metadata, registry values, and event logs are all L7 data sources.</span>
+  </div>
+  <p>VQL is a SQL-like language specifically designed for endpoint forensics. Every artifact and hunt is built on VQL. Understanding VQL is the key to unlocking Velociraptor's full power.</p>
+
+  <h3>VQL Fundamentals</h3>
+  <pre><code"># VQL structure
+SELECT column1, column2 FROM plugin(arg1='value') WHERE condition
+
+# Basic examples
+SELECT * FROM info()                          -- system info
+SELECT Pid, Name, CommandLine FROM pslist()   -- running processes
+SELECT FullPath, Size, Mtime FROM glob(globs='C:/Windows/Temp/*')  -- list temp dir
+SELECT * FROM users()                         -- local user accounts
+
+# WHERE filtering
+SELECT Name, CommandLine FROM pslist()
+WHERE Name =~ 'powershell'   -- regex match with =~
+
+-- Multiple conditions
+SELECT Name, Pid, CommandLine FROM pslist()
+WHERE Name =~ 'cmd.exe' AND CommandLine =~ 'base64'
+
+# String functions
+SELECT base64decode(string=CommandLine) FROM pslist()
+WHERE CommandLine =~ '[A-Za-z0-9+/]{50,}={0,2}'  -- find base64 in cmdline</code></pre>
+
+  <h3>Essential VQL Plugins</h3>
+  <table>
+    <thead><tr><th>Plugin</th><th>Returns</th><th>Example Use</th></tr></thead>
+    <tbody>
+      <tr><td><code>pslist()</code></td><td>Running processes (PID, PPID, Name, Username, CommandLine)</td><td>Hunt for unusual processes or parent-child chains</td></tr>
+      <tr><td><code>netstat()</code></td><td>Network connections (LocalAddr, RemoteAddr, State, Pid)</td><td>Find C2 connections, unusual listening ports</td></tr>
+      <tr><td><code>users()</code></td><td>Local user accounts</td><td>Detect new accounts, disabled accounts re-enabled</td></tr>
+      <tr><td><code>glob(globs=)</code></td><td>File system entries matching glob pattern</td><td>Hunt for malware in temp dirs, startup locations</td></tr>
+      <tr><td><code>yara(files=, rules=)</code></td><td>YARA matches in files or memory</td><td>Scan all exe files for malware family signatures</td></tr>
+      <tr><td><code>reg_key(key=)</code></td><td>Registry key values</td><td>Check persistence keys, hunt for malware configs</td></tr>
+      <tr><td><code>parse_mft()</code></td><td>NTFS Master File Table records</td><td>Find deleted files, timestomping evidence</td></tr>
+      <tr><td><code>parse_prefetch()</code></td><td>Windows Prefetch execution evidence</td><td>Prove executables ran even if deleted</td></tr>
+      <tr><td><code>windows/EventLogs()</code></td><td>Windows event log entries</td><td>Authentication events, process creation (4688), service install (7045)</td></tr>
+      <tr><td><code>hash(path=)</code></td><td>MD5/SHA1/SHA256 of file</td><td>Compare against known-bad hash list</td></tr>
+      <tr><td><code>stat(filename=)</code></td><td>File metadata (size, timestamps, owner)</td><td>Timestomp detection (created after modified)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>VQL Functions Reference</h3>
+  <pre><code"># Filtering and manipulation
+WHERE Name =~ 'regex'                  -- regex match
+WHERE Name = 'exact'                   -- exact match
+WHERE Size > 1000000                   -- numeric comparison
+WHERE Timestamp > '2024-03-01'         -- date comparison
+format(format='%s:%d', args=[Host, Port])  -- string formatting
+base64decode(string=X)                 -- decode base64
+regex_extract(string=X, re='pattern')  -- extract with regex
+parse_json(data=X)                     -- parse JSON string
+split(string=X, sep=',')               -- split string to array
+join(array=X, sep=', ')                -- join array to string
+
+# Aggregation
+SELECT count() AS Total, Name FROM pslist() GROUP BY Name
+SELECT Name, count() as C FROM pslist() GROUP BY Name ORDER BY C DESC
+
+# Subqueries
+SELECT * FROM foreach(
+    row = {SELECT Pid FROM pslist() WHERE Name =~ 'svchost'},
+    query = {SELECT * FROM handles(pid=Pid)})</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Writing your first VQL queries</h4>
+      <ul>
+        <li>VQL follows <code>SELECT ... FROM plugin() WHERE ...</code> structure — similar to SQL</li>
+        <li>Use <code>=~</code> for regex matching and <code>=</code> for exact string matching</li>
+        <li>Key plugins to know first: <code>pslist()</code>, <code>netstat()</code>, <code>glob()</code>, <code>users()</code></li>
+        <li>Run ad-hoc queries in the Shell tab of any connected client in the web UI</li>
+      </ul>
+      <pre><code><span class="cm"># List running processes and their command lines</span>
+SELECT Pid, Name, CommandLine FROM pslist()
+WHERE Name =~ 'powershell'
+
+<span class="cm"># List files in a directory</span>
+SELECT FullPath, Size FROM glob(globs='C:/Windows/Temp/*')</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Aggregation, subqueries, and chained plugins</h4>
+      <ul>
+        <li>Use <code>foreach(row=..., query=...)</code> to run a second query for each row of the first — essential for per-process inspection</li>
+        <li>Aggregate with <code>GROUP BY</code> and <code>count()</code> to summarize large result sets</li>
+        <li>Use <code>LET</code> to define named subqueries and reuse them across a multi-step investigation</li>
+      </ul>
+      <pre><code><span class="cm"># Count process instances by name — spot unusual counts</span>
+SELECT Name, count() AS C FROM pslist()
+GROUP BY Name ORDER BY C DESC
+
+<span class="cm"># For each svchost, list its open handles</span>
+SELECT * FROM foreach(
+  row={SELECT Pid FROM pslist() WHERE Name =~ 'svchost'},
+  query={SELECT * FROM handles(pid=Pid)})</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Complex VQL pipelines and server-side orchestration</h4>
+      <ul>
+        <li>Use <code>chain()</code> to merge result streams from multiple queries into a unified timeline</li>
+        <li>Use <code>rate()</code> and event-driven plugins (<code>watch_evtx()</code>) for real-time monitoring artifacts</li>
+        <li>Write server-side VQL notebooks to correlate hunt results across all clients programmatically</li>
+      </ul>
+      <pre><code><span class="cm"># Real-time process creation monitoring (event artifact)</span>
+SELECT System.TimeCreated.SystemTime AS Time,
+       EventData.NewProcessName AS Process,
+       EventData.CommandLine AS CmdLine
+FROM watch_evtx(filename='C:/Windows/System32/winevt/Logs/Security.evtx')
+WHERE System.EventID.Value = 4688
+  AND EventData.CommandLine =~ '(enc|bypass|hidden|iex)'</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 03 -->
+<template id="tpl-artifacts">
+<article class="topic">
+  <h2>Artifact Collection</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Artifacts collect application-layer forensic data — process state, registry values, file system metadata, and Windows event logs — all represented as structured L7 artifacts in Velociraptor's YAML format.</span>
+  </div>
+  <p>Artifacts are pre-built, parameterized VQL collections packaged as YAML files. Velociraptor ships with 300+ built-in artifacts covering every major Windows forensic data source.</p>
+
+  <h3>Artifact Categories</h3>
+  <table>
+    <thead><tr><th>Category</th><th>Example Artifacts</th><th>What They Collect</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Windows.System</strong></td>
+        <td><code>Windows.System.Pslist</code><br><code>Windows.System.Services</code></td>
+        <td>Running processes, services, scheduled tasks, network connections</td>
+      </tr>
+      <tr>
+        <td><strong>Windows.Forensics</strong></td>
+        <td><code>Windows.Forensics.Prefetch</code><br><code>Windows.Forensics.Lnk</code><br><code>Windows.Forensics.NTFS</code></td>
+        <td>Execution evidence, link files, MFT records, USN journal</td>
+      </tr>
+      <tr>
+        <td><strong>Windows.Registry</strong></td>
+        <td><code>Windows.Registry.Run</code><br><code>Windows.Registry.Sysinternals</code></td>
+        <td>Persistence keys, software configuration, recent activity</td>
+      </tr>
+      <tr>
+        <td><strong>Windows.EventLogs</strong></td>
+        <td><code>Windows.EventLogs.Evtx</code><br><code>Windows.EventLogs.RDPAuth</code></td>
+        <td>Security log entries, authentication events, PowerShell logging</td>
+      </tr>
+      <tr>
+        <td><strong>Windows.Memory</strong></td>
+        <td><code>Windows.Memory.ProcessDump</code><br><code>Windows.Memory.Yara.Process</code></td>
+        <td>Process memory dumps, YARA scanning of process memory</td>
+      </tr>
+      <tr>
+        <td><strong>Generic.Detection</strong></td>
+        <td><code>Generic.Detection.Yara.Glob</code><br><code>Generic.Detection.HashLookup</code></td>
+        <td>YARA file scanning, IOC hash matching across all files</td>
+      </tr>
+      <tr>
+        <td><strong>Linux</strong></td>
+        <td><code>Linux.Sys.Users</code><br><code>Linux.Forensics.Journal</code></td>
+        <td>Linux user accounts, systemd journal, bash history, cron jobs</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Running Artifacts — Web UI</h3>
+  <pre><code"># In the Velociraptor web UI (https://192.168.56.20:8889):
+# 1. Search panel (left sidebar) → type client hostname → select client
+# 2. Click "Collected" tab → "New Collection"
+# 3. Search artifact: e.g., "Windows.System.Pslist"
+# 4. Configure parameters (if any)
+# 5. Click "Launch"
+# 6. Results appear in the collection output tab
+
+# Common on-demand collections:
+# Windows.System.Pslist          → processes
+# Windows.System.Services        → installed services
+# Windows.Network.Netstat        → network connections
+# Windows.Registry.Run           → Run key persistence
+# Windows.Forensics.Prefetch     → execution evidence
+# Windows.EventLogs.Evtx         → raw event logs</code></pre>
+
+  <h3>Running Artifacts — VQL Client Shell</h3>
+  <pre><code"># In Velociraptor web UI: Shell tab → select VQL → run queries directly
+
+-- Check for Meterpreter listening on 4444
+SELECT Pid, Laddr, ForeignAddr, Status FROM netstat()
+WHERE ForeignAddr =~ ':4444'
+
+-- Find processes with unusual parent chains (non-cmd cmd.exe)
+SELECT Pid, Ppid, Name, CommandLine,
+       process_tracker_get(id=Ppid).Data.Name AS ParentName
+FROM pslist()
+WHERE Name =~ 'cmd.exe' AND NOT ParentName =~ '(explorer|powershell|cmd)'
+
+-- Scan temp dir for executables
+SELECT FullPath, Size, hash(path=FullPath).SHA256 AS SHA256
+FROM glob(globs='C:/Users/*/AppData/Local/Temp/*.exe')
+
+-- Check for suspicious scheduled tasks
+SELECT Name, Command, Arguments, NextRunTime
+FROM schtasks()
+WHERE Command =~ '(powershell|cmd|wscript|mshta)'</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Using built-in artifacts for first-response triage</h4>
+      <ul>
+        <li>Artifacts are pre-packaged VQL queries stored as YAML — you don't need to write VQL to use them</li>
+        <li>Start with <code>Windows.System.Pslist</code>, <code>Windows.Network.Netstat</code>, and <code>Windows.Registry.Run</code> for a basic triage</li>
+        <li>Launch collections from the web UI: select client → Collected → New Collection → search artifact name</li>
+        <li>Results appear immediately in the collection output tab — no waiting for disk image</li>
+      </ul>
+      <pre><code><span class="cm"># Quick triage — collect these 3 artifacts first on any incident</span>
+<span class="cm"># Web UI → New Collection → search for:</span>
+Windows.System.Pslist
+Windows.Network.Netstat
+Windows.Registry.Run</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Parameterizing artifacts and using the VQL shell for targeted queries</h4>
+      <ul>
+        <li>Many artifacts accept parameters — e.g., <code>Windows.Forensics.Prefetch</code> can filter by executable name</li>
+        <li>Use the Shell tab for ad-hoc VQL instead of full artifact collections when speed matters</li>
+        <li>Chain multiple artifact results in a Notebook cell to correlate findings across data sources</li>
+      </ul>
+      <pre><code><span class="cm"># In Shell tab — check for exes in Temp directories with hash</span>
+SELECT FullPath, Size, hash(path=FullPath).SHA256 AS SHA256
+FROM glob(globs='C:/Users/*/AppData/Local/Temp/*.exe')
+
+<span class="cm"># Check recently installed services</span>
+SELECT DisplayName, PathName, StartMode FROM services()
+WHERE StartMode = 'Auto' AND PathName =~ '(Temp|AppData)'</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Building artifact pipelines and event-driven collections</h4>
+      <ul>
+        <li>Use <code>SERVER_EVENT</code> artifact type to trigger collections automatically on client connect or hunt completion</li>
+        <li>Combine multiple sources in a single artifact using <code>sources:</code> blocks with separate VQL queries per section</li>
+        <li>Use <code>Generic.Client.DiskUsage</code> + custom thresholds to build proactive capacity and anomaly monitoring</li>
+      </ul>
+      <pre><code><span class="cm"># Multi-source artifact example structure</span>
+sources:
+  - name: Processes
+    query: SELECT Pid, Name, CommandLine FROM pslist()
+  - name: Network
+    query: SELECT Pid, ForeignAddr, Status FROM netstat()
+  - name: Registry
+    query: SELECT Key, Value, Data FROM reg_key(
+               key='HKLM/Software/Microsoft/Windows/CurrentVersion/Run/**')</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 04 -->
+<template id="tpl-hunting">
+<article class="topic">
+  <h2>Hunts — Fleet-Wide Queries</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Hunts orchestrate L7 artifact collection across the fleet — the server dispatches VQL task objects to agents over HTTPS; agents execute and stream back application-layer forensic results.</span>
+  </div>
+  <p>Hunts deploy artifact collections to every connected client simultaneously. A single hunt can answer "does any endpoint in our fleet have this malware?" in minutes.
+    <a href="#" class="xref" onclick="loadTopic('artifacts'); return false;">Artifact reference ↗</a>
+  </p>
+
+  <h3>Creating a Hunt</h3>
+  <pre><code"># Web UI: Hunts tab → New Hunt
+# Fill:
+# - Hunt Description: "IOC Hunt — March 2024 Phishing Campaign"
+# - Artifact: Generic.Detection.Yara.Glob (for YARA scan)
+#   OR: Windows.Registry.Run (for persistence check)
+#   OR: Windows.System.Pslist (for process hunt)
+# - Parameters: configure artifact-specific options
+# - Label scope: all clients, or specific label group
+# - Expiry: 1 week
+# Launch Hunt
+
+# Monitor progress:
+# Hunts → click hunt → Progress tab shows clients scheduled/completed/errored</code></pre>
+
+  <h3>Common Hunt Scenarios</h3>
+  <table>
+    <thead><tr><th>Threat</th><th>Artifact</th><th>Key Parameters / VQL Filter</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Cobalt Strike Beacon</td>
+        <td><code>Windows.Memory.Yara.Process</code></td>
+        <td>YARA rule targeting Cobalt Strike config pattern; scan all processes</td>
+      </tr>
+      <tr>
+        <td>WannaCry ransomware</td>
+        <td><code>Generic.Detection.Yara.Glob</code></td>
+        <td>YaraRule = WannaCry rule; PathGlob = C:/Users/**/*.exe</td>
+      </tr>
+      <tr>
+        <td>Suspicious Run key persistence</td>
+        <td><code>Windows.Registry.Run</code></td>
+        <td>Filter for entries pointing to %TEMP%, %APPDATA%, PowerShell, mshta</td>
+      </tr>
+      <tr>
+        <td>Lateral movement (new admin accounts)</td>
+        <td><code>Windows.System.Users</code></td>
+        <td>Find accounts created in last 48 hours that are in Administrators group</td>
+      </tr>
+      <tr>
+        <td>Known-bad hash present</td>
+        <td><code>Generic.Detection.HashLookup</code></td>
+        <td>Provide hash list; scan all EXE/DLL files</td>
+      </tr>
+      <tr>
+        <td>PowerShell download cradles</td>
+        <td><code>Windows.EventLogs.PowerShell</code></td>
+        <td>Filter Event 4104 (script block logging) for IEX, DownloadString, Net.WebClient</td>
+      </tr>
+      <tr>
+        <td>Scheduled task persistence</td>
+        <td><code>Windows.System.ScheduledTasks</code></td>
+        <td>Find tasks with Command containing powershell, mshta, wscript created in last 7 days</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Hunt Results Analysis</h3>
+  <pre><code"># Export hunt results as CSV / download for analysis
+# Web UI: Hunt → Results → Export
+
+# Or query hunt results with VQL in notebook:
+SELECT ClientId, Hostname, FullPath, Size, Hash
+FROM hunt_results(hunt_id='H.1234567890', artifact='Generic.Detection.Yara.Glob')
+WHERE Rule =~ 'CobaltStrike'
+
+# Notebook mode (available in server VQL notebooks):
+-- Find which clients returned hits
+SELECT ClientId, count() AS Matches
+FROM hunt_results(hunt_id='H.1234567890')
+GROUP BY ClientId
+ORDER BY Matches DESC</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Creating and monitoring your first hunt</h4>
+      <ul>
+        <li>A hunt is a single artifact collection dispatched to all (or a filtered set of) connected clients</li>
+        <li>Create hunts from: Hunts tab → New Hunt → select artifact → configure → Launch</li>
+        <li>Monitor progress in the hunt view — see clients scheduled, completed, and errored</li>
+        <li>Results are aggregated server-side and can be exported as CSV for offline analysis</li>
+      </ul>
+      <pre><code><span class="cm"># Hunt for Run key persistence across all clients</span>
+<span class="cm"># Hunts → New Hunt → Artifact: Windows.Registry.Run</span>
+<span class="cm"># Scope: All clients | Expiry: 7 days</span>
+<span class="cm"># After completion: Hunt → Results → Export CSV</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Targeting hunts and analyzing aggregated results</h4>
+      <ul>
+        <li>Scope hunts by label (e.g., only Windows-Servers) to reduce noise and load</li>
+        <li>Use the hunt notebook view to write VQL against <code>hunt_results()</code> for in-server analysis</li>
+        <li>Sort and filter hunt results by ClientId to identify which specific hosts had hits</li>
+      </ul>
+      <pre><code><span class="cm"># Query hunt results in server notebook — find clients with YARA hits</span>
+SELECT ClientId, Hostname, FullPath, Rule
+FROM hunt_results(hunt_id='H.1234567890',
+                  artifact='Windows.Memory.Yara.Process')
+WHERE Rule =~ 'CobaltStrike'
+ORDER BY Hostname</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Automated recurring hunts and server-side correlation</h4>
+      <ul>
+        <li>Use <code>Server.Hunt.Schedule</code> artifact to create recurring automated hunts on a cron-like schedule</li>
+        <li>Combine hunt results with threat intel lookups using <code>http_client()</code> to query VirusTotal or your MISP instance inline</li>
+        <li>Build server-side monitoring notebooks that diff results between consecutive hunt runs to catch new infections</li>
+      </ul>
+      <pre><code><span class="cm"># Scheduled daily hunt via Server artifact VQL</span>
+SELECT hunt_add(
+  description='Daily Persistence Check',
+  artifacts=['Windows.Registry.Run', 'Windows.System.ScheduledTasks'],
+  expires=now() + 86400,
+  labels=['All']
+) FROM scope()</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 05 -->
+<template id="tpl-custom">
+<article class="topic">
+  <h2>Custom Artifact Writing</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Custom artifacts are deployed as YAML over the HTTPS (L7) control channel; they execute VQL on the endpoint to collect application-layer data tailored to specific threat scenarios.</span>
+  </div>
+  <p>Custom artifacts extend Velociraptor's built-in library with org-specific detections, custom IOC hunts, and tailored forensic collections.</p>
+
+  <h3>Artifact YAML Structure</h3>
+  <pre><code"># Artifact file format: YAML
+name: Custom.Hunt.C2ConnectionCheck
+description: |
+  Detect active connections to known C2 IPs from threat intel.
+  Checks netstat against a provided IOC list.
+
+author: SOC Analyst
+type: CLIENT   # CLIENT, SERVER, EVENT, SERVER_EVENT
+
+parameters:
+  - name: C2IPs
+    description: Comma-separated list of C2 IP addresses
+    default: "203.0.113.10,203.0.113.20"
+  - name: C2Ports
+    description: Suspicious destination ports
+    default: "4444,1234,8888"
+
+sources:
+  - name: Connections
+    query: |
+      LET suspicious_ips = split(string=C2IPs, sep=',')
+      LET suspicious_ports = split(string=C2Ports, sep=',')
+
+      SELECT Pid, ForeignAddr, Status,
+             process_tracker_get(id=Pid).Data.Name AS ProcessName,
+             process_tracker_get(id=Pid).Data.CommandLine AS CommandLine
+      FROM netstat()
+      WHERE ForeignAddr =~ C2IPs
+         OR str(str=Rport) IN suspicious_ports</code></pre>
+
+  <h3>Custom YARA Hunt Artifact</h3>
+  <pre><code"># Custom artifact for specific YARA hunt
+name: Custom.Detection.YaraIOCHunt
+description: Hunt for custom IOC using YARA across all executables
+type: CLIENT
+
+parameters:
+  - name: YaraRule
+    type: yara
+    default: |
+      rule Custom_IOC {
+        strings:
+          $c2 = "evil-c2.example.com"
+          $mutex = "Global\\EvilMutex"
+        condition:
+          any of them
+      }
+  - name: PathGlob
+    default: "C:/Users/**/*.exe,C:/Windows/Temp/**"
+
+sources:
+  - query: |
+      SELECT FullPath, Rule, Meta, Strings,
+             hash(path=FullPath).SHA256 AS SHA256
+      FROM foreach(
+        row=glob(globs=split(string=PathGlob, sep=',')),
+        query={
+          SELECT FullPath, Rule, Meta, Strings
+          FROM yara(files=FullPath, rules=YaraRule)
+        })</code></pre>
+
+  <h3>Loading Custom Artifacts</h3>
+  <pre><code"># Via web UI:
+# View → Artifacts → Upload → select .yaml file
+
+# Via API:
+curl -s -H "Content-Type: application/json" \
+     -X POST https://192.168.56.20:8889/api/v1/ImportArtifacts \
+     -d "{\"artifact\": $(cat custom_artifact.yaml | python3 -c \
+         'import sys,json; print(json.dumps(sys.stdin.read()))')}"
+
+# Via velociraptor CLI:
+velociraptor --config server.yaml artifacts upload custom_artifact.yaml</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Understanding artifact YAML structure</h4>
+      <ul>
+        <li>Artifacts are YAML files with: <code>name</code>, <code>description</code>, <code>type</code> (CLIENT/SERVER), <code>parameters</code>, and <code>sources</code> sections</li>
+        <li>Start by copying an existing artifact and modifying the VQL query in the <code>sources.query</code> block</li>
+        <li>Upload artifacts via web UI: View → Artifacts → Upload → select .yaml file</li>
+        <li>The artifact name namespace convention is: <code>Category.Subcategory.Name</code> (e.g., <code>Custom.Hunt.MyCheck</code>)</li>
+      </ul>
+      <pre><code><span class="cm"># Minimal custom artifact skeleton</span>
+name: Custom.Triage.TempExes
+description: List executables in Temp directories
+type: CLIENT
+sources:
+  - query: |
+      SELECT FullPath, Size, hash(path=FullPath).MD5 AS MD5
+      FROM glob(globs='C:/Users/*/AppData/Local/Temp/*.exe')</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Parameterized artifacts and IOC-driven detection</h4>
+      <ul>
+        <li>Use <code>parameters:</code> blocks so SOC analysts can enter IOC values (IPs, hashes, ports) at hunt time without editing YAML</li>
+        <li>Use <code>split()</code> to accept comma-separated lists as parameters and convert them to arrays for <code>IN</code> checks</li>
+        <li>Combine <code>netstat()</code> with a C2 IP parameter list for targeted connection checks</li>
+      </ul>
+      <pre><code><span class="cm"># C2 connection check with configurable IP list</span>
+parameters:
+  - name: C2IPs
+    default: "203.0.113.10,203.0.113.20"
+sources:
+  - query: |
+      LET ips = split(string=C2IPs, sep=',')
+      SELECT Pid, ForeignAddr, Status FROM netstat()
+      WHERE ForeignAddr IN ips</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>YARA hunt artifacts and multi-source correlated detection</h4>
+      <ul>
+        <li>Use <code>type: yara</code> parameter type for artifacts that accept inline YARA rules — the GUI renders a syntax-highlighted YARA editor</li>
+        <li>Use <code>foreach()</code> to scan every file matched by a glob through YARA in a single artifact execution pass</li>
+        <li>Export artifact YAML to a Git repository for version-controlled detection-as-code workflows</li>
+      </ul>
+      <pre><code><span class="cm"># YARA file hunt across user-writable paths</span>
+parameters:
+  - name: YaraRule
+    type: yara
+    default: |
+      rule SuspiciousString {
+        strings: $s = "evil-c2.example.com"
+        condition: $s
+      }
+  - name: PathGlob
+    default: "C:/Users/**/*.exe"
+sources:
+  - query: |
+      SELECT FullPath, Rule, hash(path=FullPath).SHA256 AS SHA256
+      FROM foreach(
+        row=glob(globs=split(string=PathGlob, sep=',')),
+        query={SELECT FullPath, Rule FROM yara(files=FullPath, rules=YaraRule)})</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 06 -->
+<template id="tpl-offline">
+<article class="topic">
+  <h2>Offline Collection</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Offline collection gathers the same L7 application-layer artifacts as live collection — the difference is that results are written locally to a ZIP file rather than streamed back over HTTPS to the server.</span>
+  </div>
+  <p>Offline collection lets you run Velociraptor artifacts on systems without network connectivity to the server — air-gapped machines, seized devices, or quick triage in the field.</p>
+
+  <h3>Creating an Offline Collector</h3>
+  <pre><code"># Generate an offline collector package (self-contained executable + artifacts)
+# Web UI: Server Artifacts → Create Offline Collector
+
+# Or via CLI:
+velociraptor --config server.yaml artifacts collect \
+    --output /tmp/offline_collector.zip \
+    Windows.KapeFiles.Targets \
+    Windows.System.Pslist \
+    Windows.Registry.Run \
+    Windows.Forensics.Prefetch
+
+# The output is a standalone zip containing:
+# - velociraptor binary
+# - Pre-embedded artifact queries
+# - Config to run offline
+
+# Run on target system (no network needed):
+# Copy offline_collector.zip to target USB drive
+# On target: velociraptor-v0.x.x-windows-amd64.exe collector_config.yaml
+
+# Results saved locally as:
+# Collection-<hostname>-<date>.zip</code></pre>
+
+  <h3>KAPE Target Compatibility</h3>
+  <pre><code"># KAPE (Kroll Artifact Parser and Extractor) targets are supported
+# Windows.KapeFiles.Targets artifact collects the same data as KAPE
+
+# Common KAPE targets available in Velociraptor:
+# !BasicCollection              — processes, network, users, services
+# !SANS_Triage                  — full triage package
+# EvidenceOfExecution           — prefetch, amcache, shimcache
+# FileSystemActivity            — MFT, $LogFile, $J
+# BrowserActivity               — Chrome, Firefox, IE history/cache
+# AntiVirusLogs                 — AV scan logs
+# RegistryHives                 — SOFTWARE, SYSTEM, SAM, NTUSER.DAT
+
+# Use in Web UI:
+# Collect artifact: Windows.KapeFiles.Targets
+# Parameter: _SANS_Triage = Y   (collect full SANS triage set)</code></pre>
+
+  <h3>Importing Offline Results</h3>
+  <pre><code"># After collecting on the target, import results into Velociraptor server
+# Web UI: Clients → Offline Collections → Import Collection
+# Upload Collection-hostname-date.zip
+
+# Or via CLI:
+velociraptor --config server.yaml tools import \
+    Collection-WIN10-20240315.zip</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>When and how to use offline collection</h4>
+      <ul>
+        <li>Use offline collection for air-gapped machines, seized devices, or field triage without VPN</li>
+        <li>The offline collector is a single self-contained executable — copy to USB and run on the target</li>
+        <li>Results are saved as <code>Collection-hostname-date.zip</code> — import into the server later</li>
+        <li>No network connection to the Velociraptor server is required during collection</li>
+      </ul>
+      <pre><code><span class="cm"># Run collector on target (no server connection needed)</span>
+velociraptor-v0.x.x-windows-amd64.exe collector_config.yaml
+<span class="cm"># Results saved to: Collection-WIN10-20240315.zip</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Generating custom offline collector packages</h4>
+      <ul>
+        <li>Build offline collectors from the web UI: Server Artifacts → Create Offline Collector → select artifacts</li>
+        <li>Or use CLI to generate a ZIP containing the binary plus pre-embedded artifact queries and config</li>
+        <li>Use <code>Windows.KapeFiles.Targets</code> with <code>_SANS_Triage=Y</code> for a comprehensive field triage package</li>
+      </ul>
+      <pre><code><span class="cm"># Build offline collector package via CLI</span>
+velociraptor --config server.yaml artifacts collect \
+    --output /tmp/offline_collector.zip \
+    Windows.KapeFiles.Targets \
+    Windows.System.Pslist \
+    Windows.Registry.Run</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>KAPE target integration and bulk offline import</h4>
+      <ul>
+        <li>Velociraptor's <code>Windows.KapeFiles.Targets</code> mirrors the full KAPE target library — use it as a drop-in KAPE replacement with VQL post-processing</li>
+        <li>Automate bulk import of field-collected ZIPs with a shell script looping <code>velociraptor tools import</code> over a directory</li>
+        <li>After import, run server-side VQL notebooks to correlate findings across all offline collections</li>
+      </ul>
+      <pre><code><span class="cm"># Bulk import all field collections from a directory</span>
+for f in /mnt/usb/collections/*.zip; do
+  velociraptor --config server.yaml tools import "$f"
+  echo "Imported: $f"
+done</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 07 -->
+<template id="tpl-forensics">
+<article class="topic">
+  <h2>Windows Forensic Artifacts Deep Dive</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Windows forensic artifacts — Prefetch, Shimcache, Amcache, MFT, USN Journal, LNK files — are all application-layer (L7) data sources; Velociraptor reads them via the NTFS raw accessor without relying on OS APIs.</span>
+  </div>
+  <p>Velociraptor excels at collecting Windows forensic evidence that traditionally required specialized tools and significant time. These artifacts provide execution and persistence evidence.
+    <a href="#" class="xref" onclick="loadTopic('hunting'); return false;">Use in hunts ↗</a>
+  </p>
+
+  <h3>Execution Evidence Artifacts</h3>
+  <table>
+    <thead><tr><th>Artifact</th><th>What It Proves</th><th>Key Fields</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Prefetch</strong><br><code>Windows.Forensics.Prefetch</code></td>
+        <td>Program executed (even if deleted from disk)</td>
+        <td>Executable, last run time, run count, files loaded during execution</td>
+      </tr>
+      <tr>
+        <td><strong>Shimcache</strong><br><code>Windows.Registry.AppCompatCache</code></td>
+        <td>Program was present on disk (may or may not have run)</td>
+        <td>Path, file modified time, shimcache entry order (execution order in pre-Win10)</td>
+      </tr>
+      <tr>
+        <td><strong>Amcache</strong><br><code>Windows.Forensics.Amcache</code></td>
+        <td>Program executed — with install/execution timestamps</td>
+        <td>Full path, SHA1 hash, first execution time, compile time</td>
+      </tr>
+      <tr>
+        <td><strong>MFT ($MFT)</strong><br><code>Windows.Forensics.NTFS</code></td>
+        <td>File system record — all files, including deleted</td>
+        <td>FullPath, Created, Modified, MFTModified, IsDir, IsAllocated</td>
+      </tr>
+      <tr>
+        <td><strong>USN Journal ($J)</strong><br><code>Windows.Forensics.Usn</code></td>
+        <td>File create/modify/delete operations with timestamps</td>
+        <td>Filename, Timestamp, Reason (FileCreate/FileDelete/Overwrite)</td>
+      </tr>
+      <tr>
+        <td><strong>LNK Files</strong><br><code>Windows.Forensics.Lnk</code></td>
+        <td>User opened a file — records target path, access time</td>
+        <td>TargetPath, AccessTime, WrittenTime, MachineName, Volume</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>VQL for Timestomping Detection</h3>
+  <pre><code"># Timestomping: malware modifies timestamps to blend in
+# Red flag: file Created AFTER Modified (normally impossible in legit usage)
+
+SELECT FullPath,
+       timestamp(epoch=Mtime) AS Modified,
+       timestamp(epoch=Ctime) AS Created,
+       timestamp(epoch=Atime) AS Accessed,
+       Size
+FROM glob(globs='C:/Windows/Temp/**')
+WHERE Ctime > Mtime    -- created after modified = timestomped!
+  AND Size > 0
+
+-- Also check MFT timestamps vs NTFS timestamps (they may differ after stomping)
+SELECT FullPath, FileModified, MFTModified, FileCreated, MFTCreated
+FROM parse_mft(accessor='ntfs', filename='C:')
+WHERE FullPath =~ 'Temp' AND FileModified != MFTModified</code></pre>
+
+  <h3>Persistence Hunting with VQL</h3>
+  <pre><code"># Comprehensive persistence check
+-- Run keys
+SELECT Key, Value, Data FROM reg_key(key='HKLM/Software/Microsoft/Windows/CurrentVersion/Run/**')
+UNION ALL
+SELECT Key, Value, Data FROM reg_key(key='HKCU/Software/Microsoft/Windows/CurrentVersion/Run/**')
+
+-- Services (new services installed recently)
+SELECT DisplayName, PathName, StartMode, State,
+       timestamp(epoch=StartTime) AS StartTime
+FROM services()
+WHERE StartMode = 'Auto' AND PathName =~ '(Temp|AppData|Users)'
+
+-- Scheduled tasks with suspicious commands
+SELECT Name, Command, Arguments, Status,
+       timestamp(epoch=LastRunTime) AS LastRun
+FROM schtasks()
+WHERE Command =~ '(powershell|cmd|wscript|mshta|regsvr32|certutil)'
+
+-- WMI persistence (event subscriptions)
+SELECT * FROM wmi(query='SELECT * FROM __EventFilter', namespace='root/subscription')
+SELECT * FROM wmi(query='SELECT * FROM CommandLineEventConsumer', namespace='root/subscription')</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Knowing which artifact proves what</h4>
+      <ul>
+        <li>Prefetch proves a program <em>ran</em> — even if the executable was deleted afterward</li>
+        <li>Shimcache proves a program was <em>present on disk</em> — not necessarily executed (Win10+)</li>
+        <li>Amcache provides SHA1 hash and first-execution time — valuable for IOC correlation</li>
+        <li>MFT records every file's metadata including deleted files and MACB timestamps</li>
+      </ul>
+      <pre><code><span class="cm"># Collect execution evidence artifacts</span>
+<span class="cm"># Web UI → New Collection → select client → add these:</span>
+Windows.Forensics.Prefetch
+Windows.Forensics.Amcache
+Windows.Registry.AppCompatCache</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Timestomping detection and persistence hunting with VQL</h4>
+      <ul>
+        <li>Detect timestomping by comparing file <code>Ctime</code> (created) to <code>Mtime</code> (modified) — created after modified indicates manipulation</li>
+        <li>MFT has two timestamp sets: <code>$STANDARD_INFORMATION</code> (user-modifiable) vs <code>$FILE_NAME</code> (kernel-maintained) — compare both</li>
+        <li>Hunt persistence with a single VQL query combining Run keys, services, and scheduled tasks via <code>UNION ALL</code></li>
+      </ul>
+      <pre><code><span class="cm"># Detect timestomped files in Temp</span>
+SELECT FullPath, timestamp(epoch=Mtime) AS Modified,
+       timestamp(epoch=Ctime) AS Created
+FROM glob(globs='C:/Windows/Temp/**')
+WHERE Ctime > Mtime AND Size > 0</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Raw NTFS parsing and WMI persistence detection</h4>
+      <ul>
+        <li>Use <code>parse_mft(accessor='ntfs', filename='C:')</code> to read the MFT directly at the raw disk level — bypasses OS caching and locks</li>
+        <li>Compare <code>FileModified</code> vs <code>MFTModified</code> from the raw MFT parse to detect timestomping that evades standard stat() calls</li>
+        <li>Detect WMI subscriptions (fileless persistence) by querying the <code>root/subscription</code> namespace for EventFilter and EventConsumer bindings</li>
+      </ul>
+      <pre><code><span class="cm"># Raw MFT timestomp detection</span>
+SELECT FullPath, FileModified, MFTModified, FileCreated, MFTCreated
+FROM parse_mft(accessor='ntfs', filename='C:')
+WHERE FullPath =~ 'Temp' AND FileModified != MFTModified
+
+<span class="cm"># WMI persistence</span>
+SELECT * FROM wmi(
+  query='SELECT * FROM __FilterToConsumerBinding',
+  namespace='root/subscription')</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 08 -->
+<template id="tpl-memory">
+<article class="topic">
+  <h2>Memory &amp; Live Response</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Memory forensics and live response operate at L7 — YARA scans process memory for application-layer malware signatures; live response commands execute at the OS application layer and results are returned over HTTPS.</span>
+  </div>
+  <p>Velociraptor provides targeted memory scanning and live response capabilities without needing to dump the entire memory image.</p>
+
+  <h3>Process Memory YARA Scanning</h3>
+  <pre><code"># Web UI: Collect artifact → Windows.Memory.Yara.Process
+# Parameters:
+# - YaraRule: your YARA rule text
+# - PidRegex: filter which processes to scan (e.g., ".*" for all)
+
+# Via VQL (in shell or artifact):
+SELECT Pid, Name, Rule, String
+FROM foreach(
+  row=pslist(),
+  query={
+    SELECT Pid, Rule, String
+    FROM yara(
+      pid=Pid,
+      rules='rule TestRule { strings: $s = "CobaltStrike" condition: $s }'
+    )
+  })
+WHERE Rule
+
+# Hunt specific process families
+SELECT Pid, Name, Rule FROM foreach(
+  row={SELECT Pid, Name FROM pslist() WHERE Name =~ '(svchost|lsass|explorer)'},
+  query={SELECT Pid, Rule FROM yara(pid=Pid, rules=YaraRule)})</code></pre>
+
+  <h3>Process Dump (Targeted)</h3>
+  <pre><code"># Dump a specific process memory (targeted — no full VM dump needed)
+-- Find suspicious PID first
+SELECT Pid, Name, CommandLine FROM pslist()
+WHERE Name =~ 'powershell' AND CommandLine =~ 'enc'
+
+-- Dump the process memory
+SELECT * FROM collect_artifact(
+  artifact='Windows.Memory.ProcessDump',
+  env=dict(Pid='1234', OutputPrefix='C:/temp/dumps/')
+)
+
+# The dump appears in the collection results
+# Download from Web UI → Collected Files</code></pre>
+
+  <h3>Live Response Actions</h3>
+  <pre><code"># Via Shell tab in Web UI (Windows VQL shell)
+-- Kill a process
+SELECT * FROM execve(argv=['taskkill', '/F', '/PID', '1234'])
+
+-- Isolate endpoint (block network via Windows Firewall)
+SELECT * FROM execve(argv=['netsh', 'advfirewall', 'set', 'allprofiles', 'state', 'on'])
+SELECT * FROM execve(argv=['netsh', 'advfirewall', 'firewall', 'add', 'rule',
+  'name=ISOLATE', 'dir=out', 'action=block', 'remoteip=any'])
+
+-- Quarantine a file
+SELECT * FROM execve(argv=['move', 'C:\\Windows\\Temp\\malware.exe',
+  'C:\\Quarantine\\malware.exe.quarantined'])
+
+-- Collect specific log files
+SELECT * FROM upload(file='C:/Windows/System32/winevt/Logs/Security.evtx')
+
+-- Run PowerShell command and capture output
+SELECT Stdout FROM execve(argv=['powershell', '-Command', 'Get-MpThreatDetection'])</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Understanding targeted memory scanning vs full dumps</h4>
+      <ul>
+        <li>Velociraptor scans only specific process memory regions — no need to dump a full 16 GB RAM image</li>
+        <li>Use <code>Windows.Memory.Yara.Process</code> artifact to scan process memory for known malware strings</li>
+        <li>Live response via the Shell tab executes commands directly on the endpoint and returns stdout/stderr</li>
+        <li>Always identify the suspicious PID first with <code>pslist()</code> before targeting memory operations</li>
+      </ul>
+      <pre><code><span class="cm"># Find suspicious PowerShell processes first</span>
+SELECT Pid, Name, CommandLine FROM pslist()
+WHERE Name =~ 'powershell' AND CommandLine =~ 'enc'
+<span class="cm"># Then collect: Windows.Memory.ProcessDump with Pid=above</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Writing YARA rules for process memory scanning</h4>
+      <ul>
+        <li>Process memory YARA scans catch injected shellcode and reflectively-loaded DLLs that have no file on disk</li>
+        <li>Target specific process families with <code>PidRegex</code> parameter to reduce scan time (e.g., only svchost, lsass, explorer)</li>
+        <li>Combine YARA hits with <code>pslist()</code> data to get the full process context around a hit</li>
+      </ul>
+      <pre><code><span class="cm"># YARA scan only suspicious host processes</span>
+SELECT Pid, Name, Rule FROM foreach(
+  row={SELECT Pid, Name FROM pslist()
+       WHERE Name =~ '(svchost|lsass|explorer|spoolsv)'},
+  query={SELECT Pid, Rule FROM yara(
+    pid=Pid,
+    rules='rule CobaltStrike { strings: $s = "ReflectiveDll" condition: $s }'
+  )})</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Endpoint isolation and automated containment workflows</h4>
+      <ul>
+        <li>Use <code>execve()</code> with <code>netsh advfirewall</code> to programmatically isolate endpoints from the Velociraptor server hunt interface</li>
+        <li>Chain: YARA hit detection → isolation → quarantine → upload evidence in a single server-side VQL notebook workflow</li>
+        <li>Upload collected memory dumps directly from the endpoint using <code>upload()</code> in a VQL query — files appear in the collection file store</li>
+      </ul>
+      <pre><code><span class="cm"># Isolate endpoint immediately on detection (containment)</span>
+SELECT * FROM execve(argv=[
+  'netsh', 'advfirewall', 'firewall', 'add', 'rule',
+  'name=VR_ISOLATE', 'dir=out', 'action=block', 'remoteip=any'
+])
+<span class="cm"># Upload collected dump for analysis</span>
+SELECT * FROM upload(file='C:/temp/dumps/pid_1234.dmp')</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 09 -->
+<template id="tpl-timeline">
+<article class="topic">
+  <h2>Timeline Analysis</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Timeline analysis correlates application-layer timestamps from L7 data sources — MFT file system records, Prefetch execution logs, and Windows Event Log entries — into a unified chronological attack narrative.</span>
+  </div>
+  <p>Timeline analysis merges timestamps from multiple forensic sources into a single chronological view of attacker activity. Velociraptor's notebook interface facilitates this.</p>
+
+  <h3>Building a Super Timeline with VQL</h3>
+  <pre><code"># Combine multiple timestamp sources into unified timeline
+
+-- MFT timestamps (file system activity)
+LET mft_events = SELECT 'MFT' AS Source, FullPath AS Description,
+    timestamp(epoch=Mtime) AS Timestamp
+FROM parse_mft(accessor='ntfs', filename='C:')
+WHERE Mtime > '2024-03-15' AND Mtime < '2024-03-16'
+
+-- Prefetch execution events
+LET exec_events = SELECT 'Prefetch' AS Source,
+    Executable AS Description,
+    LastRunTimes[0] AS Timestamp
+FROM Windows.Forensics.Prefetch()
+WHERE LastRunTimes[0] > '2024-03-15'
+
+-- Event log events (process creation)
+LET log_events = SELECT 'EventLog' AS Source,
+    format(format='PID:%s %s', args=[ProcessId, NewProcessName]) AS Description,
+    timestamp(epoch=System.TimeCreated.SystemTime) AS Timestamp
+FROM Windows.EventLogs.Evtx(Channel='Security')
+WHERE System.EventID.Value = 4688
+  AND System.TimeCreated.SystemTime > '2024-03-15'
+
+-- Merge all sources
+SELECT * FROM chain(
+  a=mft_events,
+  b=exec_events,
+  c=log_events)
+ORDER BY Timestamp</code></pre>
+
+  <h3>Notebook Mode for Investigation</h3>
+  <pre><code"># Velociraptor Notebooks allow persistent VQL analysis with notes
+# Web UI: Notebooks → Create Notebook → add VQL cells
+
+# Cell 1: Initial triage
+SELECT * FROM pslist() ORDER BY CreateTime DESC LIMIT 20
+
+# Cell 2: Suspicious network connections
+SELECT ForeignAddr, Pid, Status,
+       process_tracker_get(id=Pid).Data.Name AS ProcessName
+FROM netstat()
+WHERE NOT ForeignAddr =~ '^(127\.|0\.0\.0\.0|::1)'
+
+# Cell 3: Add analysis notes
+# Switch cell type to Markdown → document findings inline
+
+# Export notebook as HTML or PDF report</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Understanding why timeline analysis matters</h4>
+      <ul>
+        <li>Timeline analysis answers "what happened in what order" — essential for reconstructing attack chains</li>
+        <li>Use Velociraptor Notebooks (web UI → Notebooks) to combine multiple VQL queries with inline analyst notes</li>
+        <li>Start with a narrow time window (1-2 hours around the known IOC) rather than days of data</li>
+        <li>Always anchor the timeline to a known event: phishing email timestamp, alert time, or first IOC detection</li>
+      </ul>
+      <pre><code><span class="cm"># Quick event log timeline — last hour of process creation events</span>
+SELECT EventID, timestamp(epoch=Timestamp) AS Time,
+       EventData.NewProcessName AS Process
+FROM Windows.EventLogs.Evtx(Channel='Security')
+WHERE EventID = 4688 AND Timestamp > now() - 3600
+ORDER BY Time</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Building multi-source super timelines with VQL chain()</h4>
+      <ul>
+        <li>Use <code>LET</code> to define named result sets from different sources (MFT, Prefetch, EventLog), then <code>chain()</code> to merge them</li>
+        <li>Normalize timestamps using <code>timestamp(epoch=X)</code> so all sources share a common sortable format</li>
+        <li>Add a <code>Source</code> column to each LET query so you can identify artifact origin in the merged output</li>
+      </ul>
+      <pre><code><span class="cm"># Merge MFT + Prefetch + EventLog into super timeline</span>
+LET fs = SELECT 'MFT' AS Source, FullPath AS Description,
+    timestamp(epoch=Mtime) AS Timestamp
+FROM parse_mft(accessor='ntfs', filename='C:')
+WHERE Mtime > '2024-03-15' AND Mtime < '2024-03-16'
+
+LET exec = SELECT 'Prefetch' AS Source, Executable AS Description,
+    LastRunTimes[0] AS Timestamp
+FROM Windows.Forensics.Prefetch()
+
+SELECT * FROM chain(a=fs, b=exec)
+ORDER BY Timestamp</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Persistent notebook investigations and cross-host correlation</h4>
+      <ul>
+        <li>Velociraptor Notebooks persist server-side — use them as a living investigation workspace shared across the IR team</li>
+        <li>Query hunt results across multiple hosts in a notebook to build a cross-endpoint attack timeline</li>
+        <li>Export notebooks as HTML reports for executive briefs or legal proceedings with fully embedded VQL evidence</li>
+      </ul>
+      <pre><code><span class="cm"># Cross-host timeline from a fleet-wide hunt</span>
+SELECT ClientId, Hostname, Source, Description, Timestamp
+FROM hunt_results(
+  hunt_id='H.1234567890',
+  artifact='Custom.Timeline.SuperTimeline'
+)
+ORDER BY Timestamp ASC</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 10 -->
+<template id="tpl-deploy">
+<article class="topic">
+  <h2>Deployment &amp; Configuration</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Deployment configures the L7 HTTPS communication channel — server TLS certificates, frontend bind ports (8000/8889), and mutual authentication are all application-layer (L7) transport concerns.</span>
+  </div>
+  <p>Velociraptor deployment is streamlined — a single binary handles all roles. Production deployments add TLS, user management, and scalability configurations.</p>
+
+  <h3>Quick Lab Setup</h3>
+  <pre><code"># Download Velociraptor binary
+wget https://github.com/Velocidex/velociraptor/releases/latest/download/velociraptor-v0.7.x-linux-amd64
+
+# Generate server config (interactive wizard)
+./velociraptor config generate -i
+# Answer questions:
+# - Deployment type: Self-Signed SSL (for lab)
+# - Frontend bind port: 8000
+# - GUI port: 8889
+# - DNS name: 192.168.56.20 (or velociraptor.lab)
+# Saves: server.config.yaml and client.config.yaml
+
+# Start server (stays in foreground — use tmux or systemd)
+sudo ./velociraptor --config server.config.yaml frontend
+
+# Add admin user
+./velociraptor --config server.config.yaml user add analyst --role administrator
+
+# Access GUI: https://192.168.56.20:8889
+# Accept self-signed certificate warning in browser</code></pre>
+
+  <h3>Client Deployment — Windows</h3>
+  <pre><code"># Build MSI installer for Windows clients
+# On Velociraptor server:
+./velociraptor --config server.config.yaml client_config_package --output client_package.zip
+
+# The package contains:
+# - velociraptor.exe (client binary)
+# - client.config.yaml (with server cert embedded)
+# - install.bat (runs as administrator)
+
+# Deploy to Windows target:
+# 1. Copy client_package.zip to target
+# 2. Extract and run install.bat as Administrator
+# 3. Service "Velociraptor" appears in services.msc
+# 4. Client appears in Velociraptor GUI within 30 seconds
+
+# Silent deployment via GPO:
+# Use velociraptor MSI: velociraptor-v0.x.x-windows-amd64.msi
+# GPO: Computer Configuration → Software Installation → Add MSI</code></pre>
+
+  <h3>Label-Based Client Management</h3>
+  <pre><code"># Labels allow targeting specific client groups in hunts
+# Web UI: Client → Labels → Add Label: "Windows-Workstations"
+
+# Or via VQL (server artifact):
+SELECT label(client_id='C.abc123', labels=['Windows-Workstations'], op='set')
+FROM scope()
+
+# Create a hunt targeting only labeled clients:
+# New Hunt → Include only: label = "Windows-Servers"
+
+# Standard labels for large environments:
+# Windows-Workstations, Windows-Servers, Linux-Servers
+# Critical-Assets, Finance-Dept, Incident-Response-Priority</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Standing up a Velociraptor lab server</h4>
+      <ul>
+        <li>Generate config with <code>velociraptor config generate -i</code> — the interactive wizard handles TLS cert creation automatically</li>
+        <li>For lab use, choose Self-Signed SSL; for production, use a proper CA certificate</li>
+        <li>The server needs two ports open: 8000 (client comms) and 8889 (GUI) — or 443 with reverse proxy</li>
+        <li>Add an admin user with <code>velociraptor user add &lt;name&gt; --role administrator</code> before accessing the GUI</li>
+      </ul>
+      <pre><code><span class="cm"># Full lab setup sequence</span>
+./velociraptor config generate -i
+sudo ./velociraptor --config server.config.yaml frontend &amp;
+./velociraptor --config server.config.yaml user add analyst --role administrator
+<span class="cm"># Open https://192.168.56.20:8889 — accept self-signed cert</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Client deployment and label-based fleet management</h4>
+      <ul>
+        <li>Build the Windows client package on the server — it embeds the server cert for mutual TLS authentication</li>
+        <li>Deploy via GPO using the MSI package for domain-joined systems at scale</li>
+        <li>Use labels to group clients for targeted hunting — e.g., only hunt servers, or only finance workstations</li>
+      </ul>
+      <pre><code><span class="cm"># Build client installer on the server</span>
+./velociraptor --config server.config.yaml client_config_package \
+    --output client_package.zip
+<span class="cm"># Label a client via VQL</span>
+SELECT label(client_id='C.abc123',
+             labels=['Windows-Servers'], op='set') FROM scope()</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>systemd service deployment and multi-server federation</h4>
+      <ul>
+        <li>Run the server as a systemd service for auto-restart and journal logging on Linux</li>
+        <li>Use the <code>datastore.implementation: RemoteFileStore</code> config option to store data on NFS/S3 for HA deployments</li>
+        <li>For large environments, deploy Velociraptor in multi-frontend mode with a load balancer at L7 (nginx upstream)</li>
+      </ul>
+      <pre><code><span class="cm"># Install as systemd service</span>
+./velociraptor --config server.config.yaml service install
+systemctl enable velociraptor
+systemctl start velociraptor
+systemctl status velociraptor</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 11 -->
+<template id="tpl-lab">
+<article class="topic">
+  <h2>Investigation Lab — Endpoint Threat Hunt</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">The lab spans all three layers: L3 attacker IP (192.168.56.10) and victim IP (192.168.56.30) are tracked in netstat results; L4 TCP port 4444 is the Meterpreter transport; L7 Velociraptor artifacts collect the application-layer forensic evidence.</span>
+  </div>
+  <div class="callout lab">
+    <strong>Lab scenario:</strong> The Kali attacker (192.168.56.10) has run Metasploit against the Windows 10 target (192.168.56.30). Use Velociraptor to detect the compromise from the defender side.
+  </div>
+
+  <h3>Lab Setup</h3>
+  <table>
+    <thead><tr><th>Host</th><th>IP</th><th>Setup</th></tr></thead>
+    <tbody>
+      <tr><td>Ubuntu (server)</td><td>192.168.56.20</td><td>Velociraptor server running on port 8889</td></tr>
+      <tr><td>Windows 10 (target)</td><td>192.168.56.30</td><td>Velociraptor client installed, Meterpreter running</td></tr>
+      <tr><td>Kali Linux (attacker)</td><td>192.168.56.10</td><td>Metasploit with active Meterpreter session</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Step 1 — Quick Triage: Processes &amp; Network</h3>
+  <pre><code"># In Velociraptor Web UI → Select Windows 10 client → Shell (VQL)
+
+-- Check for unusual listening ports or connections to attacker IP
+SELECT Pid, ForeignAddr, Status,
+       process_tracker_get(id=Pid).Data.Name AS Process
+FROM netstat()
+WHERE ForeignAddr =~ '192\.168\.56\.10' OR Lport = 4444
+
+-- Expected output if Meterpreter active:
+-- Pid: 3456, ForeignAddr: 192.168.56.10:4444, Status: ESTABLISHED, Process: spoolsv.exe
+-- (Meterpreter migrated to spoolsv.exe to hide)</code></pre>
+
+  <h3>Step 2 — Process Tree Investigation</h3>
+  <pre><code"># Check for unusual parent-child process chains
+SELECT Pid, Ppid, Name, CommandLine, Username,
+       process_tracker_get(id=Ppid).Data.Name AS ParentName
+FROM pslist()
+WHERE ParentName =~ '(WINWORD|EXCEL|mshta|cmd|powershell)'
+   OR (Name =~ 'powershell' AND CommandLine =~ 'enc')
+
+-- Find processes with no visible command line (injected processes)
+SELECT Pid, Name, CommandLine FROM pslist()
+WHERE CommandLine = '' AND NOT Name =~ '(System|smss|csrss|winlogon|services|lsass)'</code></pre>
+
+  <h3>Step 3 — Persistence Check</h3>
+  <pre><code"># Check persistence mechanisms the attacker may have added
+-- Run keys
+SELECT Key, Value, Data FROM reg_key(
+    key='HKLM/Software/Microsoft/Windows/CurrentVersion/Run/**')
+UNION ALL
+SELECT Key, Value, Data FROM reg_key(
+    key='HKCU/Software/Microsoft/Windows/CurrentVersion/Run/**')
+
+-- New services (common Metasploit persistence module)
+SELECT DisplayName, PathName, StartMode, Description
+FROM services()
+WHERE StartMode = 'Auto' AND PathName =~ '(Temp|AppData|Users|C:\\\\ProgramData)'
+
+-- Scheduled tasks
+SELECT Name, Command, Arguments, NextRunTime FROM schtasks()
+ORDER BY NextRunTime DESC LIMIT 20</code></pre>
+
+  <h3>Step 4 — YARA Hunt for Meterpreter</h3>
+  <pre><code"># Scan process memory for Meterpreter signatures
+-- Use artifact: Windows.Memory.Yara.Process
+-- YaraRule:
+rule Meterpreter_Reverse_TCP {
+    strings:
+        $s1 = "metsrv.dll" wide ascii
+        $s2 = "ReflectiveDll" ascii
+        $s3 = { 4d 65 74 65 72 70 72 65 74 65 72 }  // "Meterpreter" bytes
+    condition:
+        any of them
+}
+
+-- In VQL Shell:
+SELECT Pid, Name, Rule, String FROM foreach(
+  row=pslist(),
+  query={
+    SELECT Pid, Rule, String FROM yara(
+      pid=Pid,
+      rules='''rule Meterpreter { strings: $s = "metsrv" ascii condition: $s }'''
+    )
+  })</code></pre>
+
+  <h3>Step 5 — Evidence Collection &amp; Timeline</h3>
+  <pre><code"># Collect full triage package from compromised host
+# Collect Artifact: Windows.KapeFiles.Targets
+# Parameters: _BasicCollection = Y, EvidenceOfExecution = Y
+
+-- Build a quick attack timeline
+SELECT 'EventLog' AS Source, EventID, Description,
+       timestamp(epoch=Timestamp) AS Time
+FROM Windows.EventLogs.Evtx(Channel='Security')
+WHERE EventID IN (4688, 4624, 4625, 7045)
+  AND Timestamp > now() - 3600   -- last hour
+ORDER BY Time</code></pre>
+
+  <div class="callout lab">
+    <strong>Lab Extension:</strong> Create a custom artifact that checks all three persistence mechanisms (Run keys, services, scheduled tasks) in one query and formats output for reporting. Deploy an offline collector to a "disconnected" VM and import the results. Set up automated hunts that run daily and alert on new persistence entries.
+    <a href="#" class="xref" onclick="loadTopic('custom'); return false;">Custom artifact writing ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('offline'); return false;">Offline collection ↗</a>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Running the triage workflow step by step</h4>
+      <ul>
+        <li>Connect to the Velociraptor GUI (https://192.168.56.20:8889) and select the Windows 10 client</li>
+        <li>Use the Shell (VQL) tab to run quick netstat and pslist queries — look for the Meterpreter connection on port 4444</li>
+        <li>Check Run keys and services for persistence the attacker may have added after gaining access</li>
+        <li>Document every finding with a screenshot before taking any remediation action</li>
+      </ul>
+      <pre><code><span class="cm"># Step 1 — check for connection to Kali (L3 IP + L4 port)</span>
+SELECT Pid, ForeignAddr, Status,
+       process_tracker_get(id=Pid).Data.Name AS Process
+FROM netstat()
+WHERE ForeignAddr =~ '192\.168\.56\.10' OR Lport = 4444</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Process tree analysis and YARA memory scanning</h4>
+      <ul>
+        <li>Investigate parent-child process chains — Meterpreter often migrates into legitimate processes like spoolsv.exe or svchost.exe</li>
+        <li>Use <code>Windows.Memory.Yara.Process</code> with a Meterpreter YARA rule to confirm memory injection</li>
+        <li>Correlate the suspicious PID from netstat with process tree data to identify the injection target</li>
+      </ul>
+      <pre><code><span class="cm"># Find processes with unusual parent chains</span>
+SELECT Pid, Ppid, Name, CommandLine,
+       process_tracker_get(id=Ppid).Data.Name AS ParentName
+FROM pslist()
+WHERE ParentName =~ '(WINWORD|EXCEL|mshta|cmd|powershell)'
+
+<span class="cm"># YARA scan for Meterpreter in all processes</span>
+SELECT Pid, Name, Rule FROM foreach(
+  row=pslist(),
+  query={SELECT Pid, Rule FROM yara(
+    pid=Pid,
+    rules='rule Meterpreter { strings: $s = "metsrv" ascii condition: $s }')})</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Full triage collection, timeline, and automated containment</h4>
+      <ul>
+        <li>Collect <code>Windows.KapeFiles.Targets</code> with <code>_BasicCollection=Y</code> and <code>EvidenceOfExecution=Y</code> for a full triage package from the compromised host</li>
+        <li>Build a super timeline in a Notebook merging EventLog (4688, 4624, 7045), Prefetch, and MFT for the attack window</li>
+        <li>After confirming compromise, isolate the endpoint using <code>execve()</code> with Windows Firewall rules from the Velociraptor shell — no physical access needed</li>
+      </ul>
+      <pre><code><span class="cm"># Build attack timeline — last hour across 3 sources</span>
+SELECT 'EventLog' AS Src, EventID,
+       timestamp(epoch=Timestamp) AS Time
+FROM Windows.EventLogs.Evtx(Channel='Security')
+WHERE EventID IN (4688, 4624, 4625, 7045)
+  AND Timestamp > now() - 3600
+ORDER BY Time
+
+<span class="cm"># Isolate endpoint after confirming compromise</span>
+SELECT * FROM execve(argv=[
+  'netsh','advfirewall','firewall','add','rule',
+  'name=IR_ISOLATE','dir=out','action=block','remoteip=any'])</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Velociraptor',
+  topics: [
+    { id: 'overview',   badge: '01', label: 'Overview & Architecture'    },
+    { id: 'vql',        badge: '02', label: 'VQL Query Language'          },
+    { id: 'artifacts',  badge: '03', label: 'Artifact Collection'         },
+    { id: 'hunting',    badge: '04', label: 'Hunts — Fleet-Wide'          },
+    { id: 'custom',     badge: '05', label: 'Custom Artifact Writing'     },
+    { id: 'offline',    badge: '06', label: 'Offline Collection'          },
+    { id: 'forensics',  badge: '07', label: 'Windows Forensic Artifacts'  },
+    { id: 'memory',     badge: '08', label: 'Memory & Live Response'      },
+    { id: 'timeline',   badge: '09', label: 'Timeline Analysis'           },
+    { id: 'deploy',     badge: '10', label: 'Deployment & Configuration'  },
+    { id: 'lab',        badge: '11', label: 'Investigation Lab'           },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

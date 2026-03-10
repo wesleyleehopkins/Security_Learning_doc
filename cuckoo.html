@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cuckoo Sandbox — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .xref { display:inline; color:var(--accent,#3b82f6); font-size:.75em; font-weight:600; border:1px solid var(--accent,#3b82f6); border-radius:3px; padding:1px 5px; margin-left:4px; text-decoration:none; cursor:pointer; white-space:nowrap; opacity:.85; }
+    .xref:hover { background:rgba(59,130,246,.15); opacity:1; }
+    .xref-group { color:#8b949e; font-size:.82em; margin-left:2px; }
+    td .xref-group { display:block; margin-top:3px; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="index.html" class="nav-brand">
+    <span class="icon">⬡</span> SOC Notes
+  </a>
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()">☰</button>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html" class="active">Cuckoo</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sb-title">Cuckoo Sandbox</div>
+    <nav id="sb-nav"></nav>
+  </aside>
+
+  <main id="main" class="main">
+    <div id="content-area"></div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 01 -->
+<template id="tpl-overview">
+<article class="topic">
+  <h2>Overview &amp; Architecture</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Cuckoo analyzes malware behavior across all three upper OSI layers: L3 (IP-level C2 connections), L4 (TCP/UDP socket usage, port activity), and L7 (HTTP/DNS/SMTP C2 protocols). The web UI and REST API are L7; the ResultServer receives behavioral data over L4/L7 from the guest agent.</span>
+  </div>
+
+  <p>Cuckoo Sandbox is the leading open-source automated malware analysis system. When you submit a suspicious file or URL, Cuckoo executes it in an isolated virtual machine and captures everything: file system changes, registry modifications, network traffic, API calls, memory dumps, and screenshots. The result is a behavioral analysis report that answers: <em>what does this malware actually do?</em></p>
+
+  <div class="callout note">
+    <strong>Cuckoo 3 / Cape Sandbox:</strong> Cuckoo 2.x development has largely moved to <strong>CAPE Sandbox</strong> (Configuration And Payload Extraction) which adds config extraction, YARA scanning, and better evasion handling. The concepts in this notebook apply to both. For new deployments, consider CAPE.
+  </div>
+
+  <h3>Architecture Components</h3>
+  <table>
+    <thead><tr><th>Component</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Cuckoo Host</strong></td><td>Ubuntu/Debian machine running the Cuckoo daemon, web interface, and database. Does NOT execute malware — analysis VMs do.</td></tr>
+      <tr><td><strong>Analysis VMs (guests)</strong></td><td>Isolated VMs (VirtualBox/KVM/VMware) where malware actually runs. One task per VM snapshot. Reverted after each analysis.</td></tr>
+      <tr><td><strong>Cuckoo Agent</strong></td><td>Python agent running inside the guest VM — receives the sample, executes it, collects data, and sends results back to the host.</td></tr>
+      <tr><td><strong>ResultServer</strong></td><td>HTTP server on the host that receives real-time behavioral data from the guest agent during analysis</td></tr>
+      <tr><td><strong>Rooter</strong></td><td>Routes guest VM network traffic — can route to internet, inetsim (fake network), or drop all traffic</td></tr>
+      <tr><td><strong>Processing modules</strong></td><td>Post-analysis processors: YARA scanner, VirusTotal lookup, Suricata IDS, strings extractor, memory analysis</td></tr>
+      <tr><td><strong>Reporting modules</strong></td><td>Generate JSON/HTML reports, push to MISP, store in MongoDB/PostgreSQL</td></tr>
+      <tr><td><strong>Web UI</strong></td><td>Django web application for submission, report viewing, and search</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Network Layout</h3>
+  <pre><code># Host machine (Ubuntu): 192.168.56.20
+# Guest VMs (internal NAT): 192.168.122.0/24 (default libvirt)
+# Guest agent port: 8000 (HTTP, host only)
+# ResultServer: 192.168.122.1:2042
+# Web UI: http://192.168.56.20:8000
+# API: http://192.168.56.20:8090
+
+# Network isolation options:
+# - Route through InetSim (fake DNS/HTTP/SMTP for recording without real internet)
+# - Route through real internet (more realistic — use IDS to monitor)
+# - Drop all network (most isolated — some malware won't activate)</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Understanding the Cuckoo host/guest architecture</h4>
+      <ul>
+        <li>Malware runs only in isolated guest VMs — never on the Cuckoo host. The host orchestrates, the guest executes.</li>
+        <li>The Cuckoo agent inside the guest communicates back to the ResultServer at L4 (TCP port 2042) and L7 (HTTP)</li>
+        <li>Network routing options control whether malware reaches real L3 internet, a fake InetSim network, or is fully isolated</li>
+        <li>Access the web UI at http://192.168.56.20:8000 and the REST API at http://192.168.56.20:8090</li>
+      </ul>
+      <pre><code><span class="cm"># Verify Cuckoo is running</span>
+curl -s http://192.168.56.20:8090/cuckoo/status | python3 -m json.tool
+<span class="cm"># Check available VMs</span>
+curl -s http://192.168.56.20:8090/machines/list | python3 -m json.tool</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Network routing strategies for realistic analysis</h4>
+      <ul>
+        <li>InetSim provides fake DNS, HTTP, SMTP, and IRC responses at L7 — malware activates C2 behavior without reaching real infrastructure</li>
+        <li>Internet routing allows real L3 traffic — use IDS monitoring on the egress interface to capture live C2 connections</li>
+        <li>Capture PCAPs for every analysis: the ResultServer stores <code>dump.pcap</code> per task, ready for Wireshark or Zeek analysis</li>
+      </ul>
+      <pre><code><span class="cm"># Submit with InetSim routing (fake network at L7)</span>
+cuckoo submit --route inetsim --timeout 120 suspicious.exe
+<span class="cm"># Download the captured PCAP for Wireshark/Zeek analysis</span>
+curl -s http://192.168.56.20:8090/tasks/get/pcap/42 -o analysis_42.pcap
+zeek -r analysis_42.pcap</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Distributed Cuckoo with multiple analysis VMs</h4>
+      <ul>
+        <li>Deploy multiple guest VMs (different OS, Office, browser versions) to maximize detection coverage across malware families</li>
+        <li>Integrate Suricata on the Cuckoo host's bridge interface to capture and alert on L3/L4/L7 malware traffic during analysis</li>
+        <li>Use CAPE Sandbox for malware config extraction — it extends Cuckoo to dump decrypted L7 C2 protocol configurations from memory</li>
+      </ul>
+      <pre><code><span class="cm"># Monitor bridge interface with Suricata during analysis</span>
+sudo suricata -i virbr0 -l /var/log/suricata/ --runmode auto -D
+<span class="cm"># Suricata captures L3/L4/L7 traffic between guest and InetSim/internet</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 02 -->
+<template id="tpl-submission">
+<article class="topic">
+  <h2>Sample Submission</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Sample submission uses the Cuckoo web UI (HTTP L7) or the REST API (HTTP L7 on port 8090). The submitted file is transferred to the guest VM over the host-only network via the Cuckoo agent HTTP listener at L7. Network routing options then determine which L3/L4/L7 traffic the malware can reach.</span>
+  </div>
+  <p>Cuckoo accepts multiple submission types. Each submission creates a "task" that runs in an isolated analysis VM.</p>
+
+  <h3>Submission Methods</h3>
+  <table>
+    <thead><tr><th>Method</th><th>Command / URL</th><th>Submits</th></tr></thead>
+    <tbody>
+      <tr><td>Web UI</td><td>http://cuckoo.host:8000/submit/</td><td>Files, URLs, packages</td></tr>
+      <tr><td>cuckoo submit CLI</td><td><code>cuckoo submit /path/to/file.exe</code></td><td>Files</td></tr>
+      <tr><td>REST API</td><td>POST /tasks/create/file</td><td>Files (multipart)</td></tr>
+      <tr><td>REST API</td><td>POST /tasks/create/url</td><td>URL</td></tr>
+      <tr><td>Python cuckoo-api library</td><td><code>from cuckoo.apps import api</code></td><td>Programmatic</td></tr>
+    </tbody>
+  </table>
+
+  <h3>CLI Submission</h3>
+  <pre><code># Submit a single file
+cuckoo submit --timeout 120 suspicious.exe
+
+# Submit with specific VM machine
+cuckoo submit --machine win10-x64 suspicious.exe
+
+# Submit URL
+cuckoo submit --url "http://phishing.example.com/page"
+
+# Submit with package override (force specific analysis package)
+cuckoo submit --package exe suspicious.exe    # exe, doc, pdf, dll, jar, py, ps1
+cuckoo submit --package doc invoice.docx      # Office document with macros
+cuckoo submit --package pdf report.pdf
+cuckoo submit --package js script.js
+
+# Submit with custom options
+cuckoo submit --options "free=yes,human=1" suspicious.exe
+# free=yes: don't monitor execution (just watch network)
+# human=1: simulate mouse clicks / user interaction
+
+# Submit DLL (must specify export function)
+cuckoo submit --package dll --options "function=DllRegisterServer" evil.dll
+
+# Submit with network routing
+cuckoo submit --route internet suspicious.exe    # real internet
+cuckoo submit --route inetsim suspicious.exe     # fake network
+cuckoo submit --route drop suspicious.exe        # no network</code></pre>
+
+  <h3>API Submission</h3>
+  <pre><code"># Submit file via API
+curl -F "file=@suspicious.exe" \
+     -F "timeout=120" \
+     -F "machine=win10" \
+     http://192.168.56.20:8090/tasks/create/file
+
+# Response:
+# {"task_id": 42, "error": false}
+
+# Submit URL
+curl -F "url=http://phishing.example.com" \
+     http://192.168.56.20:8090/tasks/create/url
+
+# Submit memory dump for analysis
+curl -F "file=@memory.dmp" \
+     http://192.168.56.20:8090/tasks/create/file</code></pre>
+
+  <h3>Analysis Packages Reference</h3>
+  <table>
+    <thead><tr><th>Package</th><th>File Type</th><th>How It Runs</th></tr></thead>
+    <tbody>
+      <tr><td><code>exe</code></td><td>.exe PE executables</td><td>Direct execution via CreateProcess</td></tr>
+      <tr><td><code>dll</code></td><td>.dll files</td><td>rundll32.exe with specified export</td></tr>
+      <tr><td><code>doc</code></td><td>.doc, .docx, .rtf</td><td>Microsoft Word with macro execution</td></tr>
+      <tr><td><code>xls</code></td><td>.xls, .xlsx, .xlsm</td><td>Microsoft Excel — enables macros</td></tr>
+      <tr><td><code>pdf</code></td><td>.pdf</td><td>Adobe Acrobat Reader (JS enabled)</td></tr>
+      <tr><td><code>jar</code></td><td>.jar Java archives</td><td>Java runtime execution</td></tr>
+      <tr><td><code>ps1</code></td><td>.ps1 PowerShell</td><td>powershell.exe execution (policy bypassed)</td></tr>
+      <tr><td><code>vbs</code></td><td>.vbs VBScript</td><td>wscript.exe execution</td></tr>
+      <tr><td><code>hta</code></td><td>.hta HTML App</td><td>mshta.exe execution</td></tr>
+      <tr><td><code>url</code></td><td>URLs</td><td>Internet Explorer or Chrome</td></tr>
+    </tbody>
+  </table>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Submitting files and URLs via the web UI and CLI</h4>
+      <ul>
+        <li>The web UI at http://192.168.56.20:8000/submit accepts file uploads and URLs at L7 (HTTP)</li>
+        <li>Always specify the correct analysis package — submitting a <code>.doc</code> as <code>exe</code> will fail to execute macros</li>
+        <li>Use <code>--route inetsim</code> for most submissions — malware activates without actually reaching real C2 infrastructure</li>
+      </ul>
+      <pre><code><span class="cm"># Submit a suspicious Office document</span>
+cuckoo submit --package doc --timeout 120 --route inetsim invoice.docx
+<span class="cm"># Submit a PowerShell script</span>
+cuckoo submit --package ps1 --timeout 120 --route inetsim dropper.ps1</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>API-based submission and batch processing</h4>
+      <ul>
+        <li>Use the REST API at L7 (port 8090) to automate bulk submissions from threat intel feeds or email attachment scanners</li>
+        <li>Capture the returned <code>task_id</code> for status polling and report retrieval</li>
+        <li>Use <code>--options human=1</code> for documents that require user interaction (e.g., click-to-enable macros) to defeat click-to-run evasion</li>
+      </ul>
+      <pre><code><span class="cm"># Submit file via REST API and capture task ID</span>
+TASK_ID=$(curl -s -F "file=@suspicious.exe" \
+     -F "timeout=120" -F "route=inetsim" \
+     http://192.168.56.20:8090/tasks/create/file | \
+     python3 -c "import sys,json; print(json.load(sys.stdin)['task_id'])")
+echo "Task ID: $TASK_ID"</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Automated malware triage pipeline with API submission</h4>
+      <ul>
+        <li>Build a pipeline that monitors a mail server or file share, auto-submits suspicious attachments via the REST API at L7, and pages the SOC team on high-score results</li>
+        <li>Use different VMs per file type: match <code>win10-office</code> for docs, <code>win10-browser</code> for URLs, <code>win10-base</code> for executables</li>
+        <li>Parallelize submissions with multiple task workers to reduce triage time during high-volume incidents</li>
+      </ul>
+      <pre><code><span class="cm"># Batch submit all files in quarantine folder</span>
+for f in /var/quarantine/*.{exe,doc,xlsm,ps1}; do
+  PKG=$(echo "$f" | grep -oE '\.(exe|doc|xlsm|ps1)$' | tr -d '.')
+  [[ "$PKG" == "xlsm" ]] && PKG="xls"
+  TASK=$(curl -s -F "file=@$f" -F "package=$PKG" -F "route=inetsim" \
+         http://192.168.56.20:8090/tasks/create/file | python3 -c \
+         "import sys,json; print(json.load(sys.stdin)['task_id'])")
+  echo "Submitted $f → Task $TASK"
+done</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 03 -->
+<template id="tpl-reports">
+<article class="topic">
+  <h2>Behavioral Report Reading</h2>
+  <p>The analysis report is the primary output — a structured JSON document summarizing all observed behavior during the analysis window.</p>
+
+  <h3>Report Structure</h3>
+  <table>
+    <thead><tr><th>Section</th><th>Contents</th><th>Key Things to Look For</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Summary</strong></td>
+        <td>Overall verdict, score (0-10), detected families, key IOCs</td>
+        <td>Cuckoo score &gt;5 = suspicious; score &gt;7 = likely malicious</td>
+      </tr>
+      <tr>
+        <td><strong>Process Tree</strong></td>
+        <td>Parent→child process relationships, command lines, PIDs</td>
+        <td>Unusual parent chains: Word → PowerShell, Excel → cmd.exe, mshta → wscript</td>
+      </tr>
+      <tr>
+        <td><strong>File Activity</strong></td>
+        <td>Files created, modified, deleted — paths and hashes</td>
+        <td>Dropped executables in %TEMP%, %APPDATA%, modified startup items</td>
+      </tr>
+      <tr>
+        <td><strong>Registry Activity</strong></td>
+        <td>Registry keys created, modified, deleted</td>
+        <td>HKCU\Software\Microsoft\Windows\CurrentVersion\Run (persistence), HKLM\SOFTWARE (malware config)</td>
+      </tr>
+      <tr>
+        <td><strong>Network Activity</strong></td>
+        <td>DNS queries, HTTP/HTTPS requests, TCP/UDP connections</td>
+        <td>C2 domains, DGA patterns, POST requests with encoded data, unusual ports</td>
+      </tr>
+      <tr>
+        <td><strong>API Calls</strong></td>
+        <td>Windows API calls logged by the agent hook</td>
+        <td>CreateRemoteThread, WriteProcessMemory = injection; CryptEncrypt = ransomware; RegSetValue = persistence</td>
+      </tr>
+      <tr>
+        <td><strong>Signatures</strong></td>
+        <td>Cuckoo signature matches (behavioral rules)</td>
+        <td>Each signature has a severity (informational/suspicious/malicious) and description</td>
+      </tr>
+      <tr>
+        <td><strong>Screenshots</strong></td>
+        <td>VM desktop screenshots taken at intervals</td>
+        <td>Ransomware notes, fake alerts, browser redirects, UAC prompts</td>
+      </tr>
+      <tr>
+        <td><strong>YARA Matches</strong></td>
+        <td>YARA rule hits on files and memory</td>
+        <td>Family identification, packed/encoded sections</td>
+      </tr>
+      <tr>
+        <td><strong>Dropped Files</strong></td>
+        <td>Files written to disk during execution — with hashes</td>
+        <td>Secondary payloads, decrypted DLLs, configuration files</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Score Interpretation</h3>
+  <table>
+    <thead><tr><th>Score</th><th>Verdict</th><th>Typical Indicators</th></tr></thead>
+    <tbody>
+      <tr><td>0 – 3</td><td style="color:#88cc44">Clean / Benign</td><td>No suspicious behaviors; may be a utility or false submission</td></tr>
+      <tr><td>4 – 6</td><td style="color:#ffcc00">Suspicious</td><td>Some anomalous API calls, unusual file drops, or network connections that may be benign</td></tr>
+      <tr><td>7 – 9</td><td style="color:#ff8800">Likely Malicious</td><td>Process injection, persistence mechanisms, C2 beaconing, ransomware behavior</td></tr>
+      <tr><td>10</td><td style="color:#ff4444">Confirmed Malicious</td><td>Multiple high-confidence signature matches; family identified; significant destruction/exfiltration behavior</td></tr>
+    </tbody>
+  </table>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 04 -->
+<template id="tpl-process">
+<article class="topic">
+  <h2>Process Tree Analysis</h2>
+  <p>The process tree reveals how malware executes — what spawned what, what command lines were used, and how execution flows through the system. This is the first section to read in any analysis.
+    <a href="#" class="xref" onclick="loadTopic('api_calls'); return false;">API call analysis ↗</a>
+  </p>
+
+  <h3>Suspicious Process Chains</h3>
+  <table>
+    <thead><tr><th>Chain</th><th>What It Means</th><th>Common Malware Behavior</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>WINWORD.EXE → cmd.exe</code></td>
+        <td>Word macro spawning command shell</td>
+        <td>Macro malware, maldocs, VBA dropper</td>
+      </tr>
+      <tr>
+        <td><code>EXCEL.EXE → powershell.exe</code></td>
+        <td>Excel macro launching PowerShell</td>
+        <td>Emotet, TrickBot, Dridex spreadsheet loaders</td>
+      </tr>
+      <tr>
+        <td><code>powershell.exe → cmd.exe → net.exe</code></td>
+        <td>PowerShell enumerating network (net use, net user)</td>
+        <td>Post-compromise reconnaissance</td>
+      </tr>
+      <tr>
+        <td><code>mshta.exe → wscript.exe</code></td>
+        <td>HTA application spawning VBScript</td>
+        <td>Phishing HTA file executes VBS payload</td>
+      </tr>
+      <tr>
+        <td><code>explorer.exe → rundll32.exe</code></td>
+        <td>DLL execution via rundll32 (hiding in Explorer)</td>
+        <td>DLL sideloading, persistence via shell extension</td>
+      </tr>
+      <tr>
+        <td><code>svchost.exe [unusual parent]</code></td>
+        <td>svchost spawned by non-services.exe parent</td>
+        <td>Process injection — attacker injected code into svchost</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Reading the Process Tree JSON</h3>
+  <pre><code"># Process tree section in report JSON:
+{
+  "process_tree": [
+    {
+      "pid": 1234,
+      "ppid": 4,
+      "name": "WINWORD.EXE",
+      "cmd": "\"C:\\Program Files\\Microsoft Office\\...\\WINWORD.EXE\" invoice.docx",
+      "children": [
+        {
+          "pid": 2345,
+          "ppid": 1234,
+          "name": "cmd.exe",
+          "cmd": "cmd.exe /c powershell -enc BASE64PAYLOAD",
+          "children": [
+            {
+              "pid": 3456,
+              "ppid": 2345,
+              "name": "powershell.exe",
+              "cmd": "powershell -enc BASE64PAYLOAD"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+# Decode the base64 payload for analysis:
+echo "BASE64PAYLOAD" | base64 -d
+# Or in PowerShell: [System.Text.Encoding]::Unicode.GetString([System.Convert]::FromBase64String("BASE64PAYLOAD"))</code></pre>
+
+  <h3>API Calls</h3>
+  <pre><code"># Key API calls and what they indicate
+# (from report.json → behavior → processes → calls)
+
+# --- Process Injection ---
+# VirtualAllocEx + WriteProcessMemory + CreateRemoteThread = classic injection
+# NtCreateThreadEx (stealth injection)
+# SetWindowsHookEx (hook injection)
+
+# --- Evasion ---
+# IsDebuggerPresent → checking for debugger
+# NtQueryInformationProcess → anti-analysis
+# GetTickCount + sleep loops → sandbox timing evasion
+# CPUID checks → VM detection
+
+# --- Persistence ---
+# RegSetValueEx on Run keys = registry persistence
+# CreateService / OpenService = service-based persistence
+# ShellExecute on startup path = startup folder persistence
+
+# --- Network ---
+# InternetOpenUrl + InternetReadFile = HTTP download
+# WSAConnect → raw socket connect to C2
+# DnsQuery = DNS resolution (may indicate DGA)
+
+# --- Ransomware ---
+# FindFirstFile + FindNextFile = enumerating files
+# CryptEncrypt / BCryptEncrypt = encryption
+# MoveFileEx with REPLACE_EXISTING = overwriting originals</code></pre>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 05 -->
+<template id="tpl-api_calls">
+<article class="topic">
+  <h2>Network &amp; File Activity</h2>
+  <p>Network and file activity are the most actionable sections — they produce IOCs directly usable in SIEM, firewall, and IDS rules.
+    <a href="#" class="xref" onclick="loadTopic('ioc'); return false;">IOC extraction ↗</a>
+  </p>
+
+  <h3>Network Activity Analysis</h3>
+  <table>
+    <thead><tr><th>Behavior</th><th>What to Extract</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>DNS queries to random-looking domains</td>
+        <td>Domain names, query frequency, NXDOMAIN rate</td>
+        <td>Block domains in DNS sinkhole; create DGA YARA pattern; add to MISP</td>
+      </tr>
+      <tr>
+        <td>HTTP POST to unusual path</td>
+        <td>Full URI, User-Agent, request body (may be base64 encoded data)</td>
+        <td>Create Suricata rule on URI pattern; block IP; decode body for C2 protocol reverse</td>
+      </tr>
+      <tr>
+        <td>HTTPS to self-signed cert</td>
+        <td>Server IP, SNI, certificate fingerprint (JA3 hash)</td>
+        <td>Block IP; create TLS JA3 detection rule; pivot in Zeek ssl.log</td>
+      </tr>
+      <tr>
+        <td>TCP connection on unusual port</td>
+        <td>Destination IP:port, data volume, timing</td>
+        <td>Block port on egress firewall; create conn.log hunt filter</td>
+      </tr>
+      <tr>
+        <td>SMTP / email exfiltration</td>
+        <td>From/To addresses, SMTP server IP</td>
+        <td>Block outbound SMTP from workstations; monitor mail logs</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>File Activity: What to Look For</h3>
+  <pre><code"># High-value file paths in analysis:
+# %TEMP% / %TMP%                → dropper writing secondary payloads
+# %APPDATA%\Roaming\            → persistence location (common for RATs)
+# %SYSTEMROOT%\System32\        → system file replacement (DLL hijack)
+# C:\Users\Public\              → world-writable staging area
+# %PROGRAMDATA%\                → long-term persistence (survives user deletion)
+
+# Suspicious file operations:
+# File created in %TEMP% with .exe extension
+# File created with random 8-character filename (dropper pattern)
+# File opened: C:\Users\*\Documents\*.docx (ransomware enumeration)
+# File deleted: shadow copies, backup files (vssadmin.exe Delete Shadows)
+
+# In report JSON (behavior.files):
+{
+  "created": ["C:\\Users\\analyst\\AppData\\Roaming\\svchost32.exe"],
+  "deleted": ["C:\\Users\\analyst\\AppData\\Local\\Temp\\stage1.exe"],
+  "read": ["C:\\Windows\\System32\\config\\SAM"],  // credential theft!
+  "written": ["C:\\Users\\analyst\\Documents\\DECRYPT.txt"]  // ransom note!
+}</code></pre>
+
+  <h3>Registry Activity: Persistence Keys</h3>
+  <pre><code"># Top persistence registry locations:
+# HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+# HKLM\Software\Microsoft\Windows\CurrentVersion\Run
+# HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce
+# HKLM\System\CurrentControlSet\Services\ (service persistence)
+# HKCU\Software\Microsoft\Windows NT\CurrentVersion\Winlogon\Shell
+
+# Example from report (behavior.registry.written):
+{
+  "path": "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+  "key": "SecurityUpdate",
+  "value": "C:\\Users\\analyst\\AppData\\Roaming\\svchost32.exe"
+}
+# → This sets the malware to run at every login</code></pre>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 06 -->
+<template id="tpl-signatures">
+<article class="topic">
+  <h2>Signatures &amp; Scoring</h2>
+  <p>Cuckoo includes behavioral signatures — Python scripts that inspect the report data and flag specific patterns. Each signature contributes to the overall score.</p>
+
+  <h3>Signature Categories</h3>
+  <table>
+    <thead><tr><th>Category</th><th>Examples</th><th>Score Impact</th></tr></thead>
+    <tbody>
+      <tr><td>Persistence</td><td>Registry Run key, scheduled task creation, service install</td><td>+2 to +4</td></tr>
+      <tr><td>Anti-analysis</td><td>VM detection, debugger check, sleep calls, CPUID tricks</td><td>+2 to +5 (evasion = suspicious)</td></tr>
+      <tr><td>Network</td><td>IRC C2, HTTP beacon, DNS request to known-bad domain, Tor</td><td>+3 to +5</td></tr>
+      <tr><td>Process injection</td><td>VirtualAllocEx+WriteProcessMemory+CreateRemoteThread combo</td><td>+5</td></tr>
+      <tr><td>Credential access</td><td>SAM file access, LSASS memory read, browser password extraction</td><td>+4 to +5</td></tr>
+      <tr><td>Ransomware</td><td>Mass file encryption, shadow copy deletion, ransom note creation</td><td>+5 (auto max)</td></tr>
+      <tr><td>Info</td><td>File opened, system info gathered, benign API usage</td><td>+0 to +1</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Writing Custom Signatures</h3>
+  <pre><code"># Cuckoo signatures are Python files in cuckoo/signatures/
+# Base class: Signature
+
+class DetectCustomRansomware(Signature):
+    name = "custom_ransomware_pattern"
+    description = "Detects custom ransomware — mass encryption + shadow deletion"
+    severity = 5
+    categories = ["ransomware"]
+    authors = ["SOC Team"]
+    minimum = "2.0"
+
+    def run(self):
+        # Check for vssadmin shadow delete (common ransomware TTP)
+        for process in self.get_processes():
+            if "vssadmin" in process.get("process_name", "").lower():
+                cmdline = process.get("command_line", "")
+                if "delete" in cmdline.lower() and "shadow" in cmdline.lower():
+                    self.mark_ioc("cmdline", cmdline)
+                    return True
+
+        # Check for mass file encryption pattern
+        file_writes = self.check_file(pattern=".*\.(encrypted|locked|ransom)$",
+                                      regex=True, actions=["write"])
+        if len(file_writes) > 20:
+            return True
+
+        return False</code></pre>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 07 -->
+<template id="tpl-memory">
+<article class="topic">
+  <h2>Memory Analysis &amp; Dumps</h2>
+  <p>Cuckoo can capture full VM memory during or after analysis. Memory dumps reveal unpacked malware, injected shellcode, and in-memory configurations that never appear on disk.</p>
+
+  <h3>Memory Dump Configuration</h3>
+  <pre><code"># Enable memory dumps in cuckoo.conf:
+[memory]
+enabled = yes
+# Memory is dumped at:
+# - End of analysis
+# - When malware calls specific API (e.g., VirtualProtect with EXECUTE flag)
+
+# Full VM memory dump size: typically 1-4 GB
+# Location: $CUCKOO_CWD/storage/analyses/TASK_ID/memory.dmp
+
+# Submit with forced memory dump
+cuckoo submit --memory suspicious.exe</code></pre>
+
+  <h3>Analyzing Memory Dumps with Volatility</h3>
+  <pre><code"># Identify OS profile (Volatility 2) or use --os for Volatility 3
+vol2 -f memory.dmp imageinfo
+# → Suggested: Win10x64_19041
+
+# Use Volatility 3 (no profile needed)
+vol -f memory.dmp windows.info                    # OS info
+vol -f memory.dmp windows.pslist                  # running processes
+vol -f memory.dmp windows.malfind                 # find injected code (VAD regions with EXECUTE)
+vol -f memory.dmp windows.cmdline                 # process command lines
+vol -f memory.dmp windows.dlllist --pid 1234      # loaded DLLs for PID 1234
+vol -f memory.dmp windows.filescan                # find files in memory
+vol -f memory.dmp windows.netscan                 # network connections
+
+# Scan with YARA
+vol -f memory.dmp windows.vadyarascan --yara-file cobalt_strike.yar
+
+# Dump a suspicious process memory
+vol -f memory.dmp windows.memmap --pid 1234 --dump
+# Creates pid.1234.dmp → analyze with strings, YARA, etc.</code></pre>
+
+  <h3>Memory-Only IOC Extraction</h3>
+  <pre><code"># Strings in memory dump
+strings -n 8 memory.dmp | grep -E "(http|ftp|https)://[^\s]+" | sort -u
+strings -n 8 memory.dmp | grep -E "[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}" | sort -u
+strings -el memory.dmp | grep -iE "C2|beacon|panel|gate" | sort -u
+
+# Find Cobalt Strike watermark / config
+strings -n 4 memory.dmp | grep -E "^[0-9]{6,9}$" | sort -u  # possible watermark
+
+# Carve PE files from memory
+foremost -i memory.dmp -t exe,dll -o /tmp/carved/
+# Or with bulk_extractor:
+bulk_extractor -o /tmp/be_output/ memory.dmp</code></pre>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 08 -->
+<template id="tpl-ioc">
+<article class="topic">
+  <h2>IOC Extraction &amp; Reporting</h2>
+  <p>Converting Cuckoo analysis results into actionable IOCs is the core workflow for SOC analysts. Each IOC type feeds a different detection layer.</p>
+
+  <h3>IOC Extraction from JSON Report</h3>
+  <pre><code"># Get full report JSON via API
+curl -s http://192.168.56.20:8090/tasks/report/42 > report.json
+
+# Extract network IOCs
+python3 << 'EOF'
+import json
+
+with open('report.json') as f:
+    report = json.load(f)
+
+# Network IOCs
+network = report.get('network', {})
+print("=== DNS Queries ===")
+for dns in network.get('dns', []):
+    print(f"  {dns['request']} → {dns.get('answers', [])}")
+
+print("\n=== HTTP Requests ===")
+for http in network.get('http', []):
+    print(f"  {http['method']} {http['uri']} UA:{http.get('user-agent','')}")
+
+print("\n=== TCP Connections ===")
+for conn in network.get('tcp', []):
+    print(f"  {conn['src']} → {conn['dst']}:{conn['dport']}")
+
+# File IOCs
+print("\n=== Dropped Files (hashes) ===")
+for f in report.get('dropped', []):
+    if 'sha256' in f:
+        print(f"  {f.get('name','')} SHA256:{f['sha256']}")
+
+# YARA matches
+print("\n=== YARA Matches ===")
+for match in report.get('target', {}).get('file', {}).get('yara', []):
+    print(f"  {match['name']}")
+EOF</code></pre>
+
+  <h3>IOC-to-Detection Mapping</h3>
+  <table>
+    <thead><tr><th>IOC Type</th><th>Detection Destination</th><th>Format/Action</th></tr></thead>
+    <tbody>
+      <tr><td>C2 IP address</td><td>Firewall, IDS, SIEM</td><td>Block on egress firewall; Suricata alert; SIEM watchlist</td></tr>
+      <tr><td>C2 domain</td><td>DNS sinkhole, proxy, IDS</td><td>Add to DNS blackhole; Suricata DNS alert; Zeek intel feed</td></tr>
+      <tr><td>File hash (SHA256)</td><td>EDR, ClamAV, SIEM</td><td>EDR blocklist; ClamAV .hdb; SIEM hash alert</td></tr>
+      <tr><td>URL / URI pattern</td><td>Proxy, IDS</td><td>Proxy category block; Suricata HTTP content match</td></tr>
+      <tr><td>Mutex name</td><td>YARA, EDR</td><td>YARA rule for mutex string; EDR custom indicator</td></tr>
+      <tr><td>Registry key</td><td>OSSEC/Wazuh, EDR</td><td>OSSEC FIM rule for registry path; EDR custom hunt</td></tr>
+        <tr><td>JA3 TLS fingerprint</td><td>IDS, NSM</td><td>Suricata TLS JA3 rule; Zeek ssl.log hunt</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Pushing IOCs to MISP</h3>
+  <pre><code"># Auto-create MISP event from Cuckoo report
+# (via cuckoo-modified misp reporting module)
+
+# In reporting.conf:
+[misp]
+enabled = yes
+url = https://misp.internal
+apikey = YOUR_API_KEY
+mode = maldoc url file
+distribution = 0
+threat_level_id = 1
+analysis = 1
+tag = tlp:amber
+
+# Cuckoo will automatically create a MISP event with:
+# - File hash attributes
+# - Network IOC attributes
+# - C2 IPs and domains
+# - YARA signature names as tags</code></pre>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 09 -->
+<template id="tpl-vt">
+<article class="topic">
+  <h2>VirusTotal Integration</h2>
+  <p>Cuckoo integrates with VirusTotal to auto-enrich samples. After analysis, submitted hashes are checked against VT's 70+ AV engine results.</p>
+
+  <h3>VT Processing Configuration</h3>
+  <pre><code"># processing.conf
+[virustotal]
+enabled = yes
+key = YOUR_VT_API_KEY
+timeout = 60
+do_tor = no
+
+# VT API limits:
+# Free: 500 requests/day, 4/minute
+# Premium: 1000+ requests/minute
+
+# What Cuckoo submits to VT:
+# - Submitted file hash (SHA256)
+# - Dropped file hashes
+# - URLs visited during analysis</code></pre>
+
+  <h3>Reading VT Results in Report</h3>
+  <pre><code"># In report.json → virustotal:
+{
+  "virustotal": {
+    "total": 72,
+    "positives": 58,
+    "permalink": "https://www.virustotal.com/file/.../analysis/",
+    "scans": {
+      "Kaspersky": {"detected": true, "result": "Trojan.Win32.Dridex.amd"},
+      "ESET-NOD32": {"detected": true, "result": "Win32/Kryptik.HYTD"},
+      "Windows Defender": {"detected": true, "result": "Trojan:Win32/Emotet"},
+      "McAfee": {"detected": false, "result": null}
+    }
+  }
+}
+
+# Key metrics:
+# positives/total = detection rate (58/72 = 81% detected)
+# Low detection rate (< 10%) = new malware or targeted
+# Common name across multiple engines = confirmed family
+
+# Compare Cuckoo behavioral verdict vs VT:
+# If Cuckoo score = 9/10 but VT = 0/72 → zero-day, targeted attack
+# If Cuckoo score = 3/10 but VT = 65/72 → known malware in sandbox evasion mode</code></pre>
+
+  <h3>VT Graph — Pivot from Sample</h3>
+  <pre><code"># From VT report:
+# - Relations tab → shows connected IPs, domains, dropped files
+# - Embedded network → visualize infrastructure
+# - "Contacted URLs" → C2 infrastructure
+# - "Downloaded from" → distribution network
+
+# Pivot to find more C2 IPs:
+# Hash → VT → Relations → Contacted IP → VT Graph
+# → Find all files that contacted the same IP = malware campaign</code></pre>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 10 -->
+<template id="tpl-config">
+<article class="topic">
+  <h2>Configuration &amp; VM Setup</h2>
+  <p>Cuckoo's value depends entirely on realistic analysis VMs. A poorly configured VM results in missed behaviors — malware detects the sandbox and stays dormant.</p>
+
+  <h3>Analysis VM Best Practices</h3>
+  <table>
+    <thead><tr><th>Category</th><th>Recommendation</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>OS</td><td>Windows 10 22H2 (real licensed copy)</td><td>Most malware targets Win10; older OS may miss modern evasion checks</td></tr>
+      <tr><td>Office</td><td>Microsoft Office 2019 or 365</td><td>Document malware requires Office to execute macros</td></tr>
+      <tr><td>Browser</td><td>Chrome, Firefox (recent versions)</td><td>URL analysis; browser exploits; credential-stealing extensions</td></tr>
+      <tr><td>Java</td><td>Install OpenJDK and Oracle JRE</td><td>JAR file analysis</td></tr>
+      <tr><td>VM artifacts</td><td>Add fake user documents, browser history, cookies</td><td>Malware checks for "human" artifacts; empty VM = sandbox detection</td></tr>
+      <tr><td>Memory</td><td>4-8 GB RAM per VM</td><td>Large files, Office, browser all consume significant memory</td></tr>
+      <tr><td>Snapshot</td><td>Take "clean" snapshot post-setup for quick revert</td><td>Cuckoo reverts to snapshot after each analysis</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Sandbox Evasion Counter-Measures</h3>
+  <table>
+    <thead><tr><th>Evasion Technique</th><th>Malware Check</th><th>Counter-Measure</th></tr></thead>
+    <tbody>
+      <tr><td>VM detection</td><td>Checks for VirtualBox/VMware registry keys, drivers, processes (VBoxService.exe)</td><td>Install VMware tools and patch registry; hide virtualization artifacts</td></tr>
+      <tr><td>Timing attacks</td><td>Calls GetTickCount, sleep long periods, then checks if time actually passed</td><td>Cuckoo's "clock skew" option: fake system clock to skip sleeps</td></tr>
+      <tr><td>User interaction</td><td>Checks for mouse movement, keyboard input, window focus</td><td>Use <code>--options human=1</code> to simulate user interaction</td></tr>
+      <tr><td>Sandbox artifact check</td><td>Looks for Cuckoo agent, Python.exe, agent.py in process list</td><td>Rename agent, run as system process, hollow legitimate process</td></tr>
+      <tr><td>Internet connectivity</td><td>Checks for real internet before executing C2 connection</td><td>Route through InetSim + provide realistic fake responses</td></tr>
+    </tbody>
+  </table>
+
+  <h3>cuckoo.conf Key Settings</h3>
+  <pre><code"># $CUCKOO_CWD/conf/cuckoo.conf
+
+[cuckoo]
+machinery = virtualbox    # or: kvm, vmware, xenserver
+
+[resultserver]
+ip = 192.168.122.1       # host IP visible to guest VMs
+port = 2042
+
+[timeouts]
+default = 120            # analysis duration (seconds)
+critical = 60            # time to wait after execution finishes
+vm_state = 60            # time to wait for VM state changes
+
+[routing]
+route = inetsim          # default: inetsim, internet, drop, none</code></pre>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 11 -->
+<template id="tpl-lab">
+<article class="topic">
+  <h2>Investigation Lab — Full Malware Analysis Workflow</h2>
+  <div class="callout warn">
+    <strong>Safety first.</strong> This lab uses the EICAR test file and a benign test document. Never submit real malware without a fully isolated environment. Ensure the Cuckoo guest VMs have no connectivity to production networks.
+  </div>
+
+  <h3>Lab Environment</h3>
+  <table>
+    <thead><tr><th>System</th><th>IP</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td>Ubuntu (Cuckoo host)</td><td>192.168.56.20</td><td>Cuckoo daemon, web UI, result storage</td></tr>
+      <tr><td>Windows 10 (Cuckoo guest)</td><td>192.168.122.101</td><td>Analysis VM — runs submitted samples</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Step 1 — Start Cuckoo &amp; Verify</h3>
+  <pre><code"># Start the Cuckoo daemon
+cuckoo
+
+# In a second terminal, start the web interface
+cuckoo web
+
+# Verify via API
+curl -s http://localhost:8090/cuckoo/status | python3 -m json.tool
+# Should show: tasks.running, tasks.completed, machines.available
+
+# Check machine availability
+curl -s http://localhost:8090/machines/list | python3 -m json.tool</code></pre>
+
+  <h3>Step 2 — Submit the EICAR Test File</h3>
+  <pre><code"># Create EICAR test file
+echo 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' \
+    > /tmp/eicar_test.com
+
+# Submit via API
+TASK_ID=$(curl -s -F "file=@/tmp/eicar_test.com" \
+    http://localhost:8090/tasks/create/file | python3 -c \
+    "import sys,json; print(json.load(sys.stdin)['task_id'])")
+echo "Task ID: $TASK_ID"
+
+# Check task status
+curl -s http://localhost:8090/tasks/view/$TASK_ID | \
+    python3 -c "import sys,json; t=json.load(sys.stdin)['task']; print(t['status'])"</code></pre>
+
+  <h3>Step 3 — Wait and Retrieve Report</h3>
+  <pre><code"># Wait for analysis to complete (default 120 seconds)
+# Monitor status:
+watch -n 10 "curl -s http://localhost:8090/tasks/view/$TASK_ID | \
+    python3 -c \"import sys,json; t=json.load(sys.stdin)['task']; print(t['status'])\""
+
+# When status = "reported", get the report
+curl -s http://localhost:8090/tasks/report/$TASK_ID > /tmp/report_$TASK_ID.json
+
+# View key sections
+python3 << 'EOF'
+import json
+with open(f'/tmp/report_{TASK_ID}.json') as f:
+    r = json.load(f)
+
+print(f"Score: {r.get('info',{}).get('score', 'N/A')}")
+print(f"File: {r.get('target',{}).get('file',{}).get('name','N/A')}")
+print(f"SHA256: {r.get('target',{}).get('file',{}).get('sha256','N/A')}")
+
+print("\nSignatures fired:")
+for sig in r.get('signatures', []):
+    print(f"  [{sig['severity']}] {sig['name']}: {sig['description']}")
+
+print("\nNetwork DNS queries:")
+for dns in r.get('network',{}).get('dns',[]):
+    print(f"  {dns['request']}")
+EOF</code></pre>
+
+  <h3>Step 4 — View in Web UI</h3>
+  <pre><code"># Open browser to http://192.168.56.20:8000
+# Navigate: Analysis → Recent → click Task #TASK_ID
+# Explore:
+# - Summary tab: score, verdict, signatures
+# - Behavioral Analysis: process tree, API calls
+# - Network: DNS, HTTP, TCP connections
+# - Files: dropped files with hashes
+# - Screenshots: VM desktop during execution
+# - PCAP: download raw traffic capture
+
+# Download the PCAP for Wireshark / Zeek analysis
+curl -s http://localhost:8090/tasks/get/pcap/$TASK_ID -o /tmp/analysis_$TASK_ID.pcap
+zeek -r /tmp/analysis_$TASK_ID.pcap</code></pre>
+
+  <div class="callout lab">
+    <strong>Lab Extension:</strong> Submit a PowerShell dropper script and analyze the process tree. Compare Cuckoo's behavioral verdict against VirusTotal for the same sample. Extract IOCs from the report and create a MISP event. Use Volatility on the memory dump to find injected code.
+    <a href="#" class="xref" onclick="loadTopic('ioc'); return false;">IOC extraction ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('memory'); return false;">Memory analysis ↗</a>
+  </div>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Cuckoo Sandbox',
+  topics: [
+    { id: 'overview',    badge: '01', label: 'Overview & Architecture'   },
+    { id: 'submission',  badge: '02', label: 'Sample Submission'          },
+    { id: 'reports',     badge: '03', label: 'Behavioral Report Reading'  },
+    { id: 'process',     badge: '04', label: 'Process Tree Analysis'      },
+    { id: 'api_calls',   badge: '05', label: 'Network & File Activity'    },
+    { id: 'signatures',  badge: '06', label: 'Signatures & Scoring'       },
+    { id: 'memory',      badge: '07', label: 'Memory Analysis & Dumps'    },
+    { id: 'ioc',         badge: '08', label: 'IOC Extraction'             },
+    { id: 'vt',          badge: '09', label: 'VirusTotal Integration'     },
+    { id: 'config',      badge: '10', label: 'Configuration & VM Setup'   },
+    { id: 'lab',         badge: '11', label: 'Investigation Lab'          },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

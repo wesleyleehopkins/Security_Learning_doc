@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Active Response — OSSEC — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" aria-label="Toggle sidebar">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 5h14M3 10h14M3 15h14"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html" class="active">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">Active Response</div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  </aside>
+  <main class="content" id="content-area"></main>
+</div>
+
+<!-- ══════════════════════════ AR Overview ═══════════════════════════════════ -->
+<template id="tpl-ar-overview">
+<article class="topic">
+  <h2>Active Response Overview</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Active Response is triggered by L7 log analysis (application-layer events) and executes countermeasures at L3 — blocking source IPs via iptables, firewalld, or hosts.deny.</span>
+  </div>
+  <p>Active Response (AR) automatically executes scripts on the manager or an agent when a specific rule fires. The most common use is blocking an attacker's IP address in the firewall when a brute force rule triggers.</p>
+
+  <div class="callout warn">
+    <strong>Risk warning:</strong> Active response can block legitimate traffic. A misconfigured rule or false positive can lock out administrators, production services, or monitoring systems. Always test in a lab, set appropriate level thresholds (level 10+ for IP blocks), and implement timeouts so blocks auto-expire.
+  </div>
+
+  <h3>How Active Response Works</h3>
+  <pre><code>Rule fires (e.g., rule 5712 — SSH brute force, level 10)
+        ↓
+ossec-analysisd checks &lt;active-response&gt; block in ossec.conf
+        ↓
+  Matches? → Passes command + args (srcip, user, filename) to ossec-execd
+        ↓
+ossec-execd runs the script in /var/ossec/active-response/bin/
+        ↓
+  Script adds firewall rule / blocks user / sends alert
+        ↓
+  After timeout: ossec-execd runs script again with "delete" action to undo</code></pre>
+
+  <h3>Active Response Configuration Block (ossec.conf)</h3>
+  <pre><code>&lt;ossec_config&gt;
+
+  <span class="cm">&lt;!-- Step 1: Define the command (which script to run) --&gt;</span>
+  &lt;command&gt;
+    &lt;name&gt;firewall-drop&lt;/name&gt;
+    &lt;executable&gt;firewall-drop&lt;/executable&gt;  <span class="cm">&lt;!-- script in active-response/bin/ --&gt;</span>
+    &lt;timeout_allowed&gt;yes&lt;/timeout_allowed&gt;   <span class="cm">&lt;!-- allow auto-unblock after timeout --&gt;</span>
+  &lt;/command&gt;
+
+  <span class="cm">&lt;!-- Step 2: Define when to trigger it --&gt;</span>
+  &lt;active-response&gt;
+    &lt;command&gt;firewall-drop&lt;/command&gt;
+    &lt;location&gt;local&lt;/location&gt;        <span class="cm">&lt;!-- where to run: local / server / defined-agent --&gt;</span>
+    &lt;rules_id&gt;5712&lt;/rules_id&gt;         <span class="cm">&lt;!-- trigger on this specific rule ID --&gt;</span>
+    &lt;timeout&gt;600&lt;/timeout&gt;             <span class="cm">&lt;!-- unblock after 600 seconds (10 min) --&gt;</span>
+  &lt;/active-response&gt;
+
+&lt;/ossec_config&gt;</code></pre>
+
+  <h3>Active Response Location Options</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Location</th><th>Where Script Runs</th><th>Use Case</th></tr></thead>
+      <tbody>
+        <tr><td><code>local</code></td><td>On the agent that generated the alert</td><td>Block IP on the attacked server's firewall</td></tr>
+        <tr><td><code>server</code></td><td>On the OSSEC manager</td><td>Central blocking (manager has a perimeter firewall)</td></tr>
+        <tr><td><code>defined-agent</code></td><td>On a specific agent by ID</td><td>Push block to a dedicated firewall agent</td></tr>
+        <tr><td><code>all</code></td><td>On all agents</td><td>Block attacker everywhere (risky — use with care)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Understand the AR Flow</summary>
+    <div class="tier-body">
+      <h4>How Active Response Connects Rules to Actions</h4>
+      <ul>
+        <li>A rule fires (e.g., SSH brute force, level 10) → ossec-analysisd checks if an AR is configured for that rule</li>
+        <li>ossec-execd runs the configured script with <code>add</code> action (block) then <code>delete</code> after timeout (unblock)</li>
+        <li>Set <code>&lt;location&gt;local&lt;/location&gt;</code> to run the script on the agent where the alert fired</li>
+        <li>Always set a <code>&lt;timeout&gt;</code> — permanent blocks accumulate and may cause management issues</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Configure AR for Specific Rules</summary>
+    <div class="tier-body">
+      <h4>Wire a Rule to a Command</h4>
+      <ul>
+        <li>Use <code>&lt;rules_id&gt;</code> to target a specific rule SID, or <code>&lt;rules_group&gt;</code> to target a rule group (e.g., <code>authentication_failures</code>)</li>
+        <li>Use <code>&lt;level&gt;</code> to fire on any rule at or above that level</li>
+        <li>Combine: <code>&lt;rules_id&gt;5712&lt;/rules_id&gt;</code> with <code>&lt;timeout&gt;1800&lt;/timeout&gt;</code> → block SSH brute-force IPs for 30 minutes</li>
+        <li>Verify AR fired: check <code>/var/ossec/logs/active-responses.log</code> and <code>sudo iptables -L INPUT -n</code></li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Multi-location Response Strategy</summary>
+    <div class="tier-body">
+      <h4>Push Blocks to Multiple Points Simultaneously</h4>
+      <ul>
+        <li>Use <code>&lt;location&gt;all&lt;/location&gt;</code> to block the attacker IP on every agent — effective but risky if a false positive fires</li>
+        <li>Use <code>&lt;location&gt;defined-agent&lt;/location&gt;</code> with a dedicated firewall agent ID to centralize all blocking decisions</li>
+        <li>Chain two ARs for the same rule: one <code>local</code> block + one <code>server</code> log entry for audit trail</li>
+      </ul>
+      <pre><code><span class="cm">&lt;!-- Two-stage response: block locally + alert centrally --&gt;</span>
+&lt;active-response&gt;
+  &lt;command&gt;firewall-drop&lt;/command&gt;
+  &lt;location&gt;local&lt;/location&gt;
+  &lt;rules_id&gt;5712&lt;/rules_id&gt;
+  &lt;timeout&gt;1800&lt;/timeout&gt;
+&lt;/active-response&gt;</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ Built-in Commands ═════════════════════════════ -->
+<template id="tpl-builtin-commands">
+<article class="topic">
+  <h2>Built-in Active Response Commands</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Built-in response scripts enforce security at L3 (firewall-drop blocks source IPs via iptables; host-deny updates TCP wrappers) in response to L7 application-layer alert triggers.</span>
+  </div>
+  <p>OSSEC/Wazuh ships with several ready-to-use response scripts in <code>/var/ossec/active-response/bin/</code>.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Script</th><th>Platform</th><th>Action</th><th>Reversible</th></tr></thead>
+      <tbody>
+        <tr><td><code>firewall-drop</code></td><td>Linux (iptables)</td><td>Block srcip with iptables INPUT DROP rule</td><td>Yes (timeout)</td></tr>
+        <tr><td><code>firewall-drop.sh</code></td><td>Linux (iptables)</td><td>Same as above (legacy name)</td><td>Yes</td></tr>
+        <tr><td><code>firewalld-drop</code></td><td>Linux (firewalld)</td><td>Add srcip to firewalld rich rule DROP</td><td>Yes</td></tr>
+        <tr><td><code>pf</code></td><td>BSD (pf)</td><td>Block IP using PF firewall table</td><td>Yes</td></tr>
+        <tr><td><code>npf</code></td><td>BSD (npf)</td><td>Block IP using NPF firewall</td><td>Yes</td></tr>
+        <tr><td><code>host-deny</code></td><td>Linux/BSD</td><td>Add IP to /etc/hosts.deny (TCP Wrappers)</td><td>Yes</td></tr>
+        <tr><td><code>disable-account</code></td><td>Linux</td><td>Lock user account: <code>passwd -l username</code></td><td>Manual unlock needed</td></tr>
+        <tr><td><code>win_route-null</code></td><td>Windows</td><td>Route attacker IP to null (route add ... MASK 255.255.255.255 0.0.0.0)</td><td>Yes</td></tr>
+        <tr><td><code>netsh</code></td><td>Windows</td><td>Block IP with Windows Firewall via netsh</td><td>Yes</td></tr>
+        <tr><td><code>kaspersky</code></td><td>Windows</td><td>Quarantine endpoint via Kaspersky Security Center API</td><td>Varies</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Pre-configured Command Entries (ossec.conf defaults)</h3>
+  <pre><code><span class="cm">&lt;!-- These are typically already in ossec.conf --&gt;</span>
+&lt;command&gt;
+  &lt;name&gt;host-deny&lt;/name&gt;
+  &lt;executable&gt;host-deny&lt;/executable&gt;
+  &lt;timeout_allowed&gt;yes&lt;/timeout_allowed&gt;
+&lt;/command&gt;
+
+&lt;command&gt;
+  &lt;name&gt;firewall-drop&lt;/name&gt;
+  &lt;executable&gt;firewall-drop&lt;/executable&gt;
+  &lt;timeout_allowed&gt;yes&lt;/timeout_allowed&gt;
+&lt;/command&gt;
+
+&lt;command&gt;
+  &lt;name&gt;disable-account&lt;/name&gt;
+  &lt;executable&gt;disable-account&lt;/executable&gt;
+  &lt;timeout_allowed&gt;no&lt;/timeout_allowed&gt;  <span class="cm">&lt;!-- account stays locked until manual unlock --&gt;</span>
+&lt;/command&gt;
+
+&lt;command&gt;
+  &lt;name&gt;win_route-null&lt;/name&gt;
+  &lt;executable&gt;win_route-null.cmd&lt;/executable&gt;
+  &lt;timeout_allowed&gt;yes&lt;/timeout_allowed&gt;
+&lt;/command&gt;</code></pre>
+
+  <h3>Trigger Examples</h3>
+  <pre><code><span class="cm">&lt;!-- Block SSH brute-force IPs for 30 minutes --&gt;</span>
+&lt;active-response&gt;
+  &lt;command&gt;firewall-drop&lt;/command&gt;
+  &lt;location&gt;local&lt;/location&gt;
+  &lt;rules_id&gt;5712&lt;/rules_id&gt;
+  &lt;timeout&gt;1800&lt;/timeout&gt;
+&lt;/active-response&gt;
+
+<span class="cm">&lt;!-- Block web scanner IPs using hosts.deny --&gt;</span>
+&lt;active-response&gt;
+  &lt;command&gt;host-deny&lt;/command&gt;
+  &lt;location&gt;local&lt;/location&gt;
+  &lt;level&gt;8&lt;/level&gt;           <span class="cm">&lt;!-- trigger on any rule at level 8+ --&gt;</span>
+  &lt;timeout&gt;3600&lt;/timeout&gt;
+&lt;/active-response&gt;
+
+<span class="cm">&lt;!-- Disable account on multiple failed sudo attempts --&gt;</span>
+&lt;active-response&gt;
+  &lt;command&gt;disable-account&lt;/command&gt;
+  &lt;location&gt;local&lt;/location&gt;
+  &lt;rules_id&gt;5404&lt;/rules_id&gt;  <span class="cm">&lt;!-- sudo: user not in sudoers --&gt;</span>
+  &lt;timeout&gt;no&lt;/timeout&gt;
+&lt;/active-response&gt;
+
+<span class="cm">&lt;!-- Wazuh: block using group instead of specific SID --&gt;</span>
+&lt;active-response&gt;
+  &lt;command&gt;firewall-drop&lt;/command&gt;
+  &lt;location&gt;local&lt;/location&gt;
+  &lt;rules_group&gt;authentication_failures&lt;/rules_group&gt;
+  &lt;timeout&gt;600&lt;/timeout&gt;
+&lt;/active-response&gt;</code></pre>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Pick the Right Built-in</summary>
+    <div class="tier-body">
+      <h4>Match the Script to Your Platform and Action</h4>
+      <ul>
+        <li><strong>firewall-drop</strong>: Linux iptables — use for SSH/web brute force with a timeout (most common)</li>
+        <li><strong>host-deny</strong>: TCP Wrappers (/etc/hosts.deny) — lower-impact alternative; also reversible</li>
+        <li><strong>disable-account</strong>: locks the Unix account — no timeout by default, requires manual unlock</li>
+        <li><strong>win_route-null</strong>: Windows — routes attacker IP to null route (equivalent of drop)</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Combine Commands and Level Triggers</summary>
+    <div class="tier-body">
+      <h4>Layer Multiple Response Actions</h4>
+      <ul>
+        <li>Configure both <code>firewall-drop</code> (for SSH brute force via <code>rules_id</code>) and <code>host-deny</code> (for web scans via <code>level</code>) independently</li>
+        <li>For <code>disable-account</code>: only trigger on <code>rules_id</code> for very specific rules — never on broad <code>level</code> triggers</li>
+        <li>Use <code>rules_group</code> instead of <code>rules_id</code> when you want a single AR to cover a whole category</li>
+      </ul>
+      <pre><code><span class="cm">&lt;!-- Level-based: block any level 8+ event via hosts.deny --&gt;</span>
+&lt;active-response&gt;
+  &lt;command&gt;host-deny&lt;/command&gt;
+  &lt;location&gt;local&lt;/location&gt;
+  &lt;level&gt;8&lt;/level&gt;
+  &lt;timeout&gt;3600&lt;/timeout&gt;
+&lt;/active-response&gt;</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Wazuh Endpoint Isolation</summary>
+    <div class="tier-body">
+      <h4>Full Network Isolation on Confirmed Compromise</h4>
+      <ul>
+        <li>Wazuh supports endpoint isolation — cuts all agent network traffic except manager communication via <code>active-response</code> with Wazuh agent capability</li>
+        <li>Trigger isolation via API with <code>!isolate-host</code> command on agents at level 14+ only</li>
+        <li>Isolation is highly destructive — use only on confirmed compromise with a runbook for re-enabling connectivity</li>
+      </ul>
+      <pre><code><span class="cm"># Isolate an agent via Wazuh API (emergency response)</span>
+curl -k -X PUT \
+  -H "Authorization: Bearer $TOKEN" \
+  "https://&lt;manager&gt;:55000/agents/003/isolation" \
+  -d '{"isolation": true}'</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ Custom Scripts ═════════════════════════════════ -->
+<template id="tpl-custom-scripts">
+<article class="topic">
+  <h2>Custom Response Scripts</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Custom scripts receive alert data (srcip from L3, user/rule from L7) and can enforce any countermeasure — common actions include L3 IP blocking, L7 account lockout, or external API calls.</span>
+  </div>
+  <p>You can write your own active response scripts. OSSEC passes arguments via environment variables (OSSEC style) or command-line arguments (Wazuh style).</p>
+
+  <h3>OSSEC Script Interface (Bash)</h3>
+  <pre><code>#!/bin/bash
+<span class="cm"># /var/ossec/active-response/bin/my-response.sh
+# Arguments: action  user  ip  alert-id  rule-id</span>
+
+LOCAL=`dirname $0`
+cd $LOCAL/../
+
+ACTION=$1
+USER=$2
+IP=$3
+ALERTID=$4
+RULEID=$5
+
+LOCK="/tmp/my-response-${IP}"
+LOG_FILE="/var/ossec/logs/active-responses.log"
+
+<span class="cm"># Log the action</span>
+echo "$(date) - action=$ACTION ip=$IP rule=$RULEID" >> $LOG_FILE
+
+if [ "$ACTION" = "add" ]; then
+  <span class="cm"># Block the IP</span>
+  iptables -I INPUT -s "$IP" -j DROP
+  touch "$LOCK"
+
+elif [ "$ACTION" = "delete" ]; then
+  <span class="cm"># Unblock the IP (called after timeout)</span>
+  iptables -D INPUT -s "$IP" -j DROP
+  rm -f "$LOCK"
+fi
+
+exit 0</code></pre>
+
+  <h3>Wazuh Script Interface (Python)</h3>
+  <pre><code>#!/usr/bin/env python3
+<span class="cm"># /var/ossec/active-response/bin/my-wazuh-response.py
+# Wazuh passes JSON to stdin</span>
+
+import sys
+import json
+import subprocess
+import logging
+
+LOG_FILE = "/var/ossec/logs/active-responses.log"
+logging.basicConfig(filename=LOG_FILE, level=logging.DEBUG,
+                    format="%(asctime)s %(levelname)s %(message)s")
+
+def main():
+    try:
+        <span class="cm"># Read the alert JSON from stdin</span>
+        msg = sys.stdin.readline()
+        alert = json.loads(msg)
+
+        action = alert.get("command")          <span class="cm"># "add" or "delete"</span>
+        src_ip = alert.get("parameters", {}).get("alert", {}) \
+                      .get("data", {}).get("srcip", "")
+
+        if not src_ip:
+            logging.warning("No srcip found in alert")
+            return
+
+        if action == "add":
+            <span class="cm"># Block the IP using iptables</span>
+            subprocess.run(["iptables", "-I", "INPUT",
+                            "-s", src_ip, "-j", "DROP"], check=True)
+            logging.info(f"Blocked IP: {src_ip}")
+
+        elif action == "delete":
+            <span class="cm"># Unblock after timeout</span>
+            subprocess.run(["iptables", "-D", "INPUT",
+                            "-s", src_ip, "-j", "DROP"], check=True)
+            logging.info(f"Unblocked IP: {src_ip}")
+
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()</code></pre>
+
+  <h3>Register the Custom Command</h3>
+  <pre><code><span class="cm">&lt;!-- In ossec.conf: add the command definition --&gt;</span>
+&lt;command&gt;
+  &lt;name&gt;my-response&lt;/name&gt;
+  &lt;executable&gt;my-wazuh-response.py&lt;/executable&gt;
+  &lt;timeout_allowed&gt;yes&lt;/timeout_allowed&gt;
+&lt;/command&gt;
+
+&lt;active-response&gt;
+  &lt;command&gt;my-response&lt;/command&gt;
+  &lt;location&gt;local&lt;/location&gt;
+  &lt;rules_id&gt;100100&lt;/rules_id&gt;
+  &lt;timeout&gt;600&lt;/timeout&gt;
+&lt;/active-response&gt;</code></pre>
+
+  <pre><code><span class="cm"># Set correct permissions on the script</span>
+sudo chmod 750 /var/ossec/active-response/bin/my-wazuh-response.py
+sudo chown root:ossec /var/ossec/active-response/bin/my-wazuh-response.py</code></pre>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Understand the Script Interface</summary>
+    <div class="tier-body">
+      <h4>How OSSEC Calls Your Script</h4>
+      <ul>
+        <li>OSSEC passes 5 positional arguments: <code>action user ip alert-id rule-id</code></li>
+        <li><code>action</code> is either <code>add</code> (block) or <code>delete</code> (unblock after timeout)</li>
+        <li>Always handle both actions — if your script only handles <code>add</code>, the block will never be reversed</li>
+        <li>Wazuh uses JSON via stdin instead — use the Python template for new deployments</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Write and Register a Custom Script</summary>
+    <div class="tier-body">
+      <h4>Deploy a Custom Response</h4>
+      <ul>
+        <li>Place the script in <code>/var/ossec/active-response/bin/</code> with <code>chmod 750</code> and <code>chown root:ossec</code></li>
+        <li>Add a <code>&lt;command&gt;</code> block naming the script, then an <code>&lt;active-response&gt;</code> block to wire it to a rule</li>
+        <li>Test by running the script manually: <code>sudo /var/ossec/active-response/bin/my-script.sh add - 192.168.56.10 0 5712</code></li>
+        <li>Log actions to <code>/var/ossec/logs/active-responses.log</code> for auditing</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Integrate With External Systems</summary>
+    <div class="tier-body">
+      <h4>Push Blocks to Firewalls, SIEMs, and Ticketing</h4>
+      <ul>
+        <li>Use Wazuh Python scripts to call external APIs: push blocked IPs to a SOAR platform, create JIRA tickets, or update a threat intel feed</li>
+        <li>For cloud environments: use AWS Systems Manager Run Command or Azure Run Script to block IPs at the security group level</li>
+        <li>Use the alert JSON fields (<code>rule.mitre.id</code>, <code>agent.name</code>) to enrich the external notification</li>
+      </ul>
+      <pre><code><span class="cm"># Example: push srcip to an external block API</span>
+import requests
+requests.post("https://siem.internal/api/block",
+  json={"ip": src_ip, "reason": f"OSSEC rule {rule_id}",
+        "expires": 3600}, verify=False)</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ Risks & Safe Thresholds ══════════════════════ -->
+<template id="tpl-ar-risks">
+<article class="topic">
+  <h2>Risks &amp; Safe Thresholds</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">AR risks span both layers: L3 IP blocks can lock out legitimate traffic (false-positive firewall drops), while L7 account disables can lock out valid users. Proper level thresholds and IP whitelisting mitigate both.</span>
+  </div>
+
+  <div class="callout warn">
+    <strong>Production risk:</strong> A false positive at level 10 that triggers <code>firewall-drop</code> can lock out legitimate admins, monitoring systems, or partner IP ranges. Never deploy without testing and safeguards.
+  </div>
+
+  <h3>Risk Categories</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Risk</th><th>Scenario</th><th>Mitigation</th></tr></thead>
+      <tbody>
+        <tr><td>Admin lockout</td><td>Admin miskeys password 10 times → their IP blocked → locked out of server</td><td>Whitelist admin IP ranges; use disable-account instead of IP block for auth failures</td></tr>
+        <tr><td>Monitoring system blocked</td><td>Nagios/Zabbix health checks fail auth → monitoring IP blocked → blind to outages</td><td>Whitelist monitoring IPs in &lt;white_list&gt;</td></tr>
+        <tr><td>Legitimate service blocked</td><td>NAT gateway IP triggers brute-force rule (multiple users sharing IP)</td><td>Set high frequency thresholds; review srcip before blocking</td></tr>
+        <tr><td>Attack amplification</td><td>Attacker spoofs legitimate IP to trigger block (IP block DoS)</td><td>Use <code>same_source_ip</code> carefully; consider behavior-based rules over IP only</td></tr>
+        <tr><td>No timeout</td><td>IP blocked permanently → never auto-expires → accumulates block list</td><td>Always set &lt;timeout&gt; unless ban is intentional (use long timeouts: 86400)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>IP Whitelisting</h3>
+  <pre><code><span class="cm">&lt;!-- In ossec.conf: IPs that will never trigger active response --&gt;</span>
+&lt;global&gt;
+  &lt;white_list&gt;127.0.0.1&lt;/white_list&gt;
+  &lt;white_list&gt;10.0.0.0/8&lt;/white_list&gt;       <span class="cm">&lt;!-- internal network --&gt;</span>
+  &lt;white_list&gt;192.168.1.10&lt;/white_list&gt;      <span class="cm">&lt;!-- admin workstation --&gt;</span>
+  &lt;white_list&gt;203.0.113.5&lt;/white_list&gt;       <span class="cm">&lt;!-- monitoring server --&gt;</span>
+&lt;/global&gt;</code></pre>
+
+  <h3>Recommended Level Thresholds</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Action</th><th>Minimum Level</th><th>Reasoning</th></tr></thead>
+      <tbody>
+        <tr><td>IP block (firewall-drop)</td><td>10</td><td>Brute force confirmed — low false positive rate</td></tr>
+        <tr><td>hosts.deny block</td><td>8</td><td>Web scan detected — less severe consequence</td></tr>
+        <tr><td>Account disable</td><td>10</td><td>Very high confidence — action is not self-reverting</td></tr>
+        <tr><td>Email alert</td><td>7</td><td>Broad but low-impact — good for monitoring</td></tr>
+        <tr><td>Isolate endpoint (Wazuh)</td><td>12+</td><td>Confirmed attack only — high blast radius</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Verifying Active Response is Working</h3>
+  <pre><code><span class="cm"># Check the active-responses log</span>
+sudo tail -f /var/ossec/logs/active-responses.log
+
+<span class="cm"># Verify iptables block was applied</span>
+sudo iptables -L INPUT -n | grep DROP
+
+<span class="cm"># Check /etc/hosts.deny entries</span>
+sudo cat /etc/hosts.deny
+
+<span class="cm"># Check ossec.log for AR execution messages</span>
+sudo grep "active-response" /var/ossec/logs/ossec.log
+
+<span class="cm"># Test manually: trigger a rule (from a test IP, not your admin IP)</span>
+<span class="cm"># Watch the IP appear in iptables after the rule fires</span>
+
+<span class="cm"># Remove a stuck block manually</span>
+sudo iptables -D INPUT -s &lt;blocked-ip&gt; -j DROP</code></pre>
+
+  <h3>Wazuh: Active Response via API</h3>
+  <pre><code><span class="cm"># Trigger an active response command via Wazuh API</span>
+<span class="cm"># Useful for manual incident response</span>
+curl -k -X PUT \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "command": "!firewall-drop",
+    "arguments": ["-", "null", "10.0.0.99", "0", "0", "0"]
+  }' \
+  "https://&lt;manager&gt;:55000/active-response?agents_list=003"
+
+<span class="cm"># The "!" prefix means run immediately (do not wait for a rule to fire)</span></code></pre>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Know the Key Risks</summary>
+    <div class="tier-body">
+      <h4>Before Enabling Active Response</h4>
+      <ul>
+        <li>Whitelist your admin workstation IP, monitoring servers, and internal subnets in <code>&lt;white_list&gt;</code> blocks</li>
+        <li>Always set a <code>&lt;timeout&gt;</code> — permanent blocks accumulate silently and become a management problem</li>
+        <li>Use level 10+ for IP blocks (confirmed brute force) — never use a broad level 5 trigger for firewall-drop</li>
+        <li>Test in your lab before production: use the 3-VM setup to verify blocks apply and expire correctly</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Verify and Audit AR Activity</summary>
+    <div class="tier-body">
+      <h4>Confirm Blocks Are Working and Reversing</h4>
+      <ul>
+        <li>Check <code>/var/ossec/logs/active-responses.log</code> for add/delete entries per IP</li>
+        <li>Check <code>sudo iptables -L INPUT -n</code> to see active DROP rules — clean up any stuck entries manually</li>
+        <li>Check <code>/etc/hosts.deny</code> if using host-deny — entries persist until the timeout clears them</li>
+        <li>Review blocked IPs weekly — identify repeat offenders to add to a permanent block list at the network level</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Harden Against IP Spoofing Abuse</summary>
+    <div class="tier-body">
+      <h4>Prevent Attackers From Weaponizing Active Response</h4>
+      <ul>
+        <li>An attacker can spoof a legitimate IP as the source of failed SSH attempts to trigger a block (DoS via AR)</li>
+        <li>Mitigate: use <code>same_source_ip</code> with high frequency thresholds (≥10) to require sustained attack behavior</li>
+        <li>Use <code>&lt;white_list&gt;</code> to protect critical IPs that should never be blocked regardless of alert level</li>
+        <li>Consider behavior-based rules (port scan + brute force) instead of single-trigger blocks to reduce spoofing risk</li>
+      </ul>
+    </div>
+  </details>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: "Active Response",
+  topics: [
+    { id: "ar-overview",       badge: "01", label: "Overview" },
+    { id: "builtin-commands",  badge: "02", label: "Built-in Commands" },
+    { id: "custom-scripts",    badge: "03", label: "Custom Scripts" },
+    { id: "ar-risks",          badge: "04", label: "Risks & Thresholds" },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

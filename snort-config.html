@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configuration — Snort — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" aria-label="Toggle sidebar">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 5h14M3 10h14M3 15h14"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html" class="active">Snort</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">Configuration</div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  </aside>
+  <main class="content" id="content-area"></main>
+</div>
+
+<!-- ════════════════════════ Variables ═════════════════════════════════════ -->
+<template id="tpl-variables">
+<article class="topic">
+  <h2>snort.conf — Network Variables</h2>
+  <p>Variables in <code>snort.conf</code> define the network topology that Snort uses to evaluate rules. Setting these correctly is critical — incorrect <code>HOME_NET</code> means rules using <code>$EXTERNAL_NET</code> won't fire correctly.</p>
+
+  <h3>Core Network Variables</h3>
+  <pre><code><span class="cm">##############################################</span>
+<span class="cm"># Step 1: Set the Network Variables</span>
+<span class="cm">##############################################</span>
+
+<span class="cm"># HOME_NET — Your protected internal network</span>
+<span class="cm"># This is YOUR network. Rules that say "$EXTERNAL_NET -> $HOME_NET"</span>
+<span class="cm"># will match traffic coming FROM the internet INTO your network.</span>
+var HOME_NET 192.168.1.0/24
+<span class="cm"># Multiple subnets:</span>
+var HOME_NET [192.168.0.0/16,10.0.0.0/8,172.16.0.0/12]
+<span class="cm"># Catch-all (less specific — use for lab only):</span>
+var HOME_NET any
+
+<span class="cm"># EXTERNAL_NET — Everything outside HOME_NET</span>
+<span class="cm"># !$HOME_NET means "not HOME_NET" — typical setting</span>
+var EXTERNAL_NET !$HOME_NET
+<span class="cm"># Or be explicit (any = entire internet including internal):</span>
+var EXTERNAL_NET any
+
+<span class="cm"># DNS_SERVERS — Internal DNS resolvers</span>
+<span class="cm"># Rules for DNS attacks target traffic to/from these IPs</span>
+var DNS_SERVERS $HOME_NET
+<span class="cm"># Or specific IPs:</span>
+var DNS_SERVERS [192.168.1.5,192.168.1.6]
+
+<span class="cm"># SMTP_SERVERS — Internal mail servers</span>
+var SMTP_SERVERS $HOME_NET
+
+<span class="cm"># HTTP_SERVERS — Web servers to protect</span>
+<span class="cm"># SQL injection, web exploit rules use this to scope what to protect</span>
+var HTTP_SERVERS $HOME_NET
+<span class="cm"># Or specific IPs (better — reduces false positives):</span>
+var HTTP_SERVERS [192.168.1.10,192.168.1.11]
+
+<span class="cm"># SQL_SERVERS — Database servers</span>
+var SQL_SERVERS $HOME_NET
+
+<span class="cm"># TELNET_SERVERS</span>
+var TELNET_SERVERS $HOME_NET
+
+<span class="cm"># SSH_SERVERS</span>
+var SSH_SERVERS $HOME_NET
+
+<span class="cm"># FTP_SERVERS</span>
+var FTP_SERVERS $HOME_NET
+
+<span class="cm"># SIP_SERVERS</span>
+var SIP_SERVERS $HOME_NET</code></pre>
+
+  <h3>Port Variables</h3>
+  <pre><code><span class="cm"># HTTP_PORTS — Ports considered "HTTP" for preprocessor and rules</span>
+<span class="cm"># http_inspect runs on these ports; HTTP rule options like http_uri apply here</span>
+portvar HTTP_PORTS [80,8000,8080,8180,8888,2301,2381]
+<span class="cm"># Add custom app ports:</span>
+portvar HTTP_PORTS [80,8080,8443,3000,4000,5000,8000,8888,9000]
+
+<span class="cm"># SHELLCODE_PORTS — Ports where shellcode detection is applied</span>
+portvar SHELLCODE_PORTS !80
+<span class="cm"># Exclude HTTP (too many false positives from JavaScript)</span>
+
+<span class="cm"># ORACLE_PORTS</span>
+portvar ORACLE_PORTS 1521
+
+<span class="cm"># SSH_PORTS</span>
+portvar SSH_PORTS 22
+
+<span class="cm"># FTP_PORTS</span>
+portvar FTP_PORTS 21
+
+<span class="cm"># SIP_PORTS</span>
+portvar SIP_PORTS [5060,5061]
+
+<span class="cm"># FILE_DATA_PORTS — Where file data detection is used</span>
+portvar FILE_DATA_PORTS [$HTTP_PORTS,110,143]</code></pre>
+
+  <h3>Path Variables</h3>
+  <pre><code><span class="cm"># RULE_PATH — Directory containing rule files</span>
+var RULE_PATH /etc/snort/rules
+
+<span class="cm"># SO_RULE_PATH — Shared object (compiled) rules path</span>
+var SO_RULE_PATH /etc/snort/so_rules
+
+<span class="cm"># PREPROC_RULE_PATH — Preprocessor rule path</span>
+var PREPROC_RULE_PATH /etc/snort/preproc_rules
+
+<span class="cm"># WHITE_LIST_PATH — IP whitelist files</span>
+var WHITE_LIST_PATH /etc/snort/rules
+
+<span class="cm"># BLACK_LIST_PATH — IP reputation blacklist files</span>
+var BLACK_LIST_PATH /etc/snort/rules</code></pre>
+
+  <h3>Variable Reference — Effect on Rules</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Variable</th><th>Used In Rule Header As</th><th>Effect If Wrong</th></tr></thead>
+      <tbody>
+        <tr><td><code>HOME_NET</code></td><td><code>$HOME_NET</code> in dst IP</td><td>Rules don't fire if your IPs aren't in HOME_NET</td></tr>
+        <tr><td><code>EXTERNAL_NET</code></td><td><code>$EXTERNAL_NET</code> in src IP</td><td>If set to <code>any</code>, internal host scanning generates alerts</td></tr>
+        <tr><td><code>HTTP_SERVERS</code></td><td><code>$HTTP_SERVERS</code> in dst IP</td><td>Web attack rules miss if web servers aren't listed</td></tr>
+        <tr><td><code>HTTP_PORTS</code></td><td><code>$HTTP_PORTS</code> in dst port</td><td>HTTP rules miss attacks on non-standard ports (8080, etc.)</td></tr>
+        <tr><td><code>SQL_SERVERS</code></td><td><code>$SQL_SERVERS</code> in dst IP</td><td>DB attack rules miss if servers aren't listed</td></tr>
+        <tr><td><code>DNS_SERVERS</code></td><td><code>$DNS_SERVERS</code> in dst IP</td><td>DNS attack rules miss or over-trigger</td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+</template>
+
+<!-- ════════════════════════ Preprocessors ══════════════════════════════════ -->
+<template id="tpl-preprocessors">
+<article class="topic">
+  <h2>Preprocessor Configuration (Snort 2)</h2>
+  <p>Preprocessors run before the detection engine, normalizing traffic so rules can match on reconstructed streams rather than raw fragmented/encoded packets.</p>
+
+  <h3>frag3 — IP Fragment Reassembly</h3>
+  <pre><code><span class="cm"># Required for detecting exploits that fragment payloads to evade detection</span>
+preprocessor frag3_global: max_frags 65536
+preprocessor frag3_engine: policy windows detect_anomalies overlap_limit 10 \
+  min_fragment_length 100 timeout 180
+
+<span class="cm"># policy options: bsd, bsd-right, first, linux, last, solaris, windows</span>
+<span class="cm"># Set to match your servers' OS for accurate reassembly behavior</span></code></pre>
+
+  <h3>stream5 — TCP/UDP Stream Reassembly</h3>
+  <pre><code><span class="cm"># TCP stream reassembly and stateful tracking</span>
+<span class="cm"># CRITICAL: enables the "flow" rule option and prevents evasion via packet splitting</span>
+preprocessor stream5_global: max_tcp 262144, track_tcp yes, \
+  track_udp yes, track_icmp no
+
+preprocessor stream5_tcp: policy windows, detect_anomalies, require_3whs 180, \
+  overlap_limit 10, small_segments 3 bytes 150, timeout 180, \
+  ports client [21 22 23 25 42 53 80 110 111 135 139 143 443 445 \
+               465 563 587 593 636 691 771 1433 1521 2100 3306 \
+               6665 6666 6667 6668 6669 7000 8080 8443]
+preprocessor stream5_udp: timeout 180</code></pre>
+
+  <h3>http_inspect — HTTP Normalization</h3>
+  <pre><code><span class="cm"># Decodes HTTP encoding BEFORE rule matching</span>
+<span class="cm"># Handles: %xx URL encoding, Unicode, IIS-specific encoding, chunked transfer</span>
+preprocessor http_inspect: global iis_unicode_map unicode.map 1252 \
+  compress_depth 65535 decompress_depth 65535
+
+preprocessor http_inspect_server: server default \
+  http_methods { GET POST PUT HEAD DELETE TRACE OPTIONS CONNECT } \
+  chunk_length 500000 \
+  server_flow_depth 0 \
+  client_flow_depth 0 \
+  post_depth 65495 \
+  oversize_dir_length 500 \
+  max_header_length 750 \
+  max_headers 100 \
+  max_spaces 200 \
+  small_chunk_count 10 \
+  small_chunk_length 10 \
+  ports { 80 8080 8000 8180 8888 }
+
+<span class="cm"># Why this matters: without http_inspect, a rule looking for "SELECT"</span>
+<span class="cm"># would miss "%53ELECT" or "S%45LECT" — http_inspect normalizes first</span></code></pre>
+
+  <h3>sfportscan — Port Scan Detection</h3>
+  <pre><code><span class="cm"># Detects port scans and host sweeps using connection pattern analysis</span>
+preprocessor sfportscan: proto  { all } \
+                          memcap { 10000000 } \
+                          sense_level { low }
+<span class="cm"># sense_level: low (detect heavy scans only) | medium | high (detect all)</span>
+<span class="cm"># proto: tcp | udp | icmp | ip | all</span>
+
+<span class="cm"># sfportscan generates Snort events with SID ranges:</span>
+<span class="cm">#   SID 1228 — TCP port scan (one-to-many port sweep)</span>
+<span class="cm">#   SID 1229 — TCP distributed port scan</span>
+<span class="cm">#   SID 1231 — TCP portsweep (many-to-one)</span>
+<span class="cm">#   SID 1232 — TCP decoy portscan</span></code></pre>
+
+  <h3>smtp — SMTP Normalization</h3>
+  <pre><code>preprocessor smtp: ports { 25 465 587 } \
+  inspection_type stateful \
+  normalize cmds \
+  normalize_cmds { EXPN VRFY RCPT } \
+  ignore_tls_data yes \
+  max_command_line_len 512 \
+  max_header_line_len 1000 \
+  max_response_line_len 512</code></pre>
+
+  <h3>dcerpc2 — MS-RPC (SMB) Detection</h3>
+  <pre><code><span class="cm"># Required for detecting SMB/RPC attacks: EternalBlue, MS08-067, etc.</span>
+preprocessor dcerpc2: memcap 102400, events [co]
+preprocessor dcerpc2_server: default, \
+  policy WinXP, \
+  detect [smb [139,445], tcp 135, udp 135, rpc-over-http-server 593], \
+  autodetect [tcp 1025:, udp 1025:, rpc-over-http-server 1025:], \
+  smb_max_chain 3, smb_invalid_shares ["C$", "D$", "ADMIN$"]</code></pre>
+</article>
+</template>
+
+<!-- ════════════════════════ Output Plugins ═════════════════════════════════ -->
+<template id="tpl-output-plugins">
+<article class="topic">
+  <h2>Output Plugins &amp; Logging</h2>
+  <p>Output plugins determine where and how Snort writes alerts and packet logs. Multiple output plugins can be active simultaneously.</p>
+
+  <h3>Alert Output Modes (snort.conf)</h3>
+  <pre><code><span class="cm"># alert_fast — One-line alert with timestamp, IP, port, message</span>
+output alert_fast: /var/log/snort/alert
+
+<span class="cm"># alert_full — Full alert including complete packet dump</span>
+output alert_full: /var/log/snort/alert_full
+
+<span class="cm"># alert_csv — CSV format for SIEM ingestion</span>
+output alert_csv: /var/log/snort/alert.csv default
+
+<span class="cm"># alert_syslog — Send alerts to syslog daemon</span>
+output alert_syslog: LOG_AUTH LOG_ALERT
+
+<span class="cm"># unified2 — Binary format for barnyard2 (most common production setup)</span>
+output unified2: filename /var/log/snort/snort.u2, limit 128, nostamp
+
+<span class="cm"># log_tcpdump — Log raw packets in pcap format</span>
+output log_tcpdump: /var/log/snort/tcpdump.log
+
+<span class="cm"># Multiple outputs simultaneously:</span>
+output alert_fast: /var/log/snort/alert
+output unified2: filename /var/log/snort/snort.u2, limit 128
+output log_tcpdump: /var/log/snort/raw.pcap</code></pre>
+
+  <h3>barnyard2 — Unified2 Processor</h3>
+  <pre><code><span class="cm"># barnyard2 reads unified2 binary files and outputs to:</span>
+<span class="cm"># - MySQL/PostgreSQL (for Snorby web interface)</span>
+<span class="cm"># - Syslog</span>
+<span class="cm"># - Alert files</span>
+<span class="cm"># - PCAP files</span>
+
+<span class="cm"># Install</span>
+sudo apt install barnyard2
+
+<span class="cm"># Run barnyard2 (reads snort.u2 files, sends to database)</span>
+barnyard2 -c /etc/snort/barnyard2.conf \
+  -d /var/log/snort \
+  -f snort.u2 \
+  -w /var/log/snort/barnyard2.waldo \
+  -u snort -g snort
+
+<span class="cm"># Key barnyard2.conf settings</span>
+config logdir:  /var/log/barnyard2
+config sid_file: /etc/snort/sid-msg.map
+config gen_file: /etc/snort/gen-msg.map
+
+output database: log, mysql, user=snort password=snortpass dbname=snort host=localhost</code></pre>
+
+  <h3>threshold.conf — Global Alert Suppression</h3>
+  <pre><code><span class="cm"># threshold.conf allows suppression and rate-limiting without editing rules</span>
+<span class="cm"># Overrides threshold options defined in rules</span>
+
+<span class="cm"># Suppress all alerts for a specific rule (whitelist an IP)</span>
+suppress gen_id 1, sig_id 1000100, track by_src, ip 192.168.1.10
+
+<span class="cm"># Suppress specific destination</span>
+suppress gen_id 1, sig_id 1000100, track by_dst, ip 203.0.113.50
+
+<span class="cm"># Rate-limit a noisy rule (alert at most 3 times per 60 seconds per source)</span>
+event_filter gen_id 1, sig_id 1000200, type limit, track by_src, count 3, seconds 60
+
+<span class="cm"># Rate-limit globally (all events of this SID)</span>
+event_filter gen_id 1, sig_id 1000300, type threshold, track by_src, count 10, seconds 60
+
+<span class="cm"># Include threshold.conf in snort.conf</span>
+include threshold.conf</code></pre>
+</article>
+</template>
+
+<!-- ════════════════════════ Include Structure ══════════════════════════════ -->
+<template id="tpl-include-structure">
+<article class="topic">
+  <h2>snort.conf Include Structure</h2>
+  <p>The <code>snort.conf</code> file is organized in sections. Understanding the order matters — variables must be defined before they're used, and preprocessors must run before rules that depend on their output.</p>
+
+  <h3>snort.conf Section Order</h3>
+  <pre><code><span class="cm">##################################################</span>
+<span class="cm"># snort.conf — Section Overview (Snort 2)</span>
+<span class="cm">##################################################</span>
+
+<span class="cm"># Step 1: Set the network variables (HOME_NET, HTTP_PORTS, etc.)</span>
+var HOME_NET 192.168.1.0/24
+var EXTERNAL_NET !$HOME_NET
+var HTTP_SERVERS $HOME_NET
+portvar HTTP_PORTS [80,8080,8443,8000]
+var RULE_PATH /etc/snort/rules
+<span class="cm"># ... all other variables ...</span>
+
+<span class="cm"># Step 2: Configure the decoder (rarely changed)</span>
+config disable_decode_alerts
+config disable_tcpopt_experimental_alerts
+
+<span class="cm"># Step 3: Configure the base detection engine</span>
+config detection: search-method ac-split search-optimize max-pattern-len 20
+
+<span class="cm"># Step 4: Configure dynamic loaded libraries</span>
+dynamicpreprocessor directory /usr/lib/snort_dynamicpreprocessor/
+dynamicengine /usr/lib/snort_dynamicengine/libsf_engine.so
+dynamicdetection directory /usr/lib/snort_dynamicrules/
+
+<span class="cm"># Step 5: Configure preprocessors (order matters)</span>
+preprocessor frag3_global: max_frags 65536
+preprocessor frag3_engine: policy windows
+preprocessor stream5_global: max_tcp 262144, track_tcp yes
+preprocessor stream5_tcp: policy windows, detect_anomalies
+preprocessor http_inspect: global iis_unicode_map unicode.map 1252
+preprocessor http_inspect_server: server default ports { 80 8080 }
+preprocessor sfportscan: proto { all } memcap { 10000000 } sense_level { low }
+preprocessor smtp: ports { 25 465 587 }
+preprocessor dcerpc2: memcap 102400
+
+<span class="cm"># Step 6: Configure output plugins</span>
+output alert_fast: /var/log/snort/alert
+output unified2: filename /var/log/snort/snort.u2, limit 128
+
+<span class="cm"># Step 7: Customize your preprocessor/decoder alerts (optional)</span>
+include $PREPROC_RULE_PATH/preprocessor.rules
+
+<span class="cm"># Step 8: Include your rule files</span>
+include $RULE_PATH/local.rules           <span class="cm"># YOUR custom rules — always first</span>
+include $RULE_PATH/bad-traffic.rules
+include $RULE_PATH/exploit.rules
+include $RULE_PATH/scan.rules
+include $RULE_PATH/icmp.rules
+include $RULE_PATH/web-attacks.rules
+include $RULE_PATH/sql.rules
+include $RULE_PATH/shellcode.rules
+include $RULE_PATH/malware-cnc.rules
+include $RULE_PATH/ddos.rules
+<span class="cm"># ... additional rule files ...</span>
+
+<span class="cm"># Step 9: Include thresholds / event filters</span>
+include threshold.conf</code></pre>
+
+  <h3>local.rules — Your Custom Rules</h3>
+  <pre><code><span class="cm"># /etc/snort/rules/local.rules</span>
+<span class="cm"># This is where you write and test custom rules</span>
+<span class="cm"># SID range 1000000+ is reserved for user-defined rules</span>
+<span class="cm"># Start your SIDs at 1000001 to avoid conflicts</span>
+
+<span class="cm"># Example local.rules structure:</span>
+
+<span class="cm"># ---- Reconnaissance ----</span>
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"TCP NULL Scan"; flags:0; classtype:network-scan; sid:1000001; rev:1;)
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"TCP XMAS Scan"; flags:FPU; classtype:network-scan; sid:1000002; rev:1;)
+
+<span class="cm"># ---- Web Attacks ----</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"SQL Injection UNION SELECT"; flow:established,to_server; content:"UNION"; nocase; content:"SELECT"; nocase; distance:0; classtype:web-application-attack; sid:1000010; rev:1;)
+
+<span class="cm"># ---- Malware ----</span>
+alert tcp $HOME_NET any -> $EXTERNAL_NET any (msg:"Possible C2 Beacon - Regular Intervals"; flow:established,to_server; content:"GET"; http_method; threshold:type both,track by_dst,count 1,seconds 60; classtype:trojan-activity; sid:1000020; rev:1;)</code></pre>
+</article>
+</template>
+
+<!-- ════════════════════════ Snort 3 Config ═════════════════════════════════ -->
+<template id="tpl-snort3-config">
+<article class="topic">
+  <h2>Snort 3 — Lua Configuration</h2>
+  <p>Snort 3 replaces the flat <code>snort.conf</code> format with Lua scripting. All configuration is expressed as Lua tables, which allows for programmatic configuration and much cleaner syntax.</p>
+
+  <h3>snort.lua Structure</h3>
+  <pre><code><span class="cm">-- snort.lua — Snort 3 main configuration</span>
+<span class="cm">-- Lua tables configure each Snort module</span>
+
+<span class="cm">-- Include default values (defines HOME_NET, HTTP_PORTS, etc.)</span>
+include 'snort_defaults.lua'
+
+<span class="cm">-- Override variables</span>
+HOME_NET = '192.168.1.0/24'
+EXTERNAL_NET = '!$HOME_NET'
+HTTP_SERVERS = HOME_NET
+HTTP_PORTS = '80 8080 8000 8443'
+
+<span class="cm">-- IPS module: load rules</span>
+ips =
+{
+    include = RULE_PATH .. '/local.rules',
+    variables = default_variables,
+    enable_builtin_rules = true,
+    mode = 'inline',  <span class="cm">-- or 'passive' for NIDS</span>
+}
+
+<span class="cm">-- Inspectors (replace preprocessors)</span>
+stream = { }
+
+stream_tcp =
+{
+    policy = 'windows',
+    session_timeout = 180,
+}
+
+http_inspect = { }
+
+port_scan =
+{
+    protos = 'all',
+    scan_types = 'all',
+}
+
+<span class="cm">-- Alert output</span>
+alert_fast = { file = true }       <span class="cm">-- Write to alert_fast.txt</span>
+alert_json = { file = true }       <span class="cm">-- Write to alert_json.txt</span>
+
+<span class="cm">-- Event queue</span>
+event_queue =
+{
+    max_queue = 8,
+    log = 3,
+    order_events = 'priority',
+}</code></pre>
+
+  <h3>snort_defaults.lua — Variable Defaults</h3>
+  <pre><code><span class="cm">-- /etc/snort/snort_defaults.lua</span>
+<span class="cm">-- Pre-defined variables (override in snort.lua)</span>
+
+HOME_NET = 'any'
+EXTERNAL_NET = 'any'
+
+HTTP_PORTS = ' 80 8080 8180 8000 8888 2301 2381 '
+SHELLCODE_PORTS = ' !80 '
+ORACLE_PORTS = ' 1521 '
+SSH_PORTS = ' 22 '
+FTP_PORTS = ' 21 '
+
+RULE_PATH = '../rules'
+BUILTIN_RULE_PATH = '../builtin_rules'
+PLUGIN_RULE_PATH = '../so_rules'
+
+default_variables =
+{
+    nets =
+    {
+        HOME_NET = HOME_NET,
+        EXTERNAL_NET = EXTERNAL_NET,
+        HTTP_SERVERS = HOME_NET,
+        SMTP_SERVERS = HOME_NET,
+        DNS_SERVERS = HOME_NET,
+        SQL_SERVERS = HOME_NET,
+    },
+    ports =
+    {
+        HTTP_PORTS = HTTP_PORTS,
+        SHELLCODE_PORTS = SHELLCODE_PORTS,
+        ORACLE_PORTS = ORACLE_PORTS,
+        SSH_PORTS = SSH_PORTS,
+        FTP_PORTS = FTP_PORTS,
+    }
+}</code></pre>
+
+  <h3>Snort 2 vs Snort 3 Config Comparison</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Feature</th><th>Snort 2 (snort.conf)</th><th>Snort 3 (snort.lua)</th></tr></thead>
+      <tbody>
+        <tr><td>Format</td><td>Flat text with <code>keyword value</code></td><td>Lua tables and functions</td></tr>
+        <tr><td>Variables</td><td><code>var HOME_NET 192.168.1.0/24</code></td><td><code>HOME_NET = '192.168.1.0/24'</code></td></tr>
+        <tr><td>Port variables</td><td><code>portvar HTTP_PORTS [80,8080]</code></td><td><code>HTTP_PORTS = ' 80 8080 '</code></td></tr>
+        <tr><td>Preprocessors</td><td><code>preprocessor frag3_global: ...</code></td><td><code>stream = { } stream_tcp = { }</code></td></tr>
+        <tr><td>Output</td><td><code>output alert_fast: /path</code></td><td><code>alert_fast = { file = true }</code></td></tr>
+        <tr><td>Rule include</td><td><code>include $RULE_PATH/local.rules</code></td><td><code>ips = { include = 'local.rules' }</code></td></tr>
+        <tr><td>Multiple include</td><td>Multiple <code>include</code> lines</td><td><code>ips = { include = 'rules/local.rules rules/web.rules' }</code></td></tr>
+        <tr><td>IPS mode</td><td><code>-Q</code> CLI flag</td><td><code>ips = { mode = 'inline' }</code></td></tr>
+        <tr><td>Threshold</td><td><code>threshold.conf</code> separate file</td><td><code>event_filter</code> in snort.lua</td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: "Snort — Configuration",
+  topics: [
+    { id: "variables",        badge: "01", label: "Network Variables" },
+    { id: "preprocessors",    badge: "02", label: "Preprocessors" },
+    { id: "output-plugins",   badge: "03", label: "Output &amp; Logging" },
+    { id: "include-structure",badge: "04", label: "Include Structure" },
+    { id: "snort3-config",    badge: "05", label: "Snort 3 Lua Config" },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

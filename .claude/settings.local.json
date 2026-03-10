@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep -l \"preview\\\\|Preview\\\\|hook\")",
+      "mcp__Claude_Preview__preview_start"
+    ]
+  }
+}

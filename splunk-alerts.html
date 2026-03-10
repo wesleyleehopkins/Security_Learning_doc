@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alerts &amp; ES — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Splunk</div>
+      <div class="sidebar-title">Alerts &amp; ES</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">🚨</div>
+          <h2>Alerts &amp; ES</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Alerts & ES',
+  topics: [
+    { id: 'scheduled-alerts',    badge: '01', label: 'Scheduled Alerts'              },
+    { id: 'correlation-searches',badge: '02', label: 'Correlation Searches (ES)'     },
+    { id: 'notable-events',      badge: '03', label: 'Notable Events Workflow'       },
+    { id: 'throttling',          badge: '04', label: 'Throttling & Suppression'      },
+    { id: 'rba',                 badge: '05', label: 'Risk-Based Alerting (RBA)'     },
+  ]
+};
+</script>
+
+<template id="tpl-scheduled-alerts">
+<article class="topic">
+<h1>01 · Scheduled Alerts</h1>
+<hr class="divider">
+
+<h2>Alert Configuration Fields</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Setting</th><th>Description</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td>Schedule</td><td>When to run the search (cron)</td><td><code>*/15 * * * *</code> (every 15 min)</td></tr>
+    <tr><td>Time Range</td><td>Data window to search each run</td><td>Last 15 minutes</td></tr>
+    <tr><td>Trigger Condition</td><td>When to fire the alert</td><td>Number of results &gt; 0</td></tr>
+    <tr><td>Trigger Once</td><td>Fire once even if condition persists</td><td>Prevents alert storms</td></tr>
+    <tr><td>Throttle</td><td>Suppress repeated fires</td><td>Once per 60 minutes</td></tr>
+    <tr><td>Alert Actions</td><td>What happens when alert fires</td><td>Email, webhook, notable event, SOAR</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Cron Schedule Reference</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Cron Expression</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>*/5 * * * *</code></td><td>Every 5 minutes</td></tr>
+    <tr><td><code>*/15 * * * *</code></td><td>Every 15 minutes — common for real-time detections</td></tr>
+    <tr><td><code>0 * * * *</code></td><td>Top of every hour</td></tr>
+    <tr><td><code>0 6 * * *</code></td><td>Daily at 6:00 AM</td></tr>
+    <tr><td><code>0 8 * * 1-5</code></td><td>Weekdays at 8:00 AM</td></tr>
+    <tr><td><code>0 0 * * 0</code></td><td>Weekly on Sunday midnight</td></tr>
+    <tr><td><code>0 0 1 * *</code></td><td>Monthly — 1st of every month at midnight</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Trigger Conditions</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Condition</th><th>Fires When</th><th>Use Case</th></tr></thead>
+  <tbody>
+    <tr><td>Number of results &gt; 0</td><td>Any result returned</td><td>Specific rare event detection</td></tr>
+    <tr><td>Number of results &gt; N</td><td>Result count exceeds threshold</td><td>Brute force (N failed logins)</td></tr>
+    <tr><td>Number of hosts &gt; N</td><td>Distinct host count exceeds N</td><td>Widespread event (worm, patch failure)</td></tr>
+    <tr><td>Number of sources &gt; N</td><td>Distinct source count exceeds N</td><td>Data from multiple endpoints</td></tr>
+    <tr><td>Custom — eval field</td><td>SPL condition in eval evaluates true</td><td>Complex multi-field conditions</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Example: Brute Force Scheduled Alert</h2>
+<pre><code><span class="cm"># Schedule: Every 15 minutes | Time range: Last 15 minutes</span>
+<span class="cm"># Trigger: Number of results > 0</span>
+
+index=windows sourcetype=WinEventLog:Security EventCode=4625
+| stats count AS failed_logins by src_ip
+| where failed_logins &gt; 50
+
+<span class="cm"># If any src_ip has more than 50 failures in the last 15 min → alert</span>
+<span class="cm"># Alert action: Create notable event (ES) or send email</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-correlation-searches">
+<article class="topic">
+<h1>02 · Correlation Searches (ES)</h1>
+<hr class="divider">
+
+<h2>What is a Correlation Search?</h2>
+<p>In Splunk Enterprise Security, correlation searches are scheduled SPL searches that, when their trigger condition is met, generate <strong>notable events</strong> in the Incident Review queue. They are the primary detection mechanism in ES.</p>
+
+<h2>Notable Event Fields Created by ES</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Field</th><th>Source</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>rule_name</code></td><td>Correlation search name</td><td>Human-readable detection name</td></tr>
+    <tr><td><code>rule_title</code></td><td>Correlation search title field</td><td>Short description of what fired</td></tr>
+    <tr><td><code>urgency</code></td><td>Calculated from severity + priority</td><td>informational / low / medium / high / critical</td></tr>
+    <tr><td><code>src</code></td><td>Mapped from search result</td><td>Source entity (IP, hostname, user)</td></tr>
+    <tr><td><code>dest</code></td><td>Mapped from search result</td><td>Target entity</td></tr>
+    <tr><td><code>user</code></td><td>Mapped from search result</td><td>User involved</td></tr>
+    <tr><td><code>orig_time</code></td><td>Event _time</td><td>When the underlying event occurred</td></tr>
+    <tr><td><code>info_min_time</code></td><td>Search window start</td><td>Earliest event in the search window</td></tr>
+    <tr><td><code>drilldown_search</code></td><td>Configured in correlation search</td><td>Pre-built search analysts can run for context</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Built-in ES Correlation Search Examples</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Rule Name</th><th>Detection Logic</th></tr></thead>
+  <tbody>
+    <tr><td>Brute Force Access Behavior Detected</td><td>src_ip with &gt; N failed auths in window</td></tr>
+    <tr><td>Excessive Failed Logins</td><td>Same user &gt; N failures across any src</td></tr>
+    <tr><td>Malware Detected</td><td>Endpoint AV/EDR reports detection event</td></tr>
+    <tr><td>Network Scanner Detected</td><td>Single src scanning &gt; N dest_ports</td></tr>
+    <tr><td>Prohibited Software Detected</td><td>Process name matches known bad list</td></tr>
+    <tr><td>New Domain Observed</td><td>DNS query to domain not seen in last 30 days</td></tr>
+    <tr><td>High Volume of Traffic to Unusual Country</td><td>bytes_out to non-baseline geo exceeds threshold</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Custom Correlation Search — Anatomy</h2>
+<pre><code><span class="cm"># Custom correlation search: PowerShell Encoded Command Execution</span>
+<span class="cm"># Schedule: Every 5 min | Window: Last 5 min | Trigger: results > 0</span>
+
+index=windows sourcetype=WinEventLog:Security EventCode=4688
+    (CommandLine="*-enc*" OR CommandLine="*-EncodedCommand*"
+     OR CommandLine="*-nop*" OR CommandLine="*bypass*")
+| eval risk_level = case(
+    match(CommandLine, "(?i)iex|invoke-expression|downloadstring|webclient"), "CRITICAL",
+    match(CommandLine, "(?i)-enc|-noprofile|-bypass"), "HIGH",
+    true, "MEDIUM"
+  )
+| table _time, host, user, CommandLine, risk_level
+
+<span class="cm"># Notable event fields to map:</span>
+<span class="cm">#   src → host</span>
+<span class="cm">#   user → user</span>
+<span class="cm">#   severity → HIGH</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-notable-events">
+<article class="topic">
+<h1>03 · Notable Events Workflow</h1>
+<hr class="divider">
+
+<h2>Incident Review — Analyst View</h2>
+<p>The Incident Review dashboard in ES is the primary analyst triage queue. Notable events appear here when correlation searches fire. Analysts work through the queue, update status, assign owners, and document investigation notes.</p>
+
+<h2>Urgency Calculation</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Asset/Identity Priority</th><th>Event Severity</th><th>Resulting Urgency</th></tr></thead>
+  <tbody>
+    <tr><td>Critical</td><td>High</td><td>Critical</td></tr>
+    <tr><td>High</td><td>High</td><td>High</td></tr>
+    <tr><td>Medium</td><td>High</td><td>High</td></tr>
+    <tr><td>Low / Unknown</td><td>High</td><td>Medium</td></tr>
+    <tr><td>Any</td><td>Informational</td><td>Informational</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="callout note"><strong>Asset &amp; Identity data matters.</strong> A high-severity alert against a "Critical" asset (e.g., a domain controller) becomes "Critical" urgency. The same alert against an unknown asset is only "Medium". Keeping asset data current dramatically improves urgency accuracy.</div>
+
+<h2>Notable Event Triage Steps</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Step</th><th>Action</th><th>SPL to Run</th></tr></thead>
+  <tbody>
+    <tr><td>1. Understand the Rule</td><td>Read rule_name and rule_description</td><td>Check Content Management for search SPL</td></tr>
+    <tr><td>2. Get Context</td><td>Run drilldown search; check asset/identity data</td><td><code>index=notable event_id=XYZ | table *</code></td></tr>
+    <tr><td>3. Pivot to Raw Logs</td><td>Search the underlying index for the entity</td><td><code>index=windows host=VICTIM-01 earliest=-1h</code></td></tr>
+    <tr><td>4. Determine Disposition</td><td>TP / FP / Benign / No Action</td><td>Based on investigation findings</td></tr>
+    <tr><td>5. Update Status</td><td>Set status, assign owner, add comment</td><td>In Incident Review UI</td></tr>
+    <tr><td>6. Tune if FP</td><td>Add exclusion or raise threshold</td><td>Edit correlation search; add whitelist lookup</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Searching Notable Events</h2>
+<pre><code><span class="cm"># All open notables from last 24 hours</span>
+index=notable earliest=-24h status!=5
+| table _time, rule_name, urgency, src, dest, user, owner, status
+| sort -urgency, -_time
+
+<span class="cm"># Notable events for a specific host (investigation)</span>
+index=notable (src="DC01.corp.local" OR dest="DC01.corp.local") earliest=-7d
+| table _time, rule_name, urgency, src, dest, user, status
+
+<span class="cm"># Count notables by rule to find noisy detections (FP candidates)</span>
+index=notable earliest=-7d
+| stats count, dc(src) AS unique_sources by rule_name
+| sort -count</code></pre>
+</article>
+</template>
+
+<template id="tpl-throttling">
+<article class="topic">
+<h1>04 · Throttling &amp; Suppression</h1>
+<hr class="divider">
+
+<h2>Why Throttle?</h2>
+<p>Without throttling, a correlation search that fires every 5 minutes on an ongoing brute force will create hundreds of notable events for the same incident. Throttling collapses repeat fires into a manageable stream.</p>
+
+<h2>Throttle Settings (ES Correlation Search)</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Setting</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>Throttle Window</td><td>Time period during which duplicates are suppressed (e.g., 3600 seconds = 1 hour)</td></tr>
+    <tr><td>Group By Field</td><td>Field that identifies "same incident" — usually <code>src</code> or <code>src, user</code></td></tr>
+    <tr><td>Results</td><td>Only one notable per unique group-by value per throttle window</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Throttle Configuration Example</h2>
+<pre><code><span class="cm"># Brute Force alert: throttle per src_ip for 1 hour</span>
+<span class="cm"># Even if the search fires every 15 minutes...</span>
+<span class="cm"># ...only ONE notable per attacker IP per hour is created</span>
+
+<span class="cm"># Throttle window: 3600 (seconds)</span>
+<span class="cm"># Group by field: src_ip</span>
+
+<span class="cm"># Practical effect:</span>
+<span class="cm"># 09:00 - 847 failures from 185.220.101.34 → 1 notable created</span>
+<span class="cm"># 09:15 - still failing → suppressed (within throttle window)</span>
+<span class="cm"># 09:30 - still failing → suppressed</span>
+<span class="cm"># 10:00 - throttle window expires → new notable if still firing</span></code></pre>
+
+<h2>Suppression — Asset/User-Based</h2>
+<pre><code><span class="cm"># ES Suppressions prevent notables for known benign activity</span>
+<span class="cm"># Example: Suppress "Failed Login" notable for a service account</span>
+<span class="cm"># that legitimately fails often due to a legacy system</span>
+
+<span class="cm"># Suppression condition:</span>
+<span class="cm">#   user = "svc_legacy_backup" AND rule_name = "Excessive Failed Logins"</span>
+<span class="cm"># Expiration: 90 days (require review before permanent)</span>
+
+<span class="cm"># View active suppressions in ES:</span>
+<span class="cm"># Configure → Content Management → Suppressions</span></code></pre>
+
+<h2>Alert Fatigue Prevention Checklist</h2>
+<ul>
+  <li>Set appropriate throttle windows — most brute force rules: 1-4 hours</li>
+  <li>Use group-by fields that identify the true "unique incident" (src + user, not just src)</li>
+  <li>Review top 10 noisiest rules weekly — tune or suppress confirmed FPs</li>
+  <li>Use RBA for low-confidence detections instead of direct notable events</li>
+  <li>Set meaningful urgency — don't cry wolf with critical for everything</li>
+  <li>Add whitelist lookups for known benign IPs/users/processes</li>
+</ul>
+</article>
+</template>
+
+<template id="tpl-rba">
+<article class="topic">
+<h1>05 · Risk-Based Alerting (RBA)</h1>
+<hr class="divider">
+
+<h2>RBA Concept</h2>
+<p>Instead of every detection firing a notable event (alert fatigue), lower-fidelity detections add <strong>risk score</strong> to an entity (user or system). A notable event is only created when the cumulative risk score exceeds a threshold. This means a single suspicious behavior doesn't alert — but 5 suspicious behaviors together do.</p>
+
+<h2>RBA Components</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Component</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>Risk Rule</td><td>Correlation search configured to "add risk" instead of "create notable" — fires a risk modifier event</td></tr>
+    <tr><td>Risk Object</td><td>Entity accumulating risk — typically <code>user</code> or <code>system</code> (hostname)</td></tr>
+    <tr><td>Risk Score</td><td>Numeric value (e.g., 20) added per risk rule match</td></tr>
+    <tr><td>Risk Index</td><td>Splunk index storing risk modifier events: <code>index=risk</code></td></tr>
+    <tr><td>Risk Incident Rule</td><td>Correlation search that fires a notable when risk score &gt; threshold</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Risk Score Examples</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Detection</th><th>Risk Score Added</th><th>Risk Object</th></tr></thead>
+  <tbody>
+    <tr><td>PowerShell with encoded command</td><td>30</td><td>system (hostname)</td></tr>
+    <tr><td>New local admin account created</td><td>40</td><td>system</td></tr>
+    <tr><td>Login from unusual country</td><td>25</td><td>user</td></tr>
+    <tr><td>Outbound connection to Tor exit node</td><td>50</td><td>system</td></tr>
+    <tr><td>Scheduled task created at odd hour</td><td>20</td><td>system</td></tr>
+    <tr><td>Credential dumping tool name (mimikatz)</td><td>80</td><td>system</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Querying the Risk Index</h2>
+<pre><code><span class="cm"># View risk scores for a specific host in the last 24 hours</span>
+index=risk risk_object="WORKSTATION-01" earliest=-24h
+| stats sum(risk_score) AS total_risk, values(source) AS triggering_rules by risk_object
+| sort -total_risk
+
+<span class="cm"># Sample output:</span>
+<span class="cm"># risk_object     total_risk  triggering_rules</span>
+<span class="cm"># WORKSTATION-01  135         PowerShell Encoded Cmd; New Local Admin; Tor Connection</span>
+
+<span class="cm"># Risk incident fires because 135 > 100 threshold</span>
+<span class="cm"># Creates ONE notable with full context of all contributing detections</span>
+
+<span class="cm"># View all risk objects over threshold</span>
+index=risk earliest=-24h
+| stats sum(risk_score) AS total_risk, dc(source) AS rule_count by risk_object, risk_object_type
+| where total_risk &gt; 75
+| sort -total_risk</code></pre>
+</article>
+</template>
+
+<script src="js/app.js"></script>
+</body>
+</html>

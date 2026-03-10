@@ -1,0 +1,1528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MISP — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .xref { display:inline; color:var(--accent,#3b82f6); font-size:.75em; font-weight:600; border:1px solid var(--accent,#3b82f6); border-radius:3px; padding:1px 5px; margin-left:4px; text-decoration:none; cursor:pointer; white-space:nowrap; opacity:.85; }
+    .xref:hover { background:rgba(59,130,246,.15); opacity:1; }
+    .xref-group { color:#8b949e; font-size:.82em; margin-left:2px; }
+    td .xref-group { display:block; margin-top:3px; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="index.html" class="nav-brand">
+    <span class="icon">⬡</span> SOC Notes
+  </a>
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()">☰</button>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html" class="active">MISP</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sb-title">MISP</div>
+    <nav id="sb-nav"></nav>
+  </aside>
+
+  <main id="main" class="main">
+    <div id="content-area"></div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 01 -->
+<template id="tpl-overview">
+<article class="topic">
+  <h2>Overview &amp; Architecture</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">MISP is entirely an application-layer platform — the web UI, REST API, ZeroMQ publisher, and database all operate at L7. IoC values (IPs, ports) are stored as threat intelligence DATA within the application, not as active L3/L4 traffic.</span>
+  </div>
+
+  <p>MISP (Malware Information Sharing Platform) is the leading open-source threat intelligence platform. It provides a collaborative environment for collecting, sharing, storing, and correlating threat indicators (IOCs), threat actors, campaigns, and TTPs. MISP is widely adopted by CERTs, ISACs, law enforcement, and enterprise SOC teams globally.</p>
+
+  <h3>Core Concepts</h3>
+  <table>
+    <thead><tr><th>Concept</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Event</strong></td><td>The core data container in MISP — represents an incident, campaign, or threat report. Contains attributes, objects, tags, and relationships.</td></tr>
+      <tr><td><strong>Attribute</strong></td><td>An individual IOC or data point within an event: IP address, domain, hash, URL, email address, filename, etc.</td></tr>
+      <tr><td><strong>Object</strong></td><td>A structured collection of related attributes (e.g., a "file" object groups filename + hash + size + path into one entity)</td></tr>
+      <tr><td><strong>Tag</strong></td><td>Metadata label applied to events or attributes: TLP classification, threat actor, campaign name, MITRE ATT&amp;CK technique</td></tr>
+      <tr><td><strong>Galaxy</strong></td><td>Structured knowledge bases: MITRE ATT&amp;CK, threat actors, ransomware families, sectors. Applied as tags to provide rich context.</td></tr>
+      <tr><td><strong>Feed</strong></td><td>External threat intelligence source MISP subscribes to and automatically imports (CIRCL, Abuse.ch, AlienVault OTX, etc.)</td></tr>
+      <tr><td><strong>Organisation</strong></td><td>Tenant in MISP — each org has its own users, sharing groups, and data access controls</td></tr>
+      <tr><td><strong>Sharing Group</strong></td><td>Fine-grained sharing control — share events with specific organizations, not the entire community</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Traffic Light Protocol (TLP)</h3>
+  <table>
+    <thead><tr><th>TLP Level</th><th>Tag</th><th>Sharing Rule</th></tr></thead>
+    <tbody>
+      <tr><td style="color:#ff4444"><strong>TLP:RED</strong></td><td><code>tlp:red</code></td><td>Not for disclosure — restricted to named recipients only; do not share in MISP</td></tr>
+      <tr><td style="color:#ff8800"><strong>TLP:AMBER</strong></td><td><code>tlp:amber</code></td><td>Limited disclosure to members of own org and clients on need-to-know</td></tr>
+      <tr><td style="color:#ffcc00"><strong>TLP:AMBER+STRICT</strong></td><td><code>tlp:amber+strict</code></td><td>Recipients may not re-share; stays within original recipient organization</td></tr>
+      <tr><td style="color:#88cc44"><strong>TLP:GREEN</strong></td><td><code>tlp:green</code></td><td>Limited to community (ISAC members, vetted sharing groups)</td></tr>
+      <tr><td><strong>TLP:CLEAR</strong></td><td><code>tlp:clear</code></td><td>No restriction — can be shared publicly (formerly TLP:WHITE)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>MISP Architecture</h3>
+  <pre><code># MISP stack:
+# - Apache/Nginx web server → PHP application layer
+# - MySQL/MariaDB → data storage
+# - Redis → background jobs, pub/sub
+# - MISP workers → background processing (feed sync, exports, ZeroMQ pub)
+# - ZeroMQ (optional) → real-time feed to SIEM via pub/sub
+
+# Ports:
+# 443 = MISP web UI (HTTPS)
+# 6666 = ZeroMQ pub/sub feed (for SIEM integration)
+
+# Lab IP: 192.168.56.20 (Security Onion / MISP server)</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Understanding MISP's purpose and data model</h4>
+      <ul>
+        <li>MISP is a threat intelligence platform that centralizes and shares IOCs at L7 via HTTPS API and web UI</li>
+        <li>The core data unit is the <strong>Event</strong> — a container holding attributes (IOCs), objects, and tags</li>
+        <li>TLP levels control how far an event propagates: TLP:RED stays private; TLP:CLEAR can go public</li>
+        <li>Access MISP via browser at https://192.168.56.20 using your organisation account</li>
+      </ul>
+      <pre><code><span class="cm"># Open MISP web interface</span>
+firefox https://192.168.56.20
+<span class="cm"># Default admin credentials on fresh install</span>
+<span class="cm"># Username: admin@admin.test  Password: admin</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Working with the MISP REST API and ZeroMQ</h4>
+      <ul>
+        <li>All API calls authenticate via the Authorization header — rotate keys regularly</li>
+        <li>ZeroMQ (port 6666) enables real-time streaming of events to SIEM consumers at L7</li>
+        <li>Configure Redis and MISP background workers for reliable feed processing</li>
+      </ul>
+      <pre><code><span class="cm"># Test API connectivity</span>
+curl -s -H "Authorization: YOUR_KEY" \
+     -H "Accept: application/json" \
+     https://192.168.56.20/users/view/me | python3 -m json.tool
+<span class="cm"># Verify ZeroMQ is publishing (port 6666)</span>
+nc -zv 192.168.56.20 6666</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Production MISP deployment and multi-instance federation</h4>
+      <ul>
+        <li>Deploy MISP behind nginx with TLS termination; configure separate worker processes for feed sync and ZeroMQ publishing</li>
+        <li>Federate multiple MISP instances using sync server push/pull with filtered distribution rules</li>
+        <li>Tune Redis pub/sub for low-latency SIEM alerting; monitor worker queue depth</li>
+      </ul>
+      <pre><code><span class="cm"># Check MISP worker health</span>
+sudo -u www-data /var/www/MISP/app/Console/cake Admin workers
+<span class="cm"># Tail ZeroMQ publisher log</span>
+sudo journalctl -u misp-workers -f | grep ZeroMQ</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 02 -->
+<template id="tpl-events">
+<article class="topic">
+  <h2>Events &amp; Attributes</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Event creation, attribute submission, and API calls all operate at L7 over HTTPS. The IoC values stored (ip-dst, ip-src, domain, url) are L3/L4 threat DATA recorded in the application — MISP itself communicates only at L7.</span>
+  </div>
+  <p>Events are the primary data unit in MISP. Every threat report, IOC set, or incident analysis is packaged as an event containing attributes.
+    <a href="#" class="xref" onclick="loadTopic('objects'); return false;">MISP Objects ↗</a>
+  </p>
+
+  <h3>Creating an Event</h3>
+  <pre><code># Via Web UI:
+# Events → Add Event
+# Fill in:
+# - Date: incident date
+# - Distribution: controls who can see the event
+# - Threat Level: High/Medium/Low/Undefined
+# - Analysis: Initial/Ongoing/Complete
+# - Event Info: short description (acts as title)
+# Click Create
+
+# Via API:
+curl -s -H "Authorization: YOUR_API_KEY" \
+     -H "Content-Type: application/json" \
+     -H "Accept: application/json" \
+     -X POST https://misp.internal/events \
+     -d '{
+       "Event": {
+         "date": "2024-03-15",
+         "threat_level_id": "1",
+         "info": "APT-X Phishing Campaign - Finance Sector",
+         "analysis": "1",
+         "distribution": "1"
+       }
+     }'</code></pre>
+
+  <h3>Attribute Types Reference</h3>
+  <table>
+    <thead><tr><th>Category</th><th>Type</th><th>Example Value</th><th>Use Case</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="4"><strong>Network</strong></td>
+          <td><code>ip-dst</code></td><td>203.0.113.10</td><td>C2 server IP, exfil destination</td></tr>
+      <tr><td><code>ip-src</code></td><td>192.168.56.10</td><td>Attacker source IP (internal pivot)</td></tr>
+      <tr><td><code>domain</code></td><td>evil-c2.example.com</td><td>C2 domain, DGA domain, phishing domain</td></tr>
+      <tr><td><code>url</code></td><td>http://evil.com/payload.exe</td><td>Malware download URL, phishing URL</td></tr>
+      <tr><td rowspan="3"><strong>File</strong></td>
+          <td><code>md5</code></td><td>44d88612fea8a8f36de82e1278abb02f</td><td>File hash for AV/EDR blocklist</td></tr>
+      <tr><td><code>sha256</code></td><td>d41d8cd98f00b204e9800...</td><td>Preferred hash (collision-resistant)</td></tr>
+      <tr><td><code>filename</code></td><td>invoice_2024.exe</td><td>Malware filename (weak IOC — easily changed)</td></tr>
+      <tr><td rowspan="3"><strong>Email</strong></td>
+          <td><code>email-src</code></td><td>phisher@spoofed.com</td><td>Phishing sender address</td></tr>
+      <tr><td><code>email-subject</code></td><td>Urgent: Invoice Attached</td><td>Phishing email subject line</td></tr>
+      <tr><td><code>email-attachment</code></td><td>invoice.xlsm</td><td>Malicious attachment filename</td></tr>
+      <tr><td rowspan="2"><strong>Malware</strong></td>
+          <td><code>malware-sample</code></td><td>(binary upload)</td><td>Upload actual sample — encrypted in MISP</td></tr>
+      <tr><td><code>yara</code></td><td>(YARA rule text)</td><td>Store YARA detection rules as attributes</td></tr>
+      <tr><td><strong>Registry</strong></td>
+          <td><code>regkey</code></td><td>HKLM\SOFTWARE\Malware\Config</td><td>Persistence registry key (Windows)</td></tr>
+      <tr><td><strong>Vulnerability</strong></td>
+          <td><code>vulnerability</code></td><td>CVE-2021-44228</td><td>CVE being exploited (Log4Shell, etc.)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Adding Attributes</h3>
+  <pre><code># Web UI: Event View → Add Attribute
+# Select: Category, Type, Value, IDS flag
+
+# IDS flag = should this be exported to IDS/SIEM for blocking?
+# Set to TRUE for actionable IOCs (C2 IPs, malware hashes)
+# Set to FALSE for context-only info (email subjects, analyst notes)
+
+# API:
+curl -s -H "Authorization: YOUR_API_KEY" \
+     -H "Content-Type: application/json" \
+     -X POST https://misp.internal/attributes/add/EVENT_ID \
+     -d '{
+       "Attribute": {
+         "category": "Network activity",
+         "type": "ip-dst",
+         "value": "203.0.113.10",
+         "to_ids": true,
+         "comment": "Cobalt Strike C2 server — active since 2024-03-10"
+       }
+     }'</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Creating events and adding basic attributes</h4>
+      <ul>
+        <li>Every threat report becomes an Event — set a clear Info description, Threat Level, and Analysis status</li>
+        <li>Distribution level 0 (Your org only) is safest for new analysts — escalate sharing only after review</li>
+        <li>The <code>to_ids</code> flag marks an attribute as actionable for IDS/SIEM — only set it on verified IOCs</li>
+        <li>Network attribute types <code>ip-dst</code>, <code>domain</code>, <code>url</code> represent L3/L7 IOCs stored in the L7 MISP platform</li>
+      </ul>
+      <pre><code><span class="cm"># Add a C2 IP attribute via web UI</span>
+<span class="cm"># Event View → Add Attribute</span>
+<span class="cm"># Category: Network activity</span>
+<span class="cm"># Type: ip-dst  Value: 203.0.113.10  to_ids: checked</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Bulk attribute ingestion and attribute quality</h4>
+      <ul>
+        <li>Use the API to automate attribute creation from SIEM alerts or threat feeds at scale</li>
+        <li>Disable correlation on free-text comment attributes to avoid meaningless correlation hits</li>
+        <li>Combine ip-dst + domain-ip object to preserve the IP-to-domain mapping with evidence context</li>
+      </ul>
+      <pre><code><span class="cm"># Bulk add attributes from a text IOC list via API loop</span>
+while IFS= read -r ip; do
+  curl -s -H "Authorization: $MISP_KEY" \
+       -H "Content-Type: application/json" \
+       -X POST https://192.168.56.20/attributes/add/$EVENT_ID \
+       -d "{\"Attribute\":{\"type\":\"ip-dst\",\"value\":\"$ip\",\"to_ids\":true}}"
+done < c2_ips.txt</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Attribute decay, scoring, and quality management</h4>
+      <ul>
+        <li>MISP's decay model automatically lowers attribute reliability scores as IOCs age — configure decay models per attribute type</li>
+        <li>Combine sighting data with decay scores to surface freshly confirmed IOCs for active blocking</li>
+        <li>Use <code>enforce_warninglist</code> in API calls to automatically filter known-good values from bulk imports</li>
+      </ul>
+      <pre><code><span class="cm"># Query attributes with decay score above threshold</span>
+curl -s -H "Authorization: $MISP_KEY" \
+     -X POST https://192.168.56.20/attributes/restSearch \
+     -d '{"to_ids":1,"decayScore":{"score":30,"base_score":80},"type":"ip-dst"}'</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 03 -->
+<template id="tpl-objects">
+<article class="topic">
+  <h2>MISP Objects &amp; Templates</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">MISP Objects are structured data containers within the L7 application layer. The network-connection object stores L3/L4 data (src/dst IP, ports, protocol) as intelligence records — not as live traffic — while all MISP access itself is HTTPS at L7.</span>
+  </div>
+  <p>Objects group related attributes into structured entities. A "file" object is more informative than separate md5, sha256, and filename attributes — they're linked together with relationships.</p>
+
+  <h3>Common MISP Object Templates</h3>
+  <table>
+    <thead><tr><th>Object</th><th>Key Fields</th><th>Use Case</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>file</strong></td>
+        <td>filename, md5, sha1, sha256, size, path, malware-sample</td>
+        <td>Malware sample — all hashes and metadata in one object</td>
+      </tr>
+      <tr>
+        <td><strong>domain-ip</strong></td>
+        <td>domain, ip</td>
+        <td>Link a domain to its resolved IP (C2 mapping)</td>
+      </tr>
+      <tr>
+        <td><strong>email</strong></td>
+        <td>from, to, subject, body, attachment, screenshot</td>
+        <td>Phishing email — all components linked</td>
+      </tr>
+      <tr>
+        <td><strong>network-connection</strong></td>
+        <td>ip-src, ip-dst, src-port, dst-port, protocol, first-seen, last-seen</td>
+        <td>C2 beacon traffic — full connection tuple</td>
+      </tr>
+      <tr>
+        <td><strong>url</strong></td>
+        <td>url, text, ip, domain, port, path, credentials</td>
+        <td>Phishing URL with full breakdown</td>
+      </tr>
+      <tr>
+        <td><strong>vulnerability</strong></td>
+        <td>id (CVE), description, references, published</td>
+        <td>Exploited vulnerability linked to campaign</td>
+      </tr>
+      <tr>
+        <td><strong>process</strong></td>
+        <td>pid, name, command-line, parent-pid, image</td>
+        <td>Malicious process details from IR</td>
+      </tr>
+      <tr>
+        <td><strong>credential</strong></td>
+        <td>username, password, type, origin</td>
+        <td>Compromised credentials (handle sensitively — TLP:RED)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Adding a File Object (Web UI)</h3>
+  <pre><code># Event View → Add Object → search "file"
+# Fill in:
+# - filename: invoice_loader.exe
+# - md5: 44d88612fea8a8f36de82e1278abb02f
+# - sha256: d41d8cd98f00b204e9800998ecf8427e
+# - size-in-bytes: 131072
+# Click Submit
+
+# MISP creates linked attributes for each field
+# Add object relationships: "drops" → malware object, "related-to" → campaign object</code></pre>
+
+  <h3>Object Relationships</h3>
+  <pre><code"># Relationships model attacker behavior narratively:
+# email → drops → file (malicious attachment)
+# file → connects-to → network-connection (C2 beacon)
+# network-connection → uses → ip (C2 server)
+# vulnerability → used-by → threat-actor
+
+# In Web UI: Object → Add Relationship → select target object + relationship type
+# Common relationship types:
+# drops, downloads, communicates-with, exploits, delivers,
+# contains, related-to, attributed-to, uses, mitigates</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Understanding MISP Objects vs. flat attributes</h4>
+      <ul>
+        <li>Objects group related fields into a single structured entity — a <code>file</code> object keeps md5, sha256, filename, and size linked together</li>
+        <li>Use the <code>network-connection</code> object to document C2 beacon tuples: src IP (L3), dst IP (L3), ports (L4), protocol (L4/L7)</li>
+        <li>Object relationships model attacker behavior: <em>email → drops → file → connects-to → ip</em></li>
+      </ul>
+      <pre><code><span class="cm"># Add file object via web UI</span>
+<span class="cm"># Event View → Add Object → search "file"</span>
+<span class="cm"># Fill: filename, md5, sha256, size-in-bytes → Submit</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Creating objects and relationships via API</h4>
+      <ul>
+        <li>Use the <code>/objects/add/EVENT_ID/TEMPLATE_NAME</code> endpoint to programmatically add objects</li>
+        <li>Chain object relationships to build a full attack narrative: from phishing email to dropped payload to C2 connection</li>
+      </ul>
+      <pre><code><span class="cm"># Add network-connection object via API</span>
+curl -s -H "Authorization: $MISP_KEY" \
+     -H "Content-Type: application/json" \
+     -X POST https://192.168.56.20/objects/add/$EVENT_ID/network-connection \
+     -d '{"Object":{"name":"network-connection","Attribute":[
+       {"type":"ip-src","object_relation":"ip-src","value":"192.168.56.30"},
+       {"type":"ip-dst","object_relation":"ip-dst","value":"203.0.113.10"},
+       {"type":"port","object_relation":"dst-port","value":"443"},
+       {"type":"text","object_relation":"protocol","value":"tcp"}
+     ]}}'</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Custom object templates and automated object generation</h4>
+      <ul>
+        <li>Create custom object templates in <code>/var/www/MISP/app/files/misp-objects/objects/</code> to model organization-specific data structures</li>
+        <li>Use PyMISP's <code>MISPObject</code> class to programmatically build and link objects from SIEM correlation results</li>
+        <li>Export object relationship graphs to Neo4j for advanced threat actor infrastructure pivoting</li>
+      </ul>
+      <pre><code><span class="cm"># Build full attack chain object graph with PyMISP</span>
+from pymisp import ExpandedPyMISP, MISPObject
+misp = ExpandedPyMISP('https://192.168.56.20', KEY, ssl=False)
+email_obj = MISPObject('email')
+email_obj.add_attribute('from', value='phisher@bad.com')
+email_obj.add_attribute('subject', value='Urgent Invoice')
+file_obj = MISPObject('file')
+file_obj.add_attribute('filename', value='invoice.xlsm')
+file_obj.add_attribute('sha256', value='d41d8cd98f00...')
+email_obj.add_reference(file_obj.uuid, 'drops')
+misp.add_object(EVENT_ID, email_obj)
+misp.add_object(EVENT_ID, file_obj)</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 04 -->
+<template id="tpl-tags">
+<article class="topic">
+  <h2>Tags, Galaxies &amp; MITRE ATT&amp;CK</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Tags and Galaxies are metadata labels managed entirely within the MISP L7 application. MITRE ATT&amp;CK techniques describe adversary behavior across all OSI layers, but the tagging system itself is a pure L7 application feature accessed via HTTPS API.</span>
+  </div>
+  <p>Tags and galaxies enrich events with structured metadata — threat actor attribution, campaign names, sectors, and MITRE ATT&amp;CK techniques. This enables pivoting across events and generating contextual threat intelligence.
+    <a href="#" class="xref" onclick="loadTopic('sharing'); return false;">Sharing &amp; distribution ↗</a>
+  </p>
+
+  <h3>Tag Taxonomies</h3>
+  <table>
+    <thead><tr><th>Taxonomy</th><th>Example Tags</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>TLP</td><td><code>tlp:green</code>, <code>tlp:amber</code></td><td>Data handling/sharing classification</td></tr>
+      <tr><td>PAP</td><td><code>pap:white</code>, <code>pap:green</code></td><td>Permissible Actions Protocol — what can analysts do with this?</td></tr>
+      <tr><td>MISP Event</td><td><code>misp-workflow:action="block"</code></td><td>Automated workflow triggers</td></tr>
+      <tr><td>Sector</td><td><code>sector:finance</code>, <code>sector:healthcare</code></td><td>Targeted sector for this threat</td></tr>
+      <tr><td>Threat Actor</td><td><code>threat-actor:APT28</code></td><td>Attribution (use carefully — attribution is hard)</td></tr>
+      <tr><td>Admiralty</td><td><code>admiralty-scale:source-reliability="b"</code></td><td>Intelligence reliability/confidence rating</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Galaxies — MITRE ATT&amp;CK Integration</h3>
+  <pre><code># Galaxies provide structured threat knowledge as taggable objects
+# Most important Galaxy: MITRE ATT&amp;CK
+
+# Adding ATT&CK technique to an attribute or event:
+# Tag → Search MITRE → Select Technique
+# e.g., "misp-galaxy:mitre-attack-pattern="Spearphishing Attachment T1566.001""
+
+# ATT&CK technique in API:
+curl -s -H "Authorization: YOUR_API_KEY" \
+     -X POST https://misp.internal/events/addTag/EVENT_ID \
+     -H "Content-Type: application/json" \
+     -d '{"tag": "misp-galaxy:mitre-attack-pattern=\"Spearphishing Attachment - T1566.001\""}'
+
+# Other key Galaxies:
+# misp-galaxy:mitre-attack-pattern    → ATT&CK techniques (T####)
+# misp-galaxy:threat-actor            → APT groups (APT28, Lazarus, etc.)
+# misp-galaxy:ransomware              → Ransomware families (LockBit, Conti)
+# misp-galaxy:tool                    → Tools/malware (Cobalt Strike, Mimikatz)
+# misp-galaxy:sector                  → Targeted industry verticals</code></pre>
+
+  <h3>Searching by Tag</h3>
+  <pre><code"># Web UI: Events → Search Events → Tag filter
+# API tag search:
+curl -s -H "Authorization: YOUR_API_KEY" \
+     "https://misp.internal/events/index/tag:tlp:green/published:1"
+
+# Find all events tagged with specific ATT&CK technique:
+curl -s -H "Authorization: YOUR_API_KEY" \
+     "https://misp.internal/events/restSearch" \
+     -H "Content-Type: application/json" \
+     -X POST \
+     -d '{"tags": ["misp-galaxy:mitre-attack-pattern=\"Credential Dumping - T1003\""]}'</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Applying TLP and basic taxonomy tags</h4>
+      <ul>
+        <li>Always apply a TLP tag to every event before publishing — default to <code>tlp:amber</code> if unsure</li>
+        <li>Add <code>sector:finance</code> or <code>sector:healthcare</code> tags to help recipients filter relevant events</li>
+        <li>Galaxy clusters provide rich context: ATT&amp;CK technique tags map analyst observations to a standardized framework</li>
+      </ul>
+      <pre><code><span class="cm"># Add TLP tag via web UI: Event → Tag → search "tlp:amber"</span>
+<span class="cm"># Add ATT&CK: Tag → search "T1566" → select Spearphishing Attachment</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Building ATT&amp;CK-tagged threat profiles</h4>
+      <ul>
+        <li>Tag multiple techniques per event to build a complete TTP profile for a campaign</li>
+        <li>Combine threat-actor Galaxy (e.g., APT28) with ATT&amp;CK tags to enable cross-event attribution pivoting</li>
+        <li>Use PAP tags alongside TLP to specify what analysts can actively do with an IOC (e.g., scan vs. just monitor)</li>
+      </ul>
+      <pre><code><span class="cm"># Tag event with multiple ATT&CK techniques via API</span>
+for tag in 'tlp:amber' 'sector:finance' \
+    'misp-galaxy:mitre-attack-pattern="Spearphishing Attachment - T1566.001"' \
+    'misp-galaxy:mitre-attack-pattern="User Execution - T1204.002"'; do
+  curl -s -H "Authorization: $MISP_KEY" \
+       -X POST https://192.168.56.20/events/addTag/$EVENT_ID \
+       -H "Content-Type: application/json" \
+       -d "{\"tag\":\"$tag\"}"
+done</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Custom taxonomies and automated tag enforcement</h4>
+      <ul>
+        <li>Create custom MISP taxonomies for organization-specific classification (e.g., internal campaign codes, asset criticality)</li>
+        <li>Use MISP Workflows to automatically block publishing of events missing required TLP tags</li>
+        <li>Build ATT&amp;CK heatmaps from MISP tag data using the ATT&amp;CK Navigator export format</li>
+      </ul>
+      <pre><code><span class="cm"># Export ATT&CK coverage heatmap from MISP tag data</span>
+curl -s -H "Authorization: $MISP_KEY" \
+     -X POST https://192.168.56.20/events/restSearch \
+     -d '{"tags":["misp-galaxy:mitre-attack-pattern"],"returnFormat":"attack"}' \
+     > attck_navigator.json</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 05 -->
+<template id="tpl-sharing">
+<article class="topic">
+  <h2>Sharing, Feeds &amp; Synchronization</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Feed fetching, MISP instance synchronization, and sighting reporting all occur over HTTPS at L7. Feed data contains L3 IPs and L7 URLs as IOC values, but the transport and sharing mechanism is always L7 application protocol.</span>
+  </div>
+  <p>MISP's core value is sharing. Feeds bring external intelligence in; synchronization connects MISP instances; sharing groups control who sees what.</p>
+
+  <h3>Distribution Levels</h3>
+  <table>
+    <thead><tr><th>Level</th><th>ID</th><th>Who Sees It</th></tr></thead>
+    <tbody>
+      <tr><td>Your organisation only</td><td>0</td><td>Only users in your MISP org</td></tr>
+      <tr><td>This community only</td><td>1</td><td>Your org + directly connected MISP instances</td></tr>
+      <tr><td>Connected communities</td><td>2</td><td>Your org + connected + one additional hop</td></tr>
+      <tr><td>All communities</td><td>3</td><td>All MISP instances that receive this event (propagates widely)</td></tr>
+      <tr><td>Sharing group</td><td>4</td><td>Specific named sharing group (most controlled)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Threat Intelligence Feeds</h3>
+  <pre><code># Enable feeds: Sync Actions → Feeds → List Feeds → Enable
+
+# Key free feeds to enable:
+# CIRCL (Luxembourg CERT) — high-quality vetted IOCs
+# Abuse.ch URLhaus — malware URLs
+# Abuse.ch MalwareBazaar — malware hashes
+# Abuse.ch ThreatFox — malware IOCs
+# AlienVault OTX — community threat sharing
+# MISP Warning Lists — known good IPs to avoid false positives
+
+# Fetch feeds manually
+# Sync Actions → Fetch feeds from selected feeds
+
+# Via CLI (on MISP server):
+sudo -u www-data /var/www/MISP/app/Console/cake Server fetchFeed
+
+# Schedule automatic feed fetching
+# Admin → Server Settings → MISP → Feed fetch interval</code></pre>
+
+  <h3>MISP Instance Synchronization</h3>
+  <pre><code"># Connect two MISP instances for bidirectional sync
+# Server A adds Server B as a sync server:
+# Admin → List Servers → Add Server
+# Fill: URL, API key of Server B, sync flags (pull/push/events/attributes)
+
+# Test connection
+# Admin → List Servers → Test Connection
+
+# Pull from connected server
+sudo -u www-data /var/www/MISP/app/Console/cake Server pull SERVER_ID
+
+# Push to connected server
+sudo -u www-data /var/www/MISP/app/Console/cake Server push SERVER_ID
+
+# Automatic sync (configure in Admin → Server Settings → MISP → Sync):
+# MISP.background_jobs = true
+# MISP.Sync.push_rules / pull_rules for filtering</code></pre>
+
+  <h3>Sighting — Reporting Observed IOCs</h3>
+  <pre><code"># Sightings let you report "I saw this IOC in the wild"
+# This enriches the confidence/reliability score of the attribute
+
+# Web UI: attribute → click eye icon → Add Sighting
+
+# API sighting:
+curl -s -H "Authorization: YOUR_API_KEY" \
+     -H "Content-Type: application/json" \
+     -X POST https://misp.internal/sightings/add \
+     -d '{
+       "Sighting": {
+         "values": ["203.0.113.10"],
+         "type": "0",              // 0=sighting, 1=false positive, 2=expiration
+         "timestamp": "2024-03-15T14:30:00+00:00",
+         "source": "firewall-siem-correlation"
+       }
+     }'</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Enabling feeds and understanding distribution levels</h4>
+      <ul>
+        <li>Start with distribution level 0 (org only) and escalate sharing incrementally as confidence grows</li>
+        <li>Enable free feeds first: CIRCL, Abuse.ch URLhaus, and MalwareBazaar provide high-quality vetted IOCs at no cost</li>
+        <li>Sightings report "I saw this IOC in my environment" — they increase confidence scores and benefit the whole community</li>
+      </ul>
+      <pre><code><span class="cm"># Enable feeds via web UI</span>
+<span class="cm"># Sync Actions → Feeds → List Feeds → check desired feeds → Enable</span>
+<span class="cm"># Sync Actions → Fetch feeds from selected feeds</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Scheduled feed sync and instance-to-instance synchronization</h4>
+      <ul>
+        <li>Schedule automatic feed fetching via MISP Server Settings to keep IOCs fresh without manual intervention</li>
+        <li>Configure sync servers with filtered push/pull rules to avoid importing irrelevant or low-confidence events</li>
+        <li>Test sync connections before enabling automatic sync to avoid unexpected data propagation</li>
+      </ul>
+      <pre><code><span class="cm"># Fetch all enabled feeds via CLI (run on MISP server)</span>
+sudo -u www-data /var/www/MISP/app/Console/cake Server fetchFeed all
+<span class="cm"># Pull from connected sync server (SERVER_ID from Admin → List Servers)</span>
+sudo -u www-data /var/www/MISP/app/Console/cake Server pull 1</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Sharing group automation and custom feed publishing</h4>
+      <ul>
+        <li>Build sharing groups programmatically via API to automatically include new partner organizations as they onboard</li>
+        <li>Publish a MISP instance as a custom feed for downstream consumers using the built-in feed export format</li>
+        <li>Implement sighting automation by integrating your SIEM detection pipeline to POST sightings back to MISP in real time</li>
+      </ul>
+      <pre><code><span class="cm"># Auto-submit sightings from SIEM alert via script</span>
+curl -s -H "Authorization: $MISP_KEY" \
+     -H "Content-Type: application/json" \
+     -X POST https://192.168.56.20/sightings/add \
+     -d "{\"Sighting\":{\"values\":[\"$SIEM_IOC\"],\"type\":\"0\",\
+          \"source\":\"splunk-siem\",\"timestamp\":\"$(date +%s)\"}}"</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 06 -->
+<template id="tpl-api">
+<article class="topic">
+  <h2>API &amp; RestSearch</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">The MISP REST API is a pure L7 HTTPS interface. All restSearch queries, authentication, and data exchange travel as JSON over TLS. The API is the integration point between MISP and other security tools (SIEMs, SOAR, firewall orchestration).</span>
+  </div>
+  <p>MISP has a comprehensive REST API. The <code>restSearch</code> endpoint is the most powerful — it queries events, attributes, and objects with complex filters.</p>
+
+  <h3>API Key &amp; Authentication</h3>
+  <pre><code"># Get your API key:
+# Profile icon → My Profile → Auth key (or Automation)
+
+# All API calls require:
+# -H "Authorization: YOUR_API_KEY"
+# -H "Accept: application/json"
+# -H "Content-Type: application/json" (for POST)
+
+# Test connection
+curl -s -H "Authorization: YOUR_KEY" \
+     -H "Accept: application/json" \
+     https://misp.internal/users/view/me | python3 -m json.tool</code></pre>
+
+  <h3>restSearch — Core Query Interface</h3>
+  <pre><code"># Search for events containing a specific IP
+curl -s -H "Authorization: YOUR_KEY" \
+     -H "Accept: application/json" \
+     -X POST https://misp.internal/events/restSearch \
+     -d '{"value": "203.0.113.10", "type": "ip-dst", "to_ids": 1}'
+
+# Search attributes for hash
+curl -s -H "Authorization: YOUR_KEY" \
+     -X POST https://misp.internal/attributes/restSearch \
+     -d '{"value": "44d88612fea8a8f36de82e1278abb02f", "type": "md5"}'
+
+# Get all IDS-flagged attributes (for SIEM blocklist)
+curl -s -H "Authorization: YOUR_KEY" \
+     -X POST https://misp.internal/attributes/restSearch \
+     -d '{
+       "to_ids": 1,
+       "published": 1,
+       "returnFormat": "json",
+       "limit": 1000
+     }'
+
+# Export in different formats
+# returnFormat: json, xml, suricata, snort, text, csv, stix, stix2
+curl -s -H "Authorization: YOUR_KEY" \
+     -X POST https://misp.internal/attributes/restSearch \
+     -d '{"to_ids": 1, "type": "ip-dst", "returnFormat": "text"}'
+# Returns plain-text list of IPs — paste into firewall blocklist</code></pre>
+
+  <h3>Python PyMISP</h3>
+  <pre><code"># Install
+pip3 install pymisp
+
+# Basic usage
+from pymisp import ExpandedPyMISP
+
+misp = ExpandedPyMISP('https://misp.internal', 'YOUR_API_KEY', ssl=False)
+
+# Get an event
+event = misp.get_event(42, pythonify=True)
+print(event.info)
+
+# Search for events containing an IP
+result = misp.search(value='203.0.113.10', type_attribute='ip-dst', pythonify=True)
+for event in result:
+    print(event.id, event.info, event.date)
+
+# Create event with attribute
+from pymisp import MISPEvent, MISPAttribute
+event = MISPEvent()
+event.info = 'Lab Test Event'
+event.distribution = 0
+event.threat_level_id = 2
+event.analysis = 0
+
+attr = MISPAttribute()
+attr.type = 'ip-dst'
+attr.value = '10.10.10.10'
+attr.to_ids = True
+attr.comment = 'C2 server'
+event.add_attribute(**attr)
+
+new_event = misp.add_event(event)
+print(f"Created event: {new_event.id}")</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Using the MISP REST API with curl</h4>
+      <ul>
+        <li>Every API request requires the <code>Authorization</code> header with your API key — never share or embed keys in scripts without environment variables</li>
+        <li>The <code>restSearch</code> endpoint accepts JSON POST bodies with filter fields like <code>value</code>, <code>type</code>, and <code>to_ids</code></li>
+        <li>Always test with <code>python3 -m json.tool</code> to pretty-print and validate API responses</li>
+      </ul>
+      <pre><code><span class="cm"># Test API key and connectivity</span>
+curl -s -H "Authorization: $MISP_KEY" \
+     -H "Accept: application/json" \
+     https://192.168.56.20/users/view/me | python3 -m json.tool</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>restSearch filtering and PyMISP automation</h4>
+      <ul>
+        <li>Combine multiple filters in one restSearch: type + to_ids + published + date_from for precise IOC extraction</li>
+        <li>PyMISP's <code>pythonify=True</code> returns native Python objects — easier to iterate than raw JSON dictionaries</li>
+        <li>Use <code>returnFormat: text</code> for plain IOC lists ready to paste into firewall blocklists</li>
+      </ul>
+      <pre><code><span class="cm"># Get all published IDS-flagged IPs as plain text list</span>
+curl -s -H "Authorization: $MISP_KEY" \
+     -X POST https://192.168.56.20/attributes/restSearch \
+     -d '{"to_ids":1,"published":1,"type":"ip-dst","returnFormat":"text"}'</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>API rate limiting, pagination, and SOAR integration</h4>
+      <ul>
+        <li>Use <code>limit</code> and <code>page</code> parameters in restSearch to paginate large result sets without overwhelming the server</li>
+        <li>Implement HMAC-signed webhook callbacks in MISP Workflows to push new IOCs to a SOAR platform the moment they are published</li>
+        <li>Cache restSearch results using Redis TTL to avoid hammering the API from high-frequency SIEM enrichment queries</li>
+      </ul>
+      <pre><code><span class="cm"># Paginated restSearch — page 2, 500 results per page</span>
+curl -s -H "Authorization: $MISP_KEY" \
+     -X POST https://192.168.56.20/attributes/restSearch \
+     -d '{"to_ids":1,"published":1,"returnFormat":"json","limit":500,"page":2}'</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 07 -->
+<template id="tpl-export">
+<article class="topic">
+  <h2>Export Formats &amp; SIEM Integration</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">MISP export formats are L7 application-layer outputs (HTTPS API responses). The exported data feeds L3/L4/L7 detection tools: Suricata rules match at L3–L7, Zeek intel hits at L3/L4/L7, and SIEM watchlists operate at L7. MISP itself is always L7.</span>
+  </div>
+  <p>MISP exports IOCs in formats consumable by every major security tool. The export pipeline is what transforms threat intelligence into active detections.
+    <a href="#" class="xref" onclick="loadTopic('zeek_int'); return false;">Zeek intel integration ↗</a>
+  </p>
+
+  <h3>Export Format Reference</h3>
+  <table>
+    <thead><tr><th>Format</th><th>Use Case</th><th>Tools that consume it</th></tr></thead>
+    <tbody>
+      <tr><td>Suricata rules</td><td>IDS/IPS detection rules</td><td>Suricata, Security Onion, pfSense</td></tr>
+      <tr><td>Snort rules</td><td>Legacy IDS format</td><td>Snort, older IDS platforms</td></tr>
+      <tr><td>YARA rules</td><td>File scanning</td><td>ClamAV, Velociraptor, custom scanners</td></tr>
+      <tr><td>CSV</td><td>Generic import</td><td>Excel, custom scripts, databases</td></tr>
+      <tr><td>Plain text</td><td>Simple IOC lists (IPs, domains, hashes)</td><td>Firewall blocklists, DNS sinkhole, SIEM watchlists</td></tr>
+      <tr><td>STIX 1.x / 2.x</td><td>Standard threat intel exchange</td><td>Splunk ES, IBM QRadar, Palo Alto Cortex XSOAR</td></tr>
+      <tr><td>OpenIOC</td><td>Mandiant-format IOCs</td><td>Mandiant tools, FireEye</td></tr>
+      <tr><td>Zeek intel</td><td>Zeek intelligence framework</td><td>Zeek NSM, Security Onion</td></tr>
+      <tr><td>JSON</td><td>Full event data</td><td>Custom integrations, SOAR platforms</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Generating Suricata Rules from MISP</h3>
+  <pre><code"># Export via API
+curl -s -H "Authorization: YOUR_KEY" \
+     -X POST https://misp.internal/attributes/restSearch \
+     -d '{"to_ids": 1, "returnFormat": "suricata", "published": 1}' \
+     > misp_rules.rules
+
+# Generated rule example:
+# alert ip 203.0.113.10 any -> $HOME_NET any \
+#   (msg:"MISP e42 [TLP:GREEN] [ip-dst] C2 server"; \
+#    threshold: type limit, track by_src, count 1, seconds 3600; \
+#    sid:2712345; rev:1;)
+
+# Copy to Suricata rules directory
+sudo cp misp_rules.rules /etc/suricata/rules/
+sudo suricata-update  # or manually include in suricata.yaml</code></pre>
+
+  <h3>MISP + Security Onion (ZeroMQ)</h3>
+  <pre><code"># MISP ZeroMQ publishes events in real-time
+# Security Onion can consume this stream for automatic alert enrichment
+
+# Enable ZeroMQ in MISP:
+# Admin → Server Settings → Plugin → ZeroMQ → enable = true
+# Plugin.ZeroMQ_host = 0.0.0.0
+# Plugin.ZeroMQ_port = 6666
+
+# On Security Onion: configure misp-to-so integration
+# (Security Onion 2.x uses so-misp for integration)
+sudo so-misp-configure --url https://misp.internal --key YOUR_API_KEY
+
+# Zeek intel export from MISP (for Zeek intel framework)
+curl -s -H "Authorization: YOUR_KEY" \
+     -X POST https://misp.internal/attributes/restSearch \
+     -d '{"to_ids": 1, "returnFormat": "text", "type": ["ip-dst", "domain", "hostname"]}' \
+     | awk 'BEGIN{print "#fields\tindicator\tindicator_type\tmeta.source\tmeta.desc"} \
+            /^[0-9]/{print $0"\tIntel::ADDR\tMISP\tC2-IOC"} \
+            /^[a-z]/{print $0"\tIntel::DOMAIN\tMISP\tC2-IOC"}' \
+     > /opt/zeek/intel/misp_feed.txt</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Exporting IOC lists for firewall and SIEM use</h4>
+      <ul>
+        <li>Use <code>returnFormat: text</code> for the simplest export — plain-text IP or domain lists ready for firewall blocklists</li>
+        <li>Always filter with <code>to_ids: 1</code> and <code>published: 1</code> to export only actionable, reviewed IOCs</li>
+        <li>The Suricata export generates ready-to-use detection rules covering L3 IPs, L4 ports, and L7 URIs in one step</li>
+      </ul>
+      <pre><code><span class="cm"># Export IDS-flagged IPs as plain text for firewall blocklist</span>
+curl -s -H "Authorization: $MISP_KEY" \
+     -X POST https://192.168.56.20/attributes/restSearch \
+     -d '{"to_ids":1,"published":1,"type":"ip-dst","returnFormat":"text"}' \
+     > blocklist_ips.txt</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Suricata rule generation and ZeroMQ SIEM streaming</h4>
+      <ul>
+        <li>Automate Suricata rule deployment: export from MISP → copy to rules directory → reload Suricata</li>
+        <li>Configure ZeroMQ publishing so Security Onion receives new IOCs in real time without polling the API</li>
+        <li>Generate Zeek intel framework files for <code>Intel::ADDR</code> (L3) and <code>Intel::DOMAIN</code> (L7) lookups</li>
+      </ul>
+      <pre><code><span class="cm"># Generate Suricata rules and deploy to Security Onion</span>
+curl -s -H "Authorization: $MISP_KEY" \
+     -X POST https://192.168.56.20/attributes/restSearch \
+     -d '{"to_ids":1,"returnFormat":"suricata","published":1}' \
+     > /tmp/misp.rules
+sudo cp /tmp/misp.rules /etc/suricata/rules/
+sudo suricata-update</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Continuous IOC pipeline with automated rule lifecycle management</h4>
+      <ul>
+        <li>Build a cron-driven pipeline: MISP restSearch → Suricata rules → automated test → deploy if no rule errors</li>
+        <li>Implement rule expiry by correlating MISP attribute decay scores with Suricata rule <code>rev</code> numbering</li>
+        <li>Consume the ZeroMQ stream with a custom Python listener to push real-time IOCs to multiple detection tools simultaneously</li>
+      </ul>
+      <pre><code><span class="cm"># Subscribe to MISP ZeroMQ stream for real-time IOC push</span>
+pip3 install zmq
+python3 - &lt;&lt;'EOF'
+import zmq, json
+ctx = zmq.Context()
+sock = ctx.socket(zmq.SUB)
+sock.connect("tcp://192.168.56.20:6666")
+sock.setsockopt(zmq.SUBSCRIBE, b"misp_json")
+while True:
+    topic, data = sock.recv_multipart()
+    event = json.loads(data)
+    print(event.get('Event', {}).get('info', ''))
+EOF</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 08 -->
+<template id="tpl-zeek_int">
+<article class="topic">
+  <h2>Correlation Engine &amp; Warninglists</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Correlation and warning list checks are L7 application logic running inside MISP. The correlation engine links L3 IP addresses and L7 domain/URL attributes stored across events — all analysis occurs within the application layer, not on live network traffic.</span>
+  </div>
+  <p>MISP's built-in correlation engine automatically links attributes that appear in multiple events. Warning lists prevent benign IPs and domains from being flagged as IOCs.</p>
+
+  <h3>Correlation Engine</h3>
+  <pre><code"># Correlation happens automatically when you add attributes
+# MISP checks if the value exists in any other event
+# Correlations appear in the attribute view as "Correlations" button
+
+# Enable/disable correlation per attribute:
+# Attribute → edit → check "Disable Correlation" for non-IOC fields (analyst notes, etc.)
+
+# Correlation graph (Web UI):
+# Event → click correlation count → view graph of related events
+# Useful for: linking campaigns, identifying shared infrastructure, threat actor pivoting
+
+# Correlation search via API:
+curl -s -H "Authorization: YOUR_KEY" \
+     -X POST https://misp.internal/attributes/restSearch \
+     -d '{"value": "203.0.113.10", "includeCorrelations": 1}' | \
+     python3 -c "import sys,json; d=json.load(sys.stdin); \
+                 [print(a.get('Event',{}).get('info','')) for a in d.get('response',{}).get('Attribute',[])]"</code></pre>
+
+  <h3>MISP Warning Lists</h3>
+  <pre><code"># Warning lists prevent known-good values from being treated as IOCs
+# Built-in lists include:
+# - Top Alexa 10,000 domains
+# - RFC 1918 private IP ranges
+# - Known CDN and cloud provider IPs (Cloudflare, Akamai, AWS, Azure)
+# - Google, Microsoft, Apple infrastructure IPs
+# - Known good TLDs
+
+# Enable warning lists:
+# Admin → Warning Lists → select all → Enable
+
+# Warning list indicator on attributes:
+# Orange warning icon = value appears in warning list (likely false positive)
+
+# Check attribute against warning lists via API:
+curl -s -H "Authorization: YOUR_KEY" \
+     "https://misp.internal/warninglists/checkValue" \
+     -H "Content-Type: application/json" \
+     -X POST \
+     -d '{"value": ["8.8.8.8", "192.168.1.1", "evil.c2server.com"]}'</code></pre>
+
+  <h3>Enrichment &amp; MISP Modules</h3>
+  <pre><code"># MISP Modules extend enrichment capabilities (separate service)
+# Install: pip3 install misp-modules
+
+# Popular enrichment modules:
+# - VirusTotal: query VT on hashes/URLs/IPs
+# - Shodan: enrich IPs with banner data
+# - urlscan.io: scan URLs for malicious content
+# - ipinfo: geo/ASN enrichment
+# - BGP Ranking: IP reputation
+# - Have I Been Pwned: check emails
+
+# Use enrichment:
+# Attribute → right-click → Enrich with → select module
+
+# Via API:
+curl -s -H "Authorization: YOUR_KEY" \
+     -X POST https://misp.internal/attributes/enrich/ATTRIBUTE_ID \
+     -d '{"module": "virustotal"}'</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Using correlation and warning lists to reduce false positives</h4>
+      <ul>
+        <li>Correlation is automatic — when you save an attribute, MISP immediately checks it against all other attributes in the system</li>
+        <li>A correlation count &gt; 0 on an attribute is a strong signal — it means that value appeared in other threat reports</li>
+        <li>Enable all MISP Warning Lists to automatically flag known-good infrastructure (Google DNS 8.8.8.8, AWS IPs, CDN ranges)</li>
+      </ul>
+      <pre><code><span class="cm"># Enable all warning lists</span>
+<span class="cm"># Admin → Warning Lists → select all → Enable</span>
+<span class="cm"># Orange warning icon on attribute = matches a warning list = likely false positive</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Programmatic correlation lookups and enrichment modules</h4>
+      <ul>
+        <li>Query correlations via API using <code>includeCorrelations: 1</code> to find all events sharing an attribute value</li>
+        <li>Use MISP Modules for automated enrichment: VirusTotal, Shodan, ipinfo, and urlscan.io add L3–L7 context to attributes</li>
+        <li>Disable correlation on free-text comment fields to prevent meaningless correlation noise in the system</li>
+      </ul>
+      <pre><code><span class="cm"># Find all events sharing a C2 IP (correlation pivot)</span>
+curl -s -H "Authorization: $MISP_KEY" \
+     -X POST https://192.168.56.20/attributes/restSearch \
+     -d '{"value":"203.0.113.10","includeCorrelations":1}' | \
+     python3 -m json.tool</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Custom warning lists and correlation performance tuning</h4>
+      <ul>
+        <li>Create custom warning lists for your organization's internal IP ranges and owned domains to prevent internal assets from being flagged as IOCs</li>
+        <li>For large deployments, disable correlation on low-value attribute types (email subjects, filenames) to reduce database load</li>
+        <li>Use the correlation graph to visualize shared C2 infrastructure across multiple threat actor campaigns</li>
+      </ul>
+      <pre><code><span class="cm"># Check multiple values against warning lists at once</span>
+curl -s -H "Authorization: $MISP_KEY" \
+     -H "Content-Type: application/json" \
+     -X POST https://192.168.56.20/warninglists/checkValue \
+     -d '{"value":["8.8.8.8","203.0.113.10","192.168.1.1","evil-c2.example.com"]}'</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 09 -->
+<template id="tpl-stix">
+<article class="topic">
+  <h2>STIX / TAXII Feeds</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">STIX bundles are JSON documents exchanged over TAXII — an HTTPS REST protocol operating at L7. STIX 2.1 Indicator objects encode L3 IP patterns and L7 URL/domain patterns as threat intelligence data, but the exchange protocol itself is always L7.</span>
+  </div>
+  <p>STIX (Structured Threat Information eXpression) and TAXII (Trusted Automated eXchange of Intelligence Information) are the industry standards for threat intelligence exchange. MISP supports both natively.</p>
+
+  <h3>STIX Overview</h3>
+  <table>
+    <thead><tr><th>STIX 2.1 Object</th><th>Maps to MISP</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td>Indicator</td><td>Attribute (with to_ids=true)</td><td>IP-dst, domain, hash pattern</td></tr>
+      <tr><td>Malware</td><td>Galaxy cluster / object</td><td>WannaCry ransomware entity</td></tr>
+      <tr><td>Threat Actor</td><td>Galaxy cluster</td><td>APT28 / Fancy Bear</td></tr>
+      <tr><td>Campaign</td><td>Event with campaign tag</td><td>Operation Aurora</td></tr>
+      <tr><td>Attack Pattern</td><td>ATT&amp;CK Galaxy tag</td><td>T1566.001 Spearphishing</td></tr>
+      <tr><td>Observed Data</td><td>Event attributes</td><td>Network traffic, file hashes seen</td></tr>
+      <tr><td>Relationship</td><td>Object references</td><td>"uses", "attributed-to", "targets"</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Exporting STIX from MISP</h3>
+  <pre><code"># Export event as STIX 2.1
+curl -s -H "Authorization: YOUR_KEY" \
+     "https://misp.internal/events/restSearch/returnFormat:stix2/eventid:42"
+
+# Export all published events as STIX bundle
+curl -s -H "Authorization: YOUR_KEY" \
+     -X POST https://misp.internal/events/restSearch \
+     -d '{"published": 1, "returnFormat": "stix2"}' \
+     > misp_bundle.json
+
+# Import STIX 2.1 bundle into MISP
+curl -s -H "Authorization: YOUR_KEY" \
+     -H "Content-Type: application/json" \
+     -X POST https://misp.internal/events/upload_stix \
+     --data-binary @external_threat_bundle.json</code></pre>
+
+  <h3>TAXII Feed Consumption</h3>
+  <pre><code"># MISP can act as both TAXII server (share) and client (receive)
+
+# Configure TAXII server in MISP:
+# Admin → Server Settings → Plugin → TAXII → enable
+
+# Connect to external TAXII feed:
+# Add as a MISP sync server or use taxii2client:
+pip3 install taxii2-client
+
+from taxii2client.v21 import Server
+server = Server('https://taxii.threatfeed.example.com/taxii/',
+                user='username', password='password')
+api_root = server.api_roots[0]
+for collection in api_root.collections:
+    print(collection.id, collection.title)
+
+# Get objects from collection
+from taxii2client.v21 import Collection
+col = Collection('https://taxii.example.com/api/v21/collections/uuid/')
+bundle = col.get_objects()
+# Import bundle into MISP via upload_stix endpoint</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Understanding STIX 2.1 objects and their MISP equivalents</h4>
+      <ul>
+        <li>STIX Indicators map to MISP attributes with <code>to_ids=true</code> — they represent actionable detection patterns</li>
+        <li>STIX Threat Actor maps to a MISP Galaxy cluster — structured knowledge about adversary groups</li>
+        <li>A STIX Bundle is a JSON envelope that packages multiple objects (indicators, campaigns, relationships) for transport over TAXII at L7</li>
+      </ul>
+      <pre><code><span class="cm"># Export a single MISP event as STIX 2.1 bundle</span>
+curl -s -H "Authorization: $MISP_KEY" \
+     "https://192.168.56.20/events/restSearch/returnFormat:stix2/eventid:42"</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>STIX import/export workflows and TAXII client usage</h4>
+      <ul>
+        <li>Import external STIX bundles from threat feeds via the <code>/events/upload_stix</code> endpoint — MISP auto-maps objects to events and attributes</li>
+        <li>Use <code>taxii2-client</code> to pull collections from commercial threat intelligence providers over TAXII at L7</li>
+        <li>Export all published events as a STIX bundle for consumption by Splunk ES, QRadar, or Cortex XSOAR</li>
+      </ul>
+      <pre><code><span class="cm"># Import an external STIX 2.1 bundle into MISP</span>
+curl -s -H "Authorization: $MISP_KEY" \
+     -H "Content-Type: application/json" \
+     -X POST https://192.168.56.20/events/upload_stix \
+     --data-binary @external_threat_bundle.json</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>STIX patterning, custom objects, and TAXII server hosting</h4>
+      <ul>
+        <li>Write STIX 2.1 patterns using STIX Expression Language (STIX-EL) to encode complex multi-attribute indicators that map to L3/L4/L7 conditions</li>
+        <li>Host MISP as a TAXII 2.1 server to allow downstream partners to pull your threat intelligence programmatically</li>
+        <li>Create custom STIX 2.1 extension objects to carry organization-specific context not covered by standard STIX SCOs</li>
+      </ul>
+      <pre><code><span class="cm"># Export all published events as STIX 2.1 bundle for SIEM</span>
+curl -s -H "Authorization: $MISP_KEY" \
+     -X POST https://192.168.56.20/events/restSearch \
+     -d '{"published":1,"returnFormat":"stix2","threat_level_id":"1"}' \
+     > high_threat_stix_bundle.json
+<span class="cm"># STIX pattern example encoding L3 + L7 IOC:</span>
+<span class="cm"># [ipv4-addr:value = '203.0.113.10'] AND [domain-name:value = 'evil-c2.example.com']</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 10 -->
+<template id="tpl-workflows">
+<article class="topic">
+  <h2>Workflows &amp; Automation</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">MISP Workflows are application-layer automation logic executed within MISP at L7. Webhook actions make outbound HTTPS calls to SOAR platforms at L7. The ZeroMQ push module streams event data over TCP (L4) using the ZeroMQ pub/sub protocol (L7).</span>
+  </div>
+  <p>MISP 2.4.142+ includes a visual workflow editor for automating actions when events or attributes are created, published, or modified.</p>
+
+  <h3>MISP Workflows (Visual Editor)</h3>
+  <pre><code"># Access: Admin → Workflows
+
+# Trigger types:
+# - event-publish: fires when event is published
+# - attribute-after-save: fires when attribute is saved
+# - email-not-found: fires on email not matching block list
+# - before-event-save: fires before event save (can modify/block)
+
+# Workflow modules (actions):
+# - notify-broadcast: send email notification
+# - push-zeromq: publish to ZeroMQ
+# - block-event: prevent publishing (use for TLP:RED auto-block)
+# - create-log-entry: audit log
+# - webhook: call external SOAR/ticketing system
+
+# Example workflow: Auto-alert SOC when TLP:RED published
+# Trigger: event-publish
+# Logic: IF tag=tlp:red → Block + Notify email-admin
+#        ELSE → Continue + Push-ZeroMQ</code></pre>
+
+  <h3>PyMISP Automation Scripts</h3>
+  <pre><code"># Automated IOC enrichment and SIEM push script
+from pymisp import ExpandedPyMISP
+import requests
+import json
+
+misp = ExpandedPyMISP('https://misp.internal', 'YOUR_KEY', ssl=False)
+
+# Get all IDS-flagged attributes published today
+result = misp.search(
+    controller='attributes',
+    to_ids=1,
+    published=1,
+    date_from='2024-03-15',
+    type_attribute=['ip-dst', 'domain', 'md5', 'sha256'],
+    pythonify=True
+)
+
+# Push to Splunk via HEC
+splunk_hec_url = 'https://splunk.internal:8088/services/collector'
+splunk_token = 'YOUR_HEC_TOKEN'
+
+for attr in result:
+    event_data = {
+        "event": {
+            "misp_value": attr.value,
+            "misp_type": attr.type,
+            "misp_event_id": attr.event_id,
+            "misp_tags": [t.name for t in attr.tags] if hasattr(attr, 'tags') else [],
+            "source": "MISP"
+        }
+    }
+    requests.post(splunk_hec_url, json=event_data,
+                  headers={"Authorization": f"Splunk {splunk_token}"},
+                  verify=False)</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Understanding MISP Workflow triggers and modules</h4>
+      <ul>
+        <li>Workflows fire on MISP application events (L7): event-publish, attribute-after-save, before-event-save</li>
+        <li>The <code>block-event</code> module prevents accidental publishing of TLP:RED events to the community</li>
+        <li>The <code>webhook</code> module calls external SOAR tools at L7 — the integration bridge between MISP and incident response platforms</li>
+      </ul>
+      <pre><code><span class="cm"># Access workflow editor</span>
+<span class="cm"># Admin → Workflows → Add Workflow</span>
+<span class="cm"># Set trigger: event-publish</span>
+<span class="cm"># Add logic module: IF-ELSE → condition: tag = tlp:red</span>
+<span class="cm"># Add action module: block-event (if red), push-zeromq (if not red)</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>PyMISP automation for IOC lifecycle management</h4>
+      <ul>
+        <li>Write PyMISP scripts to query new events daily and push actionable IOCs to SIEM via Splunk HEC at L7</li>
+        <li>Use the <code>date_from</code> filter to retrieve only new IOCs published since the last pipeline run</li>
+        <li>Filter by attribute type (ip-dst, domain, md5, sha256) to deliver the right IOC format to each detection layer</li>
+      </ul>
+      <pre><code><span class="cm"># Get today's new published IDS-flagged attributes</span>
+from pymisp import ExpandedPyMISP
+from datetime import date
+misp = ExpandedPyMISP('https://192.168.56.20', KEY, ssl=False)
+iocs = misp.search(controller='attributes', to_ids=1, published=1,
+                   date_from=str(date.today()),
+                   type_attribute=['ip-dst','domain','md5','sha256'],
+                   pythonify=True)
+for a in iocs:
+    print(f"{a.type}: {a.value}")</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Event-driven SOAR integration and workflow chaining</h4>
+      <ul>
+        <li>Chain multiple workflow actions: block → notify → webhook → ZeroMQ in a single trigger for comprehensive automated response</li>
+        <li>Use the webhook module to trigger a TheHive case creation at L7 automatically when a high-severity event is published</li>
+        <li>Implement conditional logic in workflows to apply different distribution rules based on threat level, sector, or source feed confidence</li>
+      </ul>
+      <pre><code><span class="cm"># Example: Webhook payload to TheHive for auto-case creation</span>
+<span class="cm"># Workflow: event-publish trigger → IF threat_level=1 (High)</span>
+<span class="cm"># → webhook module → POST https://thehive.internal:9000/api/case</span>
+<span class="cm"># → body: {"title":"MISP Event {event.info}","severity":3,"tlp":2}</span>
+<span class="cm"># Result: High-severity MISP events auto-create TheHive cases at L7</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 11 -->
+<template id="tpl-lab">
+<article class="topic">
+  <h2>Investigation Lab — MISP Event &amp; Feed Workflow</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">This lab workflow operates entirely at L7: creating MISP events via HTTPS API, exporting Suricata rules as HTTP responses, and deploying them to Suricata for L3/L4/L7 detection. The IOCs recorded (C2 IP, phishing domain) represent L3/L7 threat data within the L7 platform.</span>
+  </div>
+  <div class="callout lab">
+    <strong>Lab scenario:</strong> A phishing campaign targeting your finance department is reported. You'll create a MISP event, add IOCs, tag with ATT&CK, and export to Suricata for detection.
+  </div>
+
+  <h3>Lab Setup</h3>
+  <table>
+    <thead><tr><th>System</th><th>URL / IP</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td>MISP</td><td>https://192.168.56.20</td><td>Threat intelligence platform</td></tr>
+      <tr><td>Security Onion</td><td>192.168.56.20</td><td>Suricata IDS — receives exported rules</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Step 1 — Create Incident Event</h3>
+  <pre><code"># Via web UI:
+# Events → Add Event
+# Date: today
+# Distribution: Your organisation only (TLP:AMBER)
+# Threat Level: High
+# Analysis: Ongoing
+# Info: "Phishing Campaign — Finance Sector — March 2024"
+
+# Or via PyMISP:
+from pymisp import ExpandedPyMISP, MISPEvent
+misp = ExpandedPyMISP('https://192.168.56.20', 'YOUR_KEY', ssl=False)
+
+event = MISPEvent()
+event.info = 'Phishing Campaign — Finance Sector — March 2024'
+event.distribution = 0   # org only
+event.threat_level_id = 1  # high
+event.analysis = 1  # ongoing
+
+new_event = misp.add_event(event, pythonify=True)
+print(f"Event ID: {new_event.id}")</code></pre>
+
+  <h3>Step 2 — Add IOC Attributes</h3>
+  <pre><code"># Add the following IOCs from the phishing report:
+# Email sender: phisher@malicious.example
+# Phishing domain: secure-login.finance-portal.xyz
+# C2 IP: 203.0.113.99
+# Malware hash (loader): d41d8cd98f00b204e9800998ecf8427e
+# Attachment filename: invoice_march2024.xlsm
+
+misp.add_attribute(new_event.id, {
+    'type': 'email-src', 'value': 'phisher@malicious.example',
+    'to_ids': False, 'comment': 'Phishing sender'
+})
+misp.add_attribute(new_event.id, {
+    'type': 'domain', 'value': 'secure-login.finance-portal.xyz',
+    'to_ids': True, 'comment': 'Phishing domain'
+})
+misp.add_attribute(new_event.id, {
+    'type': 'ip-dst', 'value': '203.0.113.99',
+    'to_ids': True, 'comment': 'C2 server IP'
+})
+misp.add_attribute(new_event.id, {
+    'type': 'md5', 'value': 'd41d8cd98f00b204e9800998ecf8427e',
+    'to_ids': True, 'comment': 'Excel macro loader'
+})</code></pre>
+
+  <h3>Step 3 — Tag with TLP and ATT&amp;CK</h3>
+  <pre><code"># Via web UI: Tag button on event → search and add:
+# tlp:amber
+# misp-galaxy:mitre-attack-pattern="Spearphishing Attachment - T1566.001"
+# misp-galaxy:mitre-attack-pattern="User Execution - T1204.002"
+# sector:finance
+
+# Via API:
+for tag in ['tlp:amber', 'sector:finance']:
+    misp.tag(new_event.uuid, tag)</code></pre>
+
+  <h3>Step 4 — Export to Suricata &amp; Deploy</h3>
+  <pre><code"># Export IDS-flagged IOCs as Suricata rules
+curl -s -H "Authorization: YOUR_KEY" \
+     -X POST https://192.168.56.20/attributes/restSearch \
+     -d "{\"to_ids\": 1, \"event_id\": \"${EVENT_ID}\", \"returnFormat\": \"suricata\"}" \
+     > /tmp/phishing_campaign.rules
+
+# Review generated rules
+cat /tmp/phishing_campaign.rules
+
+# Copy to Security Onion Suricata rules
+sudo cp /tmp/phishing_campaign.rules /opt/so/rules/misp_phishing.rules
+
+# Reload Suricata via so-suricata or so-rule-update
+sudo so-rule-update</code></pre>
+
+  <h3>Step 5 — Verify Detection in Security Onion</h3>
+  <pre><code"># Simulate a connection to the phishing domain (from Windows 10 test machine)
+# nslookup secure-login.finance-portal.xyz
+# curl http://secure-login.finance-portal.xyz/
+
+# Check Security Onion alerts:
+# Alerts → filter by "MISP" in rule description
+# Expected: Suricata alert fires on domain/IP match
+
+# In Zeek: check dns.log for the phishing domain query
+zeek-cut query rcode_name < dns.log | grep "finance-portal"
+
+# Add sighting to MISP to record the observation
+curl -s -H "Authorization: YOUR_KEY" \
+     -X POST https://192.168.56.20/sightings/add \
+     -d '{"Sighting": {"values": ["203.0.113.99"], "type": "0"}}'</code></pre>
+
+  <div class="callout lab">
+    <strong>Lab Extension:</strong> Enable the Abuse.ch URLhaus feed and verify IOCs auto-import. Write a PyMISP script that queries all new events daily and auto-generates Zeek intel feed files. Set up ZeroMQ publishing and consume the stream from a custom Python listener to simulate SOAR integration.
+    <a href="#" class="xref" onclick="loadTopic('export'); return false;">Export formats ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('api'); return false;">API reference ↗</a>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Running the basic MISP event creation and IOC export workflow</h4>
+      <ul>
+        <li>Create an event at L7 (HTTPS API or web UI), add IOC attributes (L3 IPs, L7 domains), tag with TLP and ATT&amp;CK</li>
+        <li>Export to Suricata rules via restSearch at L7 — each exported rule targets L3/L4/L7 traffic on Security Onion</li>
+        <li>Verify detections fire in Security Onion Alerts after Suricata rule reload</li>
+      </ul>
+      <pre><code><span class="cm"># Full pipeline: create event → add IOC → export rules → deploy</span>
+<span class="cm"># Step 1: Create event via web UI at https://192.168.56.20</span>
+<span class="cm"># Step 2: Add ip-dst and domain attributes with to_ids=true</span>
+<span class="cm"># Step 3: Export and deploy</span>
+curl -s -H "Authorization: $MISP_KEY" \
+     -X POST https://192.168.56.20/attributes/restSearch \
+     -d '{"to_ids":1,"returnFormat":"suricata"}' | \
+     sudo tee /etc/suricata/rules/misp_lab.rules
+sudo suricata-update</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Automating the full lab workflow with PyMISP</h4>
+      <ul>
+        <li>Script event creation, attribute addition, and tagging with PyMISP to simulate the analyst workflow in under 2 minutes</li>
+        <li>Use PyMISP's sighting API to record IOC observations back to MISP after a Suricata detection fires</li>
+        <li>Verify correlation: add the same C2 IP to two separate events and observe the correlation link appear automatically</li>
+      </ul>
+      <pre><code><span class="cm"># Simulate a sighting after Suricata fires on C2 IP</span>
+curl -s -H "Authorization: $MISP_KEY" \
+     -H "Content-Type: application/json" \
+     -X POST https://192.168.56.20/sightings/add \
+     -d '{"Sighting":{"values":["203.0.113.99"],"type":"0","source":"suricata-alert"}}'</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Full SOC integration loop: SIEM → MISP → Suricata → SIEM</h4>
+      <ul>
+        <li>Build a closed-loop pipeline: Splunk SIEM detects an alert → PyMISP queries MISP for context → sighting is posted back → MISP publishes enriched event → new Suricata rules deploy automatically</li>
+        <li>Extend the lab with the Abuse.ch URLhaus feed — verify auto-imported IOCs against Security Onion threat hunting queries</li>
+        <li>Configure ZeroMQ publish and build a Python listener that writes received IOCs directly to Zeek intel framework files in real time</li>
+      </ul>
+      <pre><code><span class="cm"># Close the loop: Zeek dns.log → hunt → MISP sighting → publish</span>
+zeek-cut query rcode_name &lt; /nsm/zeek/logs/current/dns.log | \
+    grep "finance-portal" | while read domain _; do
+  curl -s -H "Authorization: $MISP_KEY" \
+       -X POST https://192.168.56.20/sightings/add \
+       -d "{\"Sighting\":{\"values\":[\"$domain\"],\"type\":\"0\",\"source\":\"zeek-dns\"}}"
+done</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: 'MISP',
+  topics: [
+    { id: 'overview',   badge: '01', label: 'Overview & Architecture'    },
+    { id: 'events',     badge: '02', label: 'Events & Attributes'         },
+    { id: 'objects',    badge: '03', label: 'MISP Objects & Templates'    },
+    { id: 'tags',       badge: '04', label: 'Tags, Galaxies & ATT&CK'     },
+    { id: 'sharing',    badge: '05', label: 'Sharing & Feeds'             },
+    { id: 'api',        badge: '06', label: 'API & RestSearch'            },
+    { id: 'export',     badge: '07', label: 'Export & SIEM Integration'   },
+    { id: 'zeek_int',   badge: '08', label: 'Correlation & Warninglists'  },
+    { id: 'stix',       badge: '09', label: 'STIX / TAXII Feeds'          },
+    { id: 'workflows',  badge: '10', label: 'Workflows & Automation'      },
+    { id: 'lab',        badge: '11', label: 'Investigation Lab'           },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

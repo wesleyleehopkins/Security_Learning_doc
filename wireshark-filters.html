@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireshark Display Filters — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Wireshark</div>
+      <div class="sidebar-title">Display Filters</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">🔍</div>
+          <h2>Display Filters</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Display Filters',
+  topics: [
+    { id: 'filter-syntax',  badge: '01', label: 'Filter Syntax Basics'     },
+    { id: 'operators',      badge: '02', label: 'Operators & Comparisons'   },
+    { id: 'ip-transport',   badge: '03', label: 'IP, TCP & UDP Filters'     },
+    { id: 'application',    badge: '04', label: 'Application Protocol Filters' },
+    { id: 'cheatsheet',     badge: '05', label: 'SOC Filter Cheat Sheet'    },
+  ]
+};
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EMBEDDED CONTENT TEMPLATES — no server required
+     ═══════════════════════════════════════════════════════════════ -->
+
+<template id="tpl-filter-syntax">
+<article class="topic">
+<h1>01 · Display Filter Syntax Basics</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l2">L2 Data Link</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Display filter syntax is layer-agnostic — the same protocol.field operator value pattern applies whether filtering L2 MACs, L3 IPs, L4 ports, or L7 application fields.</span>
+</div>
+<hr class="divider">
+
+<div class="callout"><strong>Display filters</strong> narrow what packets are shown in the Packet List — they do <em>not</em> delete packets. The full capture is always preserved. Filter bar turns <strong style="color:#3fb950">green</strong> for valid syntax, <strong style="color:#f85149">red</strong> for invalid.</div>
+
+<h2>Basic Syntax Pattern</h2>
+<pre><code><span class="cm"># Format: protocol.field operator value</span>
+ip.addr == 192.168.1.50        <span class="cm"># IP address equals</span>
+tcp.port == 443                <span class="cm"># TCP port equals</span>
+http.request.method == "POST"  <span class="cm"># string comparison</span>
+frame.len &gt; 1000               <span class="cm"># numeric comparison</span>
+dns                            <span class="cm"># protocol name alone — show all DNS</span>
+http or dns                    <span class="cm"># combine protocols</span></code></pre>
+
+<h2>Field Name Discovery</h2>
+<pre><code><span class="cm"># Find field names without memorizing them:</span>
+<span class="cm"># 1. Click on any field in the Packet Details panel</span>
+<span class="cm"># 2. Look at the status bar at the bottom — it shows the field name</span>
+<span class="cm">#    e.g. "http.request.method"  "Hypertext Transfer Protocol"</span>
+<span class="cm"># 3. Right-click → "Apply as Filter" to auto-build the filter</span>
+
+<span class="cm"># In tshark, list all fields for a protocol:</span>
+tshark -G fields | grep "^F.*http\."
+
+<span class="cm"># Or just start typing in Wireshark filter bar — autocomplete works</span></code></pre>
+
+<h2>Filter Bar Autocomplete</h2>
+<pre><code><span class="cm"># Wireshark filter bar supports full autocomplete</span>
+<span class="cm"># Start typing → dropdown shows matching field names</span>
+
+http.          <span class="cm"># → shows all http.* fields</span>
+tcp.flags.     <span class="cm"># → shows tcp.flags.syn, tcp.flags.ack, etc.</span>
+dns.qry.       <span class="cm"># → shows dns.qry.name, dns.qry.type, etc.</span>
+
+<span class="cm"># After entering a field name, shows available operators</span>
+<span class="cm"># After entering value, shows similar recent filters</span></code></pre>
+
+<h2>Saving Filters</h2>
+<pre><code><span class="cm"># Save frequently-used filters as bookmarks:</span>
+<span class="cm"># Filter bar → click the bookmark icon (☆) → Save Current Filter</span>
+<span class="cm"># Give it a label — appears in the bookmark dropdown</span>
+
+<span class="cm"># Stored in: ~/.config/wireshark/dfilters (Linux/macOS)</span>
+<span class="cm">#           %APPDATA%\Wireshark\dfilters (Windows)</span>
+
+<span class="cm"># Format (one filter per line):</span>
+"C2 Beacon" http.request.uri contains "update?id="
+"DNS Tunnel" dns.qry.name matches ".{50,}"
+"POST Data" http.request.method == "POST"</code></pre>
+
+<h2>Negating Filters</h2>
+<pre><code><span class="cm"># Exclude a protocol</span>
+not arp
+!arp              <span class="cm"># same thing — ! and not are equivalent</span>
+
+<span class="cm"># Exclude an IP address</span>
+ip.addr != 192.168.1.1
+
+<span class="cm"># Exclude RFC1918 addresses (show only external traffic)</span>
+not (ip.addr == 192.168.0.0/16 or ip.addr == 10.0.0.0/8 or ip.addr == 172.16.0.0/12)
+
+<span class="cm"># Exclude broadcast and multicast</span>
+not (eth.dst == ff:ff:ff:ff:ff:ff) and not (ip.dst == 224.0.0.0/4)</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Writing your first display filters</h4>
+    <ul>
+      <li>Format is always: protocol.field operator value (e.g. ip.addr == 10.0.0.1)</li>
+      <li>The filter bar turns green for valid syntax and red for errors — check it before trusting results</li>
+      <li>Right-click any field in Packet Details → Apply as Filter to auto-write the filter</li>
+      <li>Just typing a protocol name alone shows all packets of that type (e.g. just dns or http)</li>
+    </ul>
+    <pre><code>ip.addr == 192.168.56.30   <span class="cm"># L3 — all traffic to/from Windows victim</span>
+tcp.port == 4444           <span class="cm"># L4 — common reverse shell port</span>
+http                       <span class="cm"># L7 — all HTTP traffic</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Using autocomplete, negation, and saved filters</h4>
+    <ul>
+      <li>Start typing in the filter bar — autocomplete suggests matching field names</li>
+      <li>! and not are equivalent for negation: !arp and not arp both work</li>
+      <li>Save frequently-used filters as bookmarks via the filter bar star icon</li>
+    </ul>
+    <pre><code><span class="cm"># Exclude RFC1918 to see only external L3 traffic:</span>
+not (ip.addr == 192.168.0.0/16 or ip.addr == 10.0.0.0/8 or ip.addr == 172.16.0.0/12)
+<span class="cm"># Save this one — you'll use it on every PCAP</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Discovering field names and building precise filters</h4>
+    <ul>
+      <li>Use tshark -G fields | grep to enumerate all available dissector field names</li>
+      <li>Status bar at the bottom of Wireshark shows the exact field name when you click a value</li>
+      <li>Combine L2, L3, L4, and L7 filters in one expression for surgical packet selection</li>
+    </ul>
+    <pre><code>tshark -G fields | grep "^F.*http\."  <span class="cm"># list all http.* fields</span>
+<span class="cm"># Combined multi-layer filter:</span>
+eth.src[0:3] == 00:50:56 and ip.dst == 192.168.56.10 and tcp.dstport == 4444
+<span class="cm"># L2 VMware MAC + L3 dest + L4 C2 port</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-operators">
+<article class="topic">
+<h1>02 · Operators &amp; Comparisons</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l2">L2 Data Link</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Comparison operators and slice notation apply across all layers — eth.src[0:3] slices L2 MAC bytes, ip.ttl uses L3 numeric comparison, and http.host uses L7 string matching.</span>
+</div>
+<hr class="divider">
+
+<h2>Comparison Operators</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Symbol</th><th>Keyword</th><th>Meaning</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><code>==</code></td><td><code>eq</code></td><td>Equal to</td><td><code>ip.src == 192.168.1.1</code></td></tr>
+    <tr><td><code>!=</code></td><td><code>ne</code></td><td>Not equal to</td><td><code>tcp.port != 80</code></td></tr>
+    <tr><td><code>&gt;</code></td><td><code>gt</code></td><td>Greater than</td><td><code>frame.len &gt; 1500</code></td></tr>
+    <tr><td><code>&lt;</code></td><td><code>lt</code></td><td>Less than</td><td><code>ip.ttl &lt; 64</code></td></tr>
+    <tr><td><code>&gt;=</code></td><td><code>ge</code></td><td>Greater than or equal</td><td><code>tcp.window_size &gt;= 65535</code></td></tr>
+    <tr><td><code>&lt;=</code></td><td><code>le</code></td><td>Less than or equal</td><td><code>http.response.code &lt;= 299</code></td></tr>
+    <tr><td><code>contains</code></td><td>—</td><td>Field contains substring (case-insensitive for strings)</td><td><code>http.host contains "evil"</code></td></tr>
+    <tr><td><code>matches</code></td><td><code>~</code></td><td>Perl-compatible regex match</td><td><code>dns.qry.name matches ".*\.tk$"</code></td></tr>
+    <tr><td><code>in</code></td><td>—</td><td>Value is in a set</td><td><code>tcp.port in {80 443 8080 8443}</code></td></tr>
+    <tr><td><code>&amp;&amp;</code></td><td><code>and</code></td><td>Logical AND</td><td><code>ip.src == 10.0.0.1 and tcp.port == 80</code></td></tr>
+    <tr><td><code>||</code></td><td><code>or</code></td><td>Logical OR</td><td><code>dns or http</code></td></tr>
+    <tr><td><code>!</code></td><td><code>not</code></td><td>Logical NOT</td><td><code>not arp</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Slice Operator [ ]</h2>
+<pre><code><span class="cm"># Extract specific bytes from a field</span>
+<span class="cm"># Syntax: field[offset:length]  or  field[offset]  or  field[start:end]</span>
+
+eth.src[0:3]           <span class="cm"># First 3 bytes of MAC (OUI/vendor prefix)</span>
+eth.src[0:3] == 00:50:56   <span class="cm"># VMware MAC prefix</span>
+
+tcp.payload[0:4]       <span class="cm"># First 4 bytes of TCP payload</span>
+frame.data[0:2]        <span class="cm"># First 2 bytes of frame</span>
+
+<span class="cm"># Negative index (from end)</span>
+dns.qry.name[-3:]      <span class="cm"># Last 3 chars of DNS query name</span></code></pre>
+
+<h2>Membership Operator { }</h2>
+<pre><code><span class="cm"># Test if value is in a set — cleaner than multiple OR conditions</span>
+tcp.port in {80 443 8080 8443 8000}
+http.response.code in {200 301 302}
+ip.proto in {6 17}            <span class="cm"># TCP or UDP</span>
+dns.qry.type in {1 28 16}     <span class="cm"># A, AAAA, or TXT records</span>
+
+<span class="cm"># Negated membership</span>
+not tcp.port in {22 80 443}   <span class="cm"># anything except SSH/HTTP/HTTPS</span></code></pre>
+
+<h2>Existence Check (fieldname alone)</h2>
+<pre><code><span class="cm"># Check if a field exists (not empty/absent)</span>
+http.authorization      <span class="cm"># any packet with HTTP Authorization header</span>
+http.cookie             <span class="cm"># any packet with Cookie header</span>
+tls.handshake           <span class="cm"># any TLS handshake packet</span>
+tcp.analysis.retransmission  <span class="cm"># Wireshark-detected retransmissions</span>
+tcp.analysis.duplicate_ack   <span class="cm"># duplicate ACKs (congestion/loss)</span></code></pre>
+
+<h2>Combining Filters</h2>
+<pre><code><span class="cm"># AND — both conditions must match</span>
+http and ip.dst == 185.220.101.34
+
+<span class="cm"># OR — either condition matches</span>
+http.request.method == "POST" or ftp.request.command == "PASS"
+
+<span class="cm"># NOT + complex expression</span>
+not (dns or arp or icmp)   <span class="cm"># hide noisy protocols</span>
+
+<span class="cm"># Nested parentheses for complex logic</span>
+(ip.src == 192.168.1.50 or ip.src == 192.168.1.51) and tcp.dstport == 4444
+
+<span class="cm"># Practical: external HTTP traffic from one host</span>
+ip.src == 192.168.1.50 and http and not ip.dst == 192.168.0.0/16</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Core comparison operators for SOC filtering</h4>
+    <ul>
+      <li>== (eq) and != (ne) are your most-used operators across all layers</li>
+      <li>contains does case-insensitive substring matching — great for L7 string fields</li>
+      <li>Use parentheses to group multi-condition filters and avoid logic errors</li>
+    </ul>
+    <pre><code>ip.src == 192.168.56.10    <span class="cm"># L3 exact IP match</span>
+http.host contains "evil"  <span class="cm"># L7 substring match</span>
+not (dns or arp or icmp)   <span class="cm"># Exclude noisy L2/L3/L7 protocols</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Regex matching, set membership, and slice notation</h4>
+    <ul>
+      <li>matches (~) uses Perl-compatible regex — more powerful than contains for pattern detection</li>
+      <li>in {set} is cleaner than chaining multiple OR conditions for port or code lists</li>
+      <li>eth.src[0:3] slices the first 3 bytes of a L2 MAC address (vendor OUI)</li>
+    </ul>
+    <pre><code>dns.qry.name matches ".*[a-z0-9]{30,}.*"   <span class="cm"># L7 — long random subdomain</span>
+tcp.port in {80 443 8080 8443}             <span class="cm"># L4 — web port set</span>
+eth.src[0:3] == 00:50:56                   <span class="cm"># L2 — VMware MAC OUI</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Existence checks and complex multi-layer logic</h4>
+    <ul>
+      <li>A bare field name (no operator) checks existence — http.authorization finds any Auth header</li>
+      <li>Combine existence checks with equality for precision: http.authorization and ip.dst != 10.0.0.0/8</li>
+      <li>Nested parentheses allow complex logic combining L2, L3, L4, and L7 in one expression</li>
+    </ul>
+    <pre><code>http.authorization and not ip.dst == 192.168.0.0/16
+<span class="cm"># L7 auth header going to external L3 IP — credential exfil check</span>
+(ip.src == 192.168.56.30 or ip.src == 192.168.56.20) and tcp.dstport == 4444
+<span class="cm"># Multi-host L3 + L4 combined filter</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-ip-transport">
+<article class="topic">
+<h1>03 · IP, TCP &amp; UDP Filters</h1>
+<hr class="divider">
+
+<h2>IP Filters</h2>
+<pre><code><span class="cm"># Source or destination equals (either direction)</span>
+ip.addr == 192.168.1.50
+
+<span class="cm"># Specific direction</span>
+ip.src == 192.168.1.50
+ip.dst == 185.220.101.34
+
+<span class="cm"># CIDR subnet</span>
+ip.src == 192.168.1.0/24
+ip.addr == 10.0.0.0/8
+
+<span class="cm"># TTL inspection</span>
+ip.ttl == 64              <span class="cm"># Linux default TTL</span>
+ip.ttl == 128             <span class="cm"># Windows default TTL</span>
+ip.ttl &lt; 10               <span class="cm"># very low TTL — traceroute, misconfiguration</span>
+
+<span class="cm"># IP protocol number</span>
+ip.proto == 6             <span class="cm"># TCP</span>
+ip.proto == 17            <span class="cm"># UDP</span>
+ip.proto == 1             <span class="cm"># ICMP</span>
+ip.proto == 47            <span class="cm"># GRE (tunneling)</span>
+
+<span class="cm"># Fragmentation</span>
+ip.flags.mf == 1          <span class="cm"># More Fragments flag set (fragmented packet)</span>
+ip.frag_offset &gt; 0        <span class="cm"># fragment continuation</span>
+
+<span class="cm"># Don't Fragment bit</span>
+ip.flags.df == 1          <span class="cm"># DF set (most normal traffic)</span>
+ip.flags.df == 0          <span class="cm"># DF not set (may indicate tunneled traffic)</span>
+
+<span class="cm"># IPv6</span>
+ipv6
+ipv6.src == 2001:db8::1</code></pre>
+
+<h2>TCP Filters</h2>
+<pre><code><span class="cm"># Port filters</span>
+tcp.port == 80             <span class="cm"># source OR destination port 80</span>
+tcp.srcport == 4444        <span class="cm"># reverse shell? malware C2?</span>
+tcp.dstport == 443
+tcp.port in {22 23 3389}   <span class="cm"># SSH, Telnet, or RDP</span>
+
+<span class="cm"># TCP flags</span>
+tcp.flags.syn == 1         <span class="cm"># SYN bit set (connection initiation)</span>
+tcp.flags.ack == 1         <span class="cm"># ACK bit set</span>
+tcp.flags.rst == 1         <span class="cm"># RST — abrupt close / port closed</span>
+tcp.flags.fin == 1         <span class="cm"># FIN — graceful close</span>
+tcp.flags.push == 1        <span class="cm"># PSH — data push</span>
+tcp.flags == 0x002         <span class="cm"># SYN only (start of connection)</span>
+tcp.flags == 0x012         <span class="cm"># SYN+ACK (server response)</span>
+tcp.flags == 0x018         <span class="cm"># PSH+ACK (data transfer)</span>
+
+<span class="cm"># Port scan detection</span>
+tcp.flags == 0x002 and not tcp.flags.ack == 1  <span class="cm"># pure SYN — scanning</span>
+
+<span class="cm"># Stream index</span>
+tcp.stream == 5            <span class="cm"># show only packets in stream 5</span>
+
+<span class="cm"># Sequence / acknowledgment numbers</span>
+tcp.seq == 0               <span class="cm"># initial sequence number</span>
+
+<span class="cm"># Analysis flags (Wireshark annotations)</span>
+tcp.analysis.retransmission           <span class="cm"># retransmitted segment</span>
+tcp.analysis.duplicate_ack            <span class="cm"># duplicate ACK (packet loss indicator)</span>
+tcp.analysis.out_of_order             <span class="cm"># out-of-order segment</span>
+tcp.analysis.zero_window              <span class="cm"># receiver buffer full</span>
+tcp.analysis.flags                    <span class="cm"># any TCP performance issue</span></code></pre>
+
+<h2>UDP Filters</h2>
+<pre><code><span class="cm"># Port filters</span>
+udp.port == 53             <span class="cm"># DNS</span>
+udp.port == 161            <span class="cm"># SNMP</span>
+udp.srcport == 68          <span class="cm"># DHCP client</span>
+udp.dstport == 67          <span class="cm"># DHCP server</span>
+udp.port in {53 123 161 500}  <span class="cm"># DNS, NTP, SNMP, IKE</span>
+
+<span class="cm"># Length</span>
+udp.length &gt; 512           <span class="cm"># large UDP (DNS tunneling, QUIC data)</span>
+udp.length &lt; 20            <span class="cm"># very small UDP</span></code></pre>
+
+<h2>ICMP Filters</h2>
+<pre><code>icmp                       <span class="cm"># all ICMP</span>
+icmp.type == 8             <span class="cm"># echo request (ping)</span>
+icmp.type == 0             <span class="cm"># echo reply</span>
+icmp.type == 3             <span class="cm"># destination unreachable</span>
+icmp.type == 11            <span class="cm"># time exceeded (traceroute)</span>
+icmp.code == 3             <span class="cm"># port unreachable</span>
+frame.len &gt; 200 and icmp   <span class="cm"># large ICMP → tunneling indicator</span>
+
+<span class="cm"># ICMP data payload</span>
+data.len &gt; 64 and icmp     <span class="cm"># payload larger than standard ping</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-application">
+<article class="topic">
+<h1>04 · Application Protocol Filters</h1>
+<hr class="divider">
+
+<h2>HTTP Filters</h2>
+<pre><code><span class="cm"># Show all HTTP traffic</span>
+http
+
+<span class="cm"># Requests only / responses only</span>
+http.request
+http.response
+
+<span class="cm"># By method</span>
+http.request.method == "GET"
+http.request.method == "POST"
+http.request.method == "PUT"
+http.request.method in {"POST" "PUT" "PATCH" "DELETE"}
+
+<span class="cm"># By URI</span>
+http.request.uri contains "/admin"
+http.request.uri contains "cmd="
+http.request.uri contains "passwd"
+http.request.uri matches ".*\.(php|asp|aspx)\?.*"
+
+<span class="cm"># By host</span>
+http.host == "evil.com"
+http.host contains ".ru"
+http.host matches ".*\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}.*"  <span class="cm"># IP as host</span>
+
+<span class="cm"># By response code</span>
+http.response.code == 200
+http.response.code == 302       <span class="cm"># redirect</span>
+http.response.code == 404
+http.response.code &gt;= 400       <span class="cm"># all errors</span>
+
+<span class="cm"># User-Agent</span>
+http.user_agent contains "curl"
+http.user_agent contains "python"
+http.user_agent contains "MSIE 6.0"   <span class="cm"># very old IE — likely malware</span>
+http.user_agent == ""                 <span class="cm"># empty UA — scripted/malware traffic</span>
+
+<span class="cm"># Authorization / credentials</span>
+http.authorization                    <span class="cm"># any HTTP Authorization header</span>
+http.authorization contains "Basic"   <span class="cm"># Base64 credentials in cleartext</span>
+
+<span class="cm"># Content type</span>
+http.content_type contains "application/x-www-form-urlencoded"  <span class="cm"># form data</span>
+http.content_type contains "application/json"
+http.content_type contains "multipart"    <span class="cm"># file upload</span>
+
+<span class="cm"># Cookies</span>
+http.cookie                            <span class="cm"># any packet with Cookie header</span>
+http.cookie contains "session"</code></pre>
+
+<h2>DNS Filters</h2>
+<pre><code><span class="cm"># All DNS</span>
+dns
+
+<span class="cm"># Queries only / responses only</span>
+dns.flags.response == 0    <span class="cm"># queries</span>
+dns.flags.response == 1    <span class="cm"># responses</span>
+
+<span class="cm"># By query name</span>
+dns.qry.name == "evil.com"
+dns.qry.name contains ".onion"
+dns.qry.name contains ".tk"    <span class="cm"># free TLD, common in malware</span>
+dns.qry.name contains ".xyz"
+dns.qry.name matches ".*[a-z0-9]{30,}.*"   <span class="cm"># long label — DNS tunneling</span>
+
+<span class="cm"># By record type</span>
+dns.qry.type == 1          <span class="cm"># A record</span>
+dns.qry.type == 28         <span class="cm"># AAAA record</span>
+dns.qry.type == 16         <span class="cm"># TXT record (DNS tunneling often uses TXT)</span>
+dns.qry.type == 15         <span class="cm"># MX record</span>
+dns.qry.type == 255        <span class="cm"># ANY query (DNS amplification)</span>
+
+<span class="cm"># Failed DNS (NXDOMAIN / SERVFAIL)</span>
+dns.flags.rcode == 3       <span class="cm"># NXDOMAIN — domain does not exist</span>
+dns.flags.rcode == 2       <span class="cm"># SERVFAIL</span>
+
+<span class="cm"># DNS answers</span>
+dns.a == 185.220.101.34    <span class="cm"># filter by resolved IP in answer</span>
+dns.resp.len &gt; 0           <span class="cm"># only responses with answers</span></code></pre>
+
+<h2>TLS / SSL Filters</h2>
+<pre><code><span class="cm"># All TLS/SSL traffic</span>
+tls
+ssl         <span class="cm"># older alias</span>
+
+<span class="cm"># TLS handshake packets</span>
+tls.handshake
+
+<span class="cm"># By handshake type</span>
+tls.handshake.type == 1    <span class="cm"># Client Hello</span>
+tls.handshake.type == 2    <span class="cm"># Server Hello</span>
+tls.handshake.type == 11   <span class="cm"># Certificate</span>
+tls.handshake.type == 14   <span class="cm"># Server Hello Done</span>
+tls.handshake.type == 16   <span class="cm"># Client Key Exchange</span>
+
+<span class="cm"># SNI (Server Name Indication)</span>
+tls.handshake.extensions_server_name contains "evil"
+tls.handshake.extensions_server_name == "c2.attacker.com"
+
+<span class="cm"># Certificate fields</span>
+tls.handshake.certificate                      <span class="cm"># any cert packet</span>
+x509sat.uTF8String contains "evil.com"         <span class="cm"># cert CN/SAN</span>
+x509ce.dNSName contains "attacker"             <span class="cm"># SAN field</span>
+
+<span class="cm"># Application data (encrypted payload)</span>
+tls.record.content_type == 23   <span class="cm"># Application Data record</span>
+
+<span class="cm"># TLS version</span>
+tls.record.version == 0x0303    <span class="cm"># TLS 1.2</span>
+tls.record.version == 0x0304    <span class="cm"># TLS 1.3</span>
+tls.record.version == 0x0301    <span class="cm"># TLS 1.0 (deprecated)</span>
+
+<span class="cm"># TLS on non-standard port</span>
+tls and not (tcp.port == 443 or tcp.port == 8443 or tcp.port == 465 or tcp.port == 993)</code></pre>
+
+<h2>SMB Filters</h2>
+<pre><code><span class="cm"># All SMB traffic</span>
+smb or smb2    <span class="cm"># SMBv1 or SMBv2/3</span>
+smb2           <span class="cm"># modern SMB (Windows Vista+)</span>
+
+<span class="cm"># File operations</span>
+smb2.cmd == 5           <span class="cm"># Create (file open/create)</span>
+smb2.cmd == 6           <span class="cm"># Close</span>
+smb2.cmd == 8           <span class="cm"># Read</span>
+smb2.cmd == 9           <span class="cm"># Write</span>
+
+<span class="cm"># File name inspection</span>
+smb2.filename contains ".exe"
+smb2.filename contains ".ps1"
+smb2.filename contains "admin$"
+smb2.filename contains "ADMIN$"
+smb2.filename contains "C$"        <span class="cm"># admin share access</span>
+
+<span class="cm"># Authentication</span>
+ntlmssp                            <span class="cm"># NTLM authentication messages</span>
+ntlmssp.auth.username              <span class="cm"># NTLM username field</span>
+
+<span class="cm"># SMBv1 (should be disabled)</span>
+smb and not smb2                   <span class="cm"># pure SMBv1 — flag for patching</span></code></pre>
+
+<h2>FTP / SMTP / Other</h2>
+<pre><code><span class="cm"># FTP — credentials in cleartext!</span>
+ftp
+ftp.request.command == "USER"   <span class="cm"># username</span>
+ftp.request.command == "PASS"   <span class="cm"># PASSWORD IN CLEARTEXT</span>
+ftp.request.command == "RETR"   <span class="cm"># file download</span>
+ftp.request.command == "STOR"   <span class="cm"># file upload</span>
+ftp-data                        <span class="cm"># FTP data channel (file content)</span>
+
+<span class="cm"># SMTP</span>
+smtp
+smtp.req.command == "AUTH"      <span class="cm"># authentication</span>
+smtp.req.command == "DATA"      <span class="cm"># email body</span>
+smtp.req.command == "RCPT"      <span class="cm"># recipient</span>
+
+<span class="cm"># ARP</span>
+arp
+arp.opcode == 1                 <span class="cm"># ARP request</span>
+arp.opcode == 2                 <span class="cm"># ARP reply</span>
+arp.duplicate-address-detected  <span class="cm"># ARP poisoning / MITM</span>
+
+<span class="cm"># DHCP</span>
+dhcp or bootp
+dhcp.option.dhcp == 1           <span class="cm"># DISCOVER</span>
+dhcp.option.dhcp == 5           <span class="cm"># ACK (address assigned)</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-cheatsheet">
+<article class="topic">
+<h1>05 · SOC Filter Cheat Sheet</h1>
+<hr class="divider">
+
+<div class="callout"><strong>Quick reference</strong> — copy any filter directly into the Wireshark display filter bar. All filters are case-sensitive unless using <code>matches</code> with case-insensitive regex flag.</div>
+
+<h2>Host &amp; Network Identification</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Goal</th><th>Display Filter</th></tr></thead>
+  <tbody>
+    <tr><td>All traffic to/from one IP</td><td><code>ip.addr == 192.168.1.50</code></td></tr>
+    <tr><td>Traffic from subnet</td><td><code>ip.src == 192.168.1.0/24</code></td></tr>
+    <tr><td>Only external traffic (hide RFC1918)</td><td><code>not (ip.addr == 10.0.0.0/8 or ip.addr == 172.16.0.0/12 or ip.addr == 192.168.0.0/16)</code></td></tr>
+    <tr><td>Traffic between two hosts</td><td><code>ip.addr == 192.168.1.10 and ip.addr == 192.168.1.20</code></td></tr>
+    <tr><td>Traffic on a specific stream</td><td><code>tcp.stream == 0</code></td></tr>
+    <tr><td>MAC address traffic</td><td><code>eth.addr == aa:bb:cc:dd:ee:ff</code></td></tr>
+    <tr><td>VMware MAC prefix</td><td><code>eth.src[0:3] == 00:50:56</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Port &amp; Protocol Hunting</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Goal</th><th>Display Filter</th></tr></thead>
+  <tbody>
+    <tr><td>Common C2 ports</td><td><code>tcp.port in {1234 4444 5555 6666 7777 8888 31337}</code></td></tr>
+    <tr><td>Non-standard HTTPS port</td><td><code>tls and not tcp.port in {443 8443 465 993 995}</code></td></tr>
+    <tr><td>Telnet (unencrypted admin)</td><td><code>tcp.port == 23</code></td></tr>
+    <tr><td>RDP connections</td><td><code>tcp.port == 3389</code></td></tr>
+    <tr><td>SSH connections</td><td><code>tcp.port == 22</code></td></tr>
+    <tr><td>IRC (old C2 protocol)</td><td><code>irc or tcp.port == 6667</code></td></tr>
+    <tr><td>Port scanning (pure SYN)</td><td><code>tcp.flags == 0x002</code></td></tr>
+    <tr><td>RSTs (scan/error)</td><td><code>tcp.flags.rst == 1</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Malware &amp; C2 Detection</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Goal</th><th>Display Filter</th></tr></thead>
+  <tbody>
+    <tr><td>HTTP with suspicious UA</td><td><code>http.user_agent contains "MSIE 6" or http.user_agent == ""</code></td></tr>
+    <tr><td>HTTP to IP address (no domain)</td><td><code>http.host matches "^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$"</code></td></tr>
+    <tr><td>HTTP beaconing URI pattern</td><td><code>http.request.uri contains "?id=" or http.request.uri contains "?guid="</code></td></tr>
+    <tr><td>PowerShell download cradle</td><td><code>http.request.uri contains ".ps1"</code></td></tr>
+    <tr><td>Executable downloads</td><td><code>http.request.uri matches ".*\.(exe|dll|bat|vbs|ps1)$"</code></td></tr>
+    <tr><td>Base64 in HTTP URI</td><td><code>http.request.uri matches ".*[A-Za-z0-9+/]{20,}={0,2}.*"</code></td></tr>
+    <tr><td>DNS tunneling (long subdomain)</td><td><code>dns.qry.name matches ".{50,}"</code></td></tr>
+    <tr><td>DNS TXT queries</td><td><code>dns.qry.type == 16</code></td></tr>
+    <tr><td>Large ICMP (tunneling)</td><td><code>icmp and frame.len &gt; 200</code></td></tr>
+    <tr><td>Large UDP (non-DNS)</td><td><code>udp and udp.length &gt; 512 and not udp.port == 53</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Credential Exposure</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Goal</th><th>Display Filter</th></tr></thead>
+  <tbody>
+    <tr><td>HTTP Basic Auth (cleartext creds)</td><td><code>http.authorization contains "Basic"</code></td></tr>
+    <tr><td>FTP password in cleartext</td><td><code>ftp.request.command == "PASS"</code></td></tr>
+    <tr><td>HTTP form POST (login forms)</td><td><code>http.request.method == "POST" and http.content_type contains "form"</code></td></tr>
+    <tr><td>SMTP AUTH</td><td><code>smtp.req.command == "AUTH"</code></td></tr>
+    <tr><td>NTLM in cleartext</td><td><code>ntlmssp</code></td></tr>
+    <tr><td>HTTP cookie exposure</td><td><code>http.cookie</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Network Anomalies</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Goal</th><th>Display Filter</th></tr></thead>
+  <tbody>
+    <tr><td>ARP poisoning indicator</td><td><code>arp.duplicate-address-detected</code></td></tr>
+    <tr><td>Broadcast storm / ARP flood</td><td><code>arp and eth.dst == ff:ff:ff:ff:ff:ff</code></td></tr>
+    <tr><td>Very low TTL (TTL expiry/trace)</td><td><code>ip.ttl &lt;= 5</code></td></tr>
+    <tr><td>TCP retransmissions</td><td><code>tcp.analysis.retransmission</code></td></tr>
+    <tr><td>Zero-window (buffer exhaustion)</td><td><code>tcp.analysis.zero_window</code></td></tr>
+    <tr><td>TCP out-of-order</td><td><code>tcp.analysis.out_of_order</code></td></tr>
+    <tr><td>Fragmented IP packets</td><td><code>ip.flags.mf == 1 or ip.frag_offset &gt; 0</code></td></tr>
+    <tr><td>SMB to external (unusual)</td><td><code>smb2 and not ip.dst == 10.0.0.0/8 and not ip.dst == 192.168.0.0/16</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>TLS / Certificate Inspection</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Goal</th><th>Display Filter</th></tr></thead>
+  <tbody>
+    <tr><td>TLS Client Hello (see SNI)</td><td><code>tls.handshake.type == 1</code></td></tr>
+    <tr><td>SNI contains keyword</td><td><code>tls.handshake.extensions_server_name contains "evil"</code></td></tr>
+    <tr><td>Self-signed cert (subject == issuer)</td><td><code>x509sat.uTF8String</code> (inspect cert manually)</td></tr>
+    <tr><td>Old TLS 1.0</td><td><code>tls.handshake.version == 0x0301</code></td></tr>
+    <tr><td>Certificate traffic</td><td><code>tls.handshake.type == 11</code></td></tr>
+  </tbody>
+</table>
+</div>
+</article>
+</template>
+
+<script src="js/app.js"></script>
+</body>
+</html>

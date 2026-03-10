@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visualizations — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Splunk</div>
+      <div class="sidebar-title">Visualizations</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">📈</div>
+          <h2>Visualizations</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Visualizations',
+  topics: [
+    { id: 'chart-types',    badge: '01', label: 'Chart Type Selection Guide'  },
+    { id: 'dashboard-panels',badge:'02', label: 'Dashboard Panels'            },
+    { id: 'brute-force-viz',badge: '03', label: 'BOTS: Brute Force Panel'     },
+    { id: 'network-viz',    badge: '04', label: 'BOTS: Traffic Analysis'      },
+    { id: 'single-value',   badge: '05', label: 'Single Value Panels & KPIs'  },
+  ]
+};
+</script>
+
+<template id="tpl-chart-types">
+<article class="topic">
+<h1>01 · Chart Type Selection Guide</h1>
+<hr class="divider">
+
+<h2>Which Chart for Which Question?</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Question Type</th><th>Best Chart</th><th>SPL Command</th></tr></thead>
+  <tbody>
+    <tr><td>How did X change over time?</td><td>Line chart</td><td><code>timechart</code></td></tr>
+    <tr><td>How much total of X over time?</td><td>Area chart</td><td><code>timechart sum(bytes)</code></td></tr>
+    <tr><td>How do categories compare?</td><td>Bar / Column chart</td><td><code>chart count over user</code></td></tr>
+    <tr><td>What is the breakdown as percentages?</td><td>Pie chart</td><td><code>top limit=8 country</code></td></tr>
+    <tr><td>What is a single current metric?</td><td>Single value</td><td><code>stats count</code></td></tr>
+    <tr><td>How are two metrics correlated?</td><td>Scatter plot</td><td><code>stats count, avg(bytes) by src_ip</code></td></tr>
+    <tr><td>What are all the raw events?</td><td>Statistics table</td><td><code>table</code></td></tr>
+    <tr><td>How does activity distribute by hour?</td><td>Heatmap / Column</td><td><code>eval hour=strftime(_time,"%H") | chart count over hour</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Chart Type Guidance</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Chart</th><th>Good For</th><th>Avoid When</th></tr></thead>
+  <tbody>
+    <tr><td>Line</td><td>Trends over time with multiple series (failed logins by hour)</td><td>Comparing categories at a single point in time</td></tr>
+    <tr><td>Area</td><td>Cumulative volume over time (bytes transferred)</td><td>More than 3-4 overlapping series (becomes unreadable)</td></tr>
+    <tr><td>Column</td><td>Comparing discrete categories — top 10 IPs, EventCodes</td><td>Time series with many points (use line instead)</td></tr>
+    <tr><td>Bar</td><td>Same as column but horizontal — better for long labels</td><td>Time series</td></tr>
+    <tr><td>Pie</td><td>Part-of-whole for 3-6 categories (traffic by protocol)</td><td>More than 6 slices — use column or table instead</td></tr>
+    <tr><td>Single Value</td><td>KPI dashboards — current open notable count, alert rate</td><td>When trend context matters (add a sparkline)</td></tr>
+    <tr><td>Map</td><td>Geographic source of attacks — src_ip to country</td><td>Internal traffic (RFC 1918 doesn't map)</td></tr>
+  </tbody>
+</table>
+</div>
+</article>
+</template>
+
+<template id="tpl-dashboard-panels">
+<article class="topic">
+<h1>02 · Dashboard Panels</h1>
+<hr class="divider">
+
+<h2>Panel Types</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Panel Type</th><th>Purpose</th><th>Backed By</th></tr></thead>
+  <tbody>
+    <tr><td>Chart</td><td>Visual — line, bar, column, area, scatter, pie</td><td>Transforming search (timechart, chart, stats)</td></tr>
+    <tr><td>Statistics Table</td><td>Tabular search results with sortable columns</td><td>Any search with defined fields</td></tr>
+    <tr><td>Single Value</td><td>One prominent KPI number with optional trend</td><td>Search returning single row, single column</td></tr>
+    <tr><td>Map</td><td>Choropleth or cluster map — IP geolocation</td><td>Stats with iplocation or geolookup</td></tr>
+    <tr><td>Event List</td><td>Raw event viewer inside dashboard</td><td>Non-transforming search</td></tr>
+    <tr><td>HTML</td><td>Custom HTML panel — text, links, images</td><td>Static HTML code</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Dashboard Input Types (Filters)</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Input</th><th>Use</th><th>Token</th></tr></thead>
+  <tbody>
+    <tr><td>Time Range Picker</td><td>Let analyst set time range for all panels</td><td><code>$time_tok.earliest$</code></td></tr>
+    <tr><td>Text Input</td><td>Free-text filter — hostname, IP, username</td><td><code>$src_ip_tok$</code></td></tr>
+    <tr><td>Dropdown</td><td>Select from list — index, sourcetype, severity</td><td><code>$index_tok$</code></td></tr>
+    <tr><td>Multi-select</td><td>Select multiple values from list</td><td><code>$eventcodes_tok$</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>SOC Dashboard Structure Best Practice</h2>
+<pre><code><span class="cm"># Recommended row layout for an operational SOC dashboard:</span>
+
+Row 1: Single Value KPIs
+  - Open Notable Events (last 24h)
+  - Failed Logins (last 1h)
+  - High-Severity Alerts (last 24h)
+  - Endpoints With Malware (last 7d)
+
+Row 2: Trend Charts
+  - Line: Failed Logins by Hour (last 24h)
+  - Area: Network Bytes Out (last 24h)
+
+Row 3: Top Talkers / Top Actors
+  - Bar: Top 10 Failed Login Source IPs
+  - Bar: Top 10 Alert Types
+
+Row 4: Event Table
+  - Statistics: Latest High-Severity Notables with owner + status</code></pre>
+
+<h2>Drilldown — Click to Investigate</h2>
+<pre><code><span class="cm"># Drilldown lets analysts click a chart element to drill into raw events</span>
+<span class="cm"># Example: Click a bar in "Top 10 Failed Login IPs"</span>
+<span class="cm"># → Opens raw events for that specific src_ip</span>
+
+<span class="cm"># Drilldown search using token set by click:</span>
+index=windows EventCode=4625 src_ip="$click.value$"
+| table _time, host, user, src_ip, Status
+| sort -_time</code></pre>
+</article>
+</template>
+
+<template id="tpl-brute-force-viz">
+<article class="topic">
+<h1>03 · BOTS: Brute Force Visualization Panel</h1>
+<hr class="divider">
+
+<div class="callout lab"><strong>BOTS Scenario (Boss of the SOC)</strong> — This panel design mirrors the kind of investigation used in BOTS datasets where an external attacker performs a credential brute force against a web or RDP service.</div>
+
+<h2>Panel 1 — Brute Force Trend Over Time (Line Chart)</h2>
+<pre><code><span class="cm"># Shows the attack spike clearly on a timeline</span>
+index=windows sourcetype=WinEventLog:Security EventCode=4625 earliest=-24h
+| timechart span=15m count AS "Failed Logins"
+
+<span class="cm"># Visualization: Line chart</span>
+<span class="cm"># Y-axis: Failed Logins count</span>
+<span class="cm"># X-axis: Time (auto from timechart)</span>
+<span class="cm"># Expected output: flat baseline with a dramatic spike</span>
+<span class="cm">#</span>
+<span class="cm"># _time                Failed Logins</span>
+<span class="cm"># 2024-01-15 09:00     8</span>
+<span class="cm"># 2024-01-15 09:15     12</span>
+<span class="cm"># 2024-01-15 09:30     3</span>
+<span class="cm"># 2024-01-15 09:45     847     ← brute force starts</span>
+<span class="cm"># 2024-01-15 10:00     1203</span>
+<span class="cm"># 2024-01-15 10:15     6       ← attack stops (or success)</span></code></pre>
+
+<h2>Panel 2 — Top Source IPs (Bar Chart)</h2>
+<pre><code><span class="cm"># Identify the attacker IPs at a glance</span>
+index=windows EventCode=4625 earliest=-24h
+| stats count AS "Failed Attempts" by src_ip
+| sort -"Failed Attempts"
+| head 10
+| rename src_ip AS "Source IP"
+
+<span class="cm"># Visualization: Bar chart (horizontal)</span>
+<span class="cm"># Y-axis: Source IP</span>
+<span class="cm"># X-axis: Failed Attempts count</span>
+<span class="cm">#</span>
+<span class="cm"># Source IP         Failed Attempts</span>
+<span class="cm"># 185.220.101.34    2,847</span>
+<span class="cm"># 45.33.32.156      312</span>
+<span class="cm"># 103.21.244.0      89</span></code></pre>
+
+<h2>Panel 3 — Failures then Success (Table)</h2>
+<pre><code><span class="cm"># Find IPs with many failures followed by a successful login</span>
+<span class="cm"># This is the smoking gun for successful brute force</span>
+index=windows (EventCode=4624 OR EventCode=4625) earliest=-24h
+| eval outcome = if(EventCode="4624", "success", "failure")
+| stats count(eval(outcome="failure")) AS failures,
+        count(eval(outcome="success")) AS successes
+        by src_ip
+| where failures &gt; 20 AND successes &gt; 0
+| sort -failures
+| rename src_ip AS "Source IP", failures AS "Failed Attempts", successes AS "Successful Logins"
+
+<span class="cm"># Sample output:</span>
+<span class="cm"># Source IP        Failed Attempts  Successful Logins</span>
+<span class="cm"># 185.220.101.34   847              1</span>
+<span class="cm"># 45.33.32.156     203              2</span></code></pre>
+
+<h2>Panel 4 — Targeted Usernames (Column Chart)</h2>
+<pre><code><span class="cm"># What usernames did the attacker try?</span>
+index=windows EventCode=4625 src_ip=185.220.101.34 earliest=-24h
+| stats count by user
+| sort -count
+| head 15
+
+<span class="cm"># Visualization: Column chart</span>
+<span class="cm"># X-axis: Username</span>
+<span class="cm"># Y-axis: Attempt count</span>
+<span class="cm">#</span>
+<span class="cm"># user          count</span>
+<span class="cm"># administrator 412</span>
+<span class="cm"># admin         289</span>
+<span class="cm"># root          201</span>
+<span class="cm"># guest         78</span>
+<span class="cm"># svc_sql       67</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-network-viz">
+<article class="topic">
+<h1>04 · BOTS: Network Traffic Analysis</h1>
+<hr class="divider">
+
+<h2>Panel 1 — Outbound Traffic Volume Over Time (Area Chart)</h2>
+<pre><code><span class="cm"># Detect data exfiltration via unusually high outbound volume</span>
+index=network sourcetype=pan:traffic action=allow earliest=-24h
+| timechart span=1h sum(bytes_out) AS "Bytes Out"
+
+<span class="cm"># Visualization: Area chart</span>
+<span class="cm"># Look for sudden spikes in bytes_out outside normal business hours</span>
+<span class="cm">#</span>
+<span class="cm"># _time              Bytes Out</span>
+<span class="cm"># 2024-01-15 08:00   45,231,488</span>
+<span class="cm"># 2024-01-15 09:00   67,108,864</span>
+<span class="cm"># 2024-01-15 02:00   1,258,291,200   ← 1.2 GB at 2 AM, suspicious</span></code></pre>
+
+<h2>Panel 2 — Top External Destinations (Geo Map)</h2>
+<pre><code><span class="cm"># Map of where outbound connections are going</span>
+index=network sourcetype=pan:traffic action=allow earliest=-24h
+| iplocation dest_ip
+| stats sum(bytes_out) AS total_bytes by Country, dest_ip
+| sort -total_bytes
+| head 100
+
+<span class="cm"># Visualization: Choropleth map (countries) or Cluster map (IPs)</span>
+<span class="cm"># Unusual countries with high byte counts = potential exfil target</span></code></pre>
+
+<h2>Panel 3 — Denied Traffic by Source (Port Scan Detection)</h2>
+<pre><code><span class="cm"># Internal hosts generating lots of denies = potential scanning or infected host</span>
+index=network sourcetype=pan:traffic action=deny earliest=-1h
+| stats dc(dest_port) AS unique_dest_ports,
+        dc(dest_ip) AS unique_dest_ips,
+        count AS total_denies
+        by src_ip
+| where unique_dest_ports &gt; 20 OR unique_dest_ips &gt; 50
+| sort -total_denies
+
+<span class="cm"># Sample output:</span>
+<span class="cm"># src_ip      unique_dest_ports  unique_dest_ips  total_denies</span>
+<span class="cm"># 10.0.1.50   1024               254              1024</span></code></pre>
+
+<h2>Panel 4 — DNS Query Anomalies (Long Domain Detection)</h2>
+<pre><code><span class="cm"># DNS tunneling uses abnormally long subdomains</span>
+index=dns earliest=-24h
+| eval query_length = len(query)
+| where query_length &gt; 50
+| stats count AS long_queries, avg(query_length) AS avg_len,
+        values(query) AS sample_queries
+        by src_ip
+| sort -count
+
+<span class="cm"># Sample suspicious DNS (DNS tunneling):</span>
+<span class="cm"># query: aGVsbG8gd29ybGQgdGhpcyBpcyBhIHRlc3Q.attacker.com</span>
+<span class="cm"># (Base64-encoded data in subdomain)</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-single-value">
+<article class="topic">
+<h1>05 · Single Value Panels &amp; KPIs</h1>
+<hr class="divider">
+
+<h2>Single Value Panel Search Pattern</h2>
+<pre><code><span class="cm"># Must return exactly one row with one numeric field</span>
+
+<span class="cm"># Open notable events (current)</span>
+index=notable status!=5 earliest=-24h
+| stats count AS "Open Notables"
+
+<span class="cm"># Failed logins last hour</span>
+index=windows EventCode=4625 earliest=-1h
+| stats count AS "Failed Logins (1h)"
+
+<span class="cm"># High-severity notables</span>
+index=notable urgency=high OR urgency=critical status!=5 earliest=-24h
+| stats count AS "High Severity Alerts"
+
+<span class="cm"># Unique endpoints with detections</span>
+index=endpoint sourcetype=WinEventLog:Microsoft-Windows-Sysmon/Operational earliest=-24h
+    [search index=notable earliest=-24h | fields host | dedup host]
+| stats dc(host) AS "Endpoints with Alerts"</code></pre>
+
+<h2>Single Value with Sparkline</h2>
+<pre><code><span class="cm"># Add sparkline trend to show context alongside the number</span>
+<span class="cm"># Sparkline is generated from timechart in same panel</span>
+index=windows EventCode=4625 earliest=-24h
+| timechart span=1h count
+| stats latest(count) AS "Failed Logins" sparkline(count, "1h") AS trend</code></pre>
+
+<h2>Threshold Coloring</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>KPI</th><th>Green (Normal)</th><th>Yellow (Watch)</th><th>Red (Critical)</th></tr></thead>
+  <tbody>
+    <tr><td>Failed Logins / Hour</td><td>&lt; 20</td><td>20 – 100</td><td>&gt; 100</td></tr>
+    <tr><td>Open Notables</td><td>&lt; 10</td><td>10 – 50</td><td>&gt; 50</td></tr>
+    <tr><td>High Severity Alerts</td><td>0</td><td>1 – 5</td><td>&gt; 5</td></tr>
+    <tr><td>Outbound MB / Hour</td><td>&lt; 500</td><td>500 – 2000</td><td>&gt; 2000</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>SOC KPI Dashboard — Complete Panel Set</h2>
+<pre><code><span class="cm"># Panel 1: Open notables last 24h</span>
+index=notable status!=5 earliest=-24h | stats count AS kpi
+
+<span class="cm"># Panel 2: Failed logins last 1h</span>
+index=windows EventCode=4625 earliest=-1h | stats count AS kpi
+
+<span class="cm"># Panel 3: Critical/high alerts last 24h</span>
+index=notable (urgency=critical OR urgency=high) status!=5 earliest=-24h | stats count AS kpi
+
+<span class="cm"># Panel 4: MTTD (mean time to detect) - time from first event to notable creation</span>
+index=notable earliest=-7d
+| eval detect_lag = _time - info_min_time
+| stats avg(detect_lag) AS avg_seconds
+| eval avg_minutes = round(avg_seconds/60, 1)
+| rename avg_minutes AS "Avg Detect Lag (min)"</code></pre>
+</article>
+</template>
+
+<script src="js/app.js"></script>
+</body>
+</html>

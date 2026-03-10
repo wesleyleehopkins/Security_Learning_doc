@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Forwarders — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Splunk</div>
+      <div class="sidebar-title">Forwarders</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">📡</div>
+          <h2>Forwarders</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Forwarders',
+  topics: [
+    { id: 'uf-overview',       badge: '01', label: 'UF vs HF — Overview'          },
+    { id: 'inputs-conf',       badge: '02', label: 'inputs.conf'                   },
+    { id: 'outputs-conf',      badge: '03', label: 'outputs.conf'                  },
+    { id: 'props-transforms',  badge: '04', label: 'props.conf & transforms.conf'  },
+    { id: 'deployment-server', badge: '05', label: 'Deployment Server'             },
+  ]
+};
+</script>
+
+<template id="tpl-uf-overview">
+<article class="topic">
+<h1>01 · Universal Forwarder vs Heavy Forwarder</h1>
+<hr class="divider">
+
+<h2>Comparison</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Feature</th><th>Universal Forwarder (UF)</th><th>Heavy Forwarder (HF)</th></tr></thead>
+  <tbody>
+    <tr><td>Parsing</td><td>No — sends raw data only</td><td>Yes — full Splunk parsing pipeline</td></tr>
+    <tr><td>Resource Usage</td><td>Very low (~50 MB RAM)</td><td>High — full Splunk instance</td></tr>
+    <tr><td>Indexing</td><td>No</td><td>No (not an indexer)</td></tr>
+    <tr><td>SPL Searches</td><td>No</td><td>Yes — can run searches</td></tr>
+    <tr><td>Field Extraction</td><td>No</td><td>Yes — at collection time</td></tr>
+    <tr><td>Data Routing</td><td>Basic</td><td>Advanced — filter, clone, route</td></tr>
+    <tr><td>Typical Use</td><td>Every endpoint/server — data collection agent</td><td>Gateway/aggregation layer, data filtering</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Recommended Architecture</h2>
+<pre><code><span class="cm"># Simple distributed deployment:</span>
+[Endpoints] → UF → [Indexers] → [Search Head]
+
+<span class="cm"># With Heavy Forwarder aggregation layer:</span>
+[Endpoints] → UF → [Heavy Forwarder] → [Indexers] → [Search Head]
+<span class="cm"># HF used for: filtering PII, routing by sourcetype, protocol change</span>
+
+<span class="cm"># Syslog sources (can't run UF):</span>
+[Syslog Device] → syslog → [HF or Syslog-NG] → [Indexers]</code></pre>
+
+<h2>Universal Forwarder Key Facts</h2>
+<ul>
+  <li>Installed on Windows, Linux, macOS, Solaris, AIX</li>
+  <li>Default listening port for management: <strong>8089</strong></li>
+  <li>Default data output port: <strong>9997</strong> (to indexer)</li>
+  <li>Config files live in <code>$SPLUNK_HOME/etc/system/local/</code> or app directories</li>
+  <li>Managed centrally via Deployment Server (push apps/configs)</li>
+  <li>No Splunk Web UI on UF — configured via .conf files only</li>
+</ul>
+
+<h2>Verify Forwarder Health</h2>
+<pre><code><span class="cm"># Check which forwarders are sending data (run on Search Head)</span>
+index=_internal sourcetype=splunkd host=* group=tcpout_connections
+| stats max(_time) AS last_seen by host
+| eval last_seen = strftime(last_seen, "%Y-%m-%d %H:%M")
+| eval hours_ago = round((now()-strptime(last_seen,"%Y-%m-%d %H:%M"))/3600,1)
+| where hours_ago &gt; 1
+| sort -hours_ago
+<span class="cm"># Hosts not seen in > 1 hour may have a dead forwarder</span>
+
+<span class="cm"># Quick forwarder count check</span>
+index=_internal sourcetype=splunkd earliest=-15m
+| stats dc(host) AS active_forwarders</code></pre>
+</article>
+</template>
+
+<template id="tpl-inputs-conf">
+<article class="topic">
+<h1>02 · inputs.conf</h1>
+<hr class="divider">
+
+<div class="callout"><strong>inputs.conf</strong> tells the forwarder WHAT to collect. One stanza per input source. Located at <code>$SPLUNK_HOME/etc/system/local/inputs.conf</code> or inside an app at <code>etc/apps/&lt;appname&gt;/local/inputs.conf</code>.</div>
+
+<h2>Monitor — File/Directory Input</h2>
+<pre><code><span class="cm"># Monitor a single log file</span>
+[monitor:///var/log/auth.log]
+index = linux
+sourcetype = linux_secure
+disabled = false
+
+<span class="cm"># Monitor a directory (all files recursively)</span>
+[monitor:///var/log/apache2/]
+index = web
+sourcetype = access_combined
+whitelist = \.log$
+blacklist = \.gz$
+disabled = false
+
+<span class="cm"># Monitor Windows IIS logs</span>
+[monitor://C:\inetpub\logs\LogFiles\W3SVC1\]
+index = web
+sourcetype = iis
+disabled = false</code></pre>
+
+<h2>Windows Event Log Input</h2>
+<pre><code><span class="cm"># Collect Windows Security event log</span>
+[WinEventLog://Security]
+index = windows
+disabled = false
+start_from = oldest
+current_only = 0
+checkpointInterval = 5
+
+<span class="cm"># PowerShell operational log (requires ETW on some systems)</span>
+[WinEventLog://Microsoft-Windows-PowerShell/Operational]
+index = windows
+disabled = false
+
+<span class="cm"># Sysmon operational log</span>
+[WinEventLog://Microsoft-Windows-Sysmon/Operational]
+index = endpoint
+disabled = false
+
+<span class="cm"># Collect specific EventCodes only (whitelist)</span>
+[WinEventLog://Security]
+index = windows
+whitelist = 4624,4625,4648,4688,4698,4720,4732,4768,4769,4776</code></pre>
+
+<h2>Network (TCP/UDP) Input</h2>
+<pre><code"><span class="cm"># Receive syslog over UDP (on indexer or HF)</span>
+[udp://514]
+connection_host = ip
+sourcetype = syslog
+index = network
+disabled = false
+
+<span class="cm"># Receive CEF-format data over TCP</span>
+[tcp://5514]
+connection_host = ip
+sourcetype = cef
+index = network
+disabled = false</code></pre>
+
+<h2>HTTP Event Collector (HEC)</h2>
+<pre><code><span class="cm"># HEC receives data via HTTP POST — enabled on indexer/HF</span>
+<span class="cm"># inputs.conf on the receiver:</span>
+[http]
+disabled = false
+port = 8088
+enableSSL = 1
+
+<span class="cm"># Each token gets its own stanza</span>
+[http://my-app-token]
+disabled = false
+index = application_logs
+sourcetype = _json
+token = 12345678-1234-1234-1234-123456789012</code></pre>
+
+<h2>inputs.conf Key Settings</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Setting</th><th>Description</th><th>Default</th></tr></thead>
+  <tbody>
+    <tr><td><code>index</code></td><td>Target index for collected data</td><td>main</td></tr>
+    <tr><td><code>sourcetype</code></td><td>Sourcetype to assign</td><td>Auto-detected</td></tr>
+    <tr><td><code>host</code></td><td>Override host field value</td><td>System hostname</td></tr>
+    <tr><td><code>disabled</code></td><td>true/false — enable/disable input</td><td>false</td></tr>
+    <tr><td><code>followTail</code></td><td>1 = only read new data; 0 = read from oldest</td><td>0</td></tr>
+    <tr><td><code>ignoreOlderThan</code></td><td>Skip files not modified in X days</td><td>0 (no limit)</td></tr>
+    <tr><td><code>whitelist</code></td><td>Regex — only monitor matching filenames</td><td>(all)</td></tr>
+    <tr><td><code>blacklist</code></td><td>Regex — exclude matching filenames</td><td>(none)</td></tr>
+  </tbody>
+</table>
+</div>
+</article>
+</template>
+
+<template id="tpl-outputs-conf">
+<article class="topic">
+<h1>03 · outputs.conf</h1>
+<hr class="divider">
+
+<div class="callout"><strong>outputs.conf</strong> tells the forwarder WHERE to send data. Lives on the forwarder. Points to one or more indexers. Critical to get right — wrong config means data never arrives in Splunk.</div>
+
+<h2>Basic Indexer Connection</h2>
+<pre><code><span class="cm"># outputs.conf — send to a single indexer</span>
+[tcpout]
+defaultGroup = primary_indexers
+
+[tcpout:primary_indexers]
+server = splunk-idx01.corp.local:9997
+disabled = false</code></pre>
+
+<h2>Load Balancing — Multiple Indexers</h2>
+<pre><code><span class="cm"># Load balance across 3 indexers (round-robin)</span>
+[tcpout]
+defaultGroup = indexer_pool
+
+[tcpout:indexer_pool]
+server = splunk-idx01.corp.local:9997,splunk-idx02.corp.local:9997,splunk-idx03.corp.local:9997
+autoLBFrequency = 30
+disabled = false
+
+<span class="cm"># autoLBFrequency: switch indexer every N seconds</span>
+<span class="cm"># Default 30s is fine for most environments</span></code></pre>
+
+<h2>SSL/TLS Encryption</h2>
+<pre><code><span class="cm"># Encrypt forwarder → indexer communication</span>
+[tcpout:indexer_pool]
+server = splunk-idx01.corp.local:9997
+sslCertPath = $SPLUNK_HOME/etc/certs/forwarder.pem
+sslRootCAPath = $SPLUNK_HOME/etc/certs/ca.pem
+sslPassword = encrypted_password_here
+useSSL = true</code></pre>
+
+<h2>Indexer Acknowledgment (Reliable Delivery)</h2>
+<pre><code><span class="cm"># useACK — forwarder waits for indexer to confirm receipt before marking data sent</span>
+<span class="cm"># Prevents data loss on network interruption</span>
+[tcpout:indexer_pool]
+server = splunk-idx01.corp.local:9997
+useACK = true
+<span class="cm"># Note: requires indexer to have indexer acknowledgment enabled too</span></code></pre>
+
+<h2>Verify Forwarder is Sending</h2>
+<pre><code><span class="cm"># On the forwarder — check connection status</span>
+$SPLUNK_HOME/bin/splunk list forward-server
+
+<span class="cm"># Expected output:</span>
+<span class="cm"># Active forwards:</span>
+<span class="cm">#   splunk-idx01.corp.local:9997</span>
+<span class="cm"># Configured but inactive forwards:</span>
+<span class="cm">#   (none)</span>
+
+<span class="cm"># Check splunkd.log for connection errors</span>
+$SPLUNK_HOME/var/log/splunk/splunkd.log | grep -i "tcpout\|error\|warn"</code></pre>
+</article>
+</template>
+
+<template id="tpl-props-transforms">
+<article class="topic">
+<h1>04 · props.conf &amp; transforms.conf</h1>
+<hr class="divider">
+
+<h2>props.conf — Sourcetype Configuration</h2>
+<p><code>props.conf</code> controls how Splunk parses events: how to detect line breaks, extract timestamps, assign sourcetypes, and apply field transforms. Lives on the indexer (index-time) or search head (search-time).</p>
+
+<h2>Essential props.conf Settings</h2>
+<pre><code><span class="cm"># Custom sourcetype configuration</span>
+[my_app_log]
+SHOULD_LINEMERGE = false
+LINE_BREAKER = ([\r\n]+)
+TIME_PREFIX = \[
+TIME_FORMAT = %Y-%m-%d %H:%M:%S
+MAX_TIMESTAMP_LOOKAHEAD = 25
+TRUNCATE = 1000000
+
+<span class="cm"># Multiline event merging (e.g., Java stack traces)</span>
+[java_app]
+SHOULD_LINEMERGE = true
+BREAK_ONLY_BEFORE = ^\d{4}-\d{2}-\d{2}
+<span class="cm"># Merge lines until the next line starting with a date</span>
+
+<span class="cm"># Assign sourcetype based on source path</span>
+[source::/var/log/apache2/access.log]
+sourcetype = access_combined</code></pre>
+
+<h2>Index-Time Field Extraction with TRANSFORMS</h2>
+<pre><code"><span class="cm"># Step 1: Define transform in transforms.conf</span>
+<span class="cm"># [transforms.conf]</span>
+[extract_src_ip]
+REGEX = src_ip=(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})
+FORMAT = src_ip::$1
+WRITE_META = true
+
+<span class="cm"># Step 2: Apply transform in props.conf</span>
+<span class="cm"># [props.conf]</span>
+[my_firewall_log]
+TRANSFORMS-extract_ip = extract_src_ip</code></pre>
+
+<h2>Search-Time Field Extraction</h2>
+<pre><code><span class="cm"># Inline regex extraction in props.conf (simpler, search-time only)</span>
+[my_app_log]
+EXTRACT-username = user=(?P&lt;username&gt;\w+)
+EXTRACT-action = action=(?P&lt;action&gt;allow|deny|drop)</code></pre>
+
+<h2>Common TIME_FORMAT Patterns</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Log Timestamp Format</th><th>TIME_FORMAT</th></tr></thead>
+  <tbody>
+    <tr><td>2024-01-15 14:22:31</td><td><code>%Y-%m-%d %H:%M:%S</code></td></tr>
+    <tr><td>Jan 15 14:22:31</td><td><code>%b %d %H:%M:%S</code></td></tr>
+    <tr><td>15/Jan/2024:14:22:31 +0000</td><td><code>%d/%b/%Y:%H:%M:%S %z</code></td></tr>
+    <tr><td>1705325351 (epoch)</td><td><code>%s</code></td></tr>
+    <tr><td>2024-01-15T14:22:31.000Z</td><td><code>%Y-%m-%dT%H:%M:%S.%3N%Z</code></td></tr>
+  </tbody>
+</table>
+</div>
+</article>
+</template>
+
+<template id="tpl-deployment-server">
+<article class="topic">
+<h1>05 · Deployment Server</h1>
+<hr class="divider">
+
+<h2>What is the Deployment Server?</h2>
+<p>The Deployment Server (DS) centrally manages configurations and apps for Universal Forwarders. Instead of manually editing .conf files on every endpoint, you push app packages from the DS. Forwarders poll the DS on a schedule (default: 60 seconds) and download updated apps.</p>
+
+<h2>Key Concepts</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+  <tbody>
+    <tr><td>Deployment App</td><td>A Splunk app (folder) placed in <code>$DS_HOME/etc/deployment-apps/</code> — pushed to forwarders</td></tr>
+    <tr><td>Server Class</td><td>Group of forwarders that receive the same apps — defined in <code>serverclass.conf</code></td></tr>
+    <tr><td>Client</td><td>A forwarder registered with the DS</td></tr>
+    <tr><td>Restart</td><td>DS can trigger a forwarder restart after app update</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>serverclass.conf — Assigning Apps to Forwarder Groups</h2>
+<pre><code><span class="cm"># serverclass.conf — on the Deployment Server</span>
+
+<span class="cm"># Define a server class for Windows endpoints</span>
+[serverClass:Windows_Endpoints]
+whitelist.0 = *
+<span class="cm"># All forwarders in this class</span>
+
+<span class="cm"># Assign an app to the Windows Endpoints class</span>
+[serverClass:Windows_Endpoints:app:TA-windows-security]
+stateOnClient = enabled
+restartSplunkWeb = false
+restartSplunkd = true
+
+<span class="cm"># Define class for Linux servers (by hostname pattern)</span>
+[serverClass:Linux_Servers]
+whitelist.0 = linux-*
+whitelist.1 = *.corp.local
+
+[serverClass:Linux_Servers:app:TA-linux-security]
+stateOnClient = enabled</code></pre>
+
+<h2>Deployment App Structure</h2>
+<pre><code><span class="cm"># A deployment app is just a Splunk app folder</span>
+$DS_HOME/etc/deployment-apps/
+  TA-windows-security/
+    local/
+      inputs.conf      ← WinEventLog collection config
+      outputs.conf     ← Indexer address
+    metadata/
+      local.meta
+
+<span class="cm"># To update a forwarder config:</span>
+<span class="cm"># 1. Edit inputs.conf in the deployment app</span>
+<span class="cm"># 2. Forwarders poll DS within 60 seconds</span>
+<span class="cm"># 3. Changed files are pushed, splunkd restarts if configured</span></code></pre>
+
+<h2>Checking Deployment Status</h2>
+<pre><code><span class="cm"># View deployment clients (on Deployment Server)</span>
+$SPLUNK_HOME/bin/splunk list deploy-clients
+
+<span class="cm"># Check from Search Head — internal logs</span>
+index=_internal sourcetype=splunkd component=DeploymentClient
+| stats max(_time) AS last_poll by host
+| eval last_poll = strftime(last_poll, "%Y-%m-%d %H:%M")
+| sort -last_poll</code></pre>
+</article>
+</template>
+
+<script src="js/app.js"></script>
+</body>
+</html>

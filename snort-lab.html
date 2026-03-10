@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Detection Lab — Snort — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" aria-label="Toggle sidebar">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 5h14M3 10h14M3 15h14"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html" class="active">Snort</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">Detection Lab</div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  </aside>
+  <main class="content" id="content-area"></main>
+</div>
+
+<!-- ════════════════════════ Scenario ══════════════════════════════════════ -->
+<template id="tpl-scenario">
+<article class="topic">
+  <h2>Lab Scenario</h2>
+
+  <div class="callout lab">
+    <strong>Lab: Port Scan + SQL Injection Detection</strong><br>
+    You are configuring Snort on a network segment protecting a web server. During a 15-minute window, an attacker performs a TCP SYN port scan against the web server, then launches a SQL injection attack via HTTP. Your task: write the detection rules, run Snort against a described traffic scenario, and interpret the resulting alerts.
+  </div>
+
+  <h3>Network Environment</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Asset</th><th>IP</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td>Snort sensor</td><td>192.168.1.1</td><td>Monitoring port on the LAN segment</td></tr>
+        <tr><td>Web server</td><td>192.168.1.10</td><td>Apache 2.4 — HTTP on port 80, HTTPS on 443</td></tr>
+        <tr><td>Database server</td><td>192.168.1.20</td><td>MySQL — port 3306 (internal only)</td></tr>
+        <tr><td>Attacker</td><td>203.0.113.50</td><td>External — simulated attacker IP</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Attack Timeline</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Time</th><th>Activity</th><th>Traffic Pattern</th></tr></thead>
+      <tbody>
+        <tr><td>14:20:00</td><td>TCP SYN scan begins</td><td>203.0.113.50 → 192.168.1.10 — SYN packets to ports 1–65535</td></tr>
+        <tr><td>14:20:45</td><td>Scan completes — found ports 22, 80, 443 open</td><td>RST/ACK responses from closed ports</td></tr>
+        <tr><td>14:22:10</td><td>HTTP reconnaissance</td><td>GET /robots.txt, GET /admin/, GET /login.php</td></tr>
+        <tr><td>14:22:45</td><td>SQL injection attempt 1 — error-based</td><td>GET /search.php?id=1' — HTTP 500 response with SQL error</td></tr>
+        <tr><td>14:23:01</td><td>SQL injection attempt 2 — UNION-based</td><td>GET /search.php?id=1 UNION SELECT 1,2,3,username,password FROM users--</td></tr>
+        <tr><td>14:23:15</td><td>Database dump success</td><td>HTTP 200 with user table data in response body</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Lab Objectives</h3>
+  <ol>
+    <li>Write Snort rules to detect the TCP SYN port scan</li>
+    <li>Write Snort rules to detect SQL injection in HTTP traffic</li>
+    <li>Set correct snort.conf variables for the environment</li>
+    <li>Run Snort against the described traffic scenario</li>
+    <li>Read and interpret realistic alert output</li>
+    <li>Tune the port scan rule to reduce false positives with <code>detection_filter</code></li>
+  </ol>
+</article>
+</template>
+
+<!-- ════════════════════════ Write Rules ════════════════════════════════════ -->
+<template id="tpl-write-rules">
+<article class="topic">
+  <h2>Step 1 — Write the Rules</h2>
+
+  <h3>Set Environment Variables in snort.conf</h3>
+  <pre><code><span class="cm"># snort.conf — network variables for this lab</span>
+var HOME_NET 192.168.1.0/24
+var EXTERNAL_NET !$HOME_NET
+
+var HTTP_SERVERS [192.168.1.10]
+var SQL_SERVERS [192.168.1.20]
+portvar HTTP_PORTS [80,443]
+
+var RULE_PATH /etc/snort/rules</code></pre>
+
+  <h3>/etc/snort/rules/local.rules</h3>
+  <pre><code><span class="cm">######################################</span>
+<span class="cm"># Lab Detection Rules — local.rules</span>
+<span class="cm">######################################</span>
+
+<span class="cm">## ---- Port Scan Rules ---- ##</span>
+
+<span class="cm"># Rule 1: TCP Null Scan — stealth scan indicator (no flags = invalid TCP)</span>
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (
+  msg:"SCAN TCP Null Scan";
+  flags:0;
+  flow:stateless;
+  classtype:network-scan;
+  priority:2;
+  sid:1000001; rev:1;
+)
+
+<span class="cm"># Rule 2: TCP Xmas Scan — FIN+PSH+URG = invalid combination</span>
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (
+  msg:"SCAN TCP Xmas Scan";
+  flags:FPU;
+  flow:stateless;
+  classtype:network-scan;
+  priority:2;
+  sid:1000002; rev:1;
+)
+
+<span class="cm"># Rule 3: TCP SYN Scan — detect rapid SYN to multiple ports from same source</span>
+<span class="cm"># detection_filter fires only after 20 SYN packets from same src in 10 seconds</span>
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (
+  msg:"SCAN TCP SYN Port Scan - Multiple Ports";
+  flags:S,12;
+  flow:stateless;
+  detection_filter:track by_src, count 20, seconds 10;
+  classtype:network-scan;
+  priority:2;
+  sid:1000003; rev:1;
+)
+
+<span class="cm">## ---- SQL Injection Rules ---- ##</span>
+
+<span class="cm"># Rule 4: SQL error response from web server</span>
+<span class="cm"># Fires when server reveals SQL syntax errors (confirms injection worked)</span>
+alert tcp $HTTP_SERVERS $HTTP_PORTS -> $EXTERNAL_NET any (
+  msg:"SQL INJECTION Error Response - SQL Syntax Exposed";
+  flow:established,to_client;
+  content:"You have an error in your SQL syntax";
+  nocase;
+  fast_pattern;
+  classtype:web-application-attack;
+  priority:1;
+  sid:1000010; rev:1;
+)
+
+<span class="cm"># Rule 5: UNION SELECT injection in HTTP URI</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  msg:"SQL INJECTION UNION SELECT in URI";
+  flow:established,to_server;
+  content:"UNION"; http_uri; nocase; fast_pattern;
+  content:"SELECT"; http_uri; nocase; distance:0; within:20;
+  classtype:web-application-attack;
+  priority:1;
+  reference:url,owasp.org/www-community/attacks/SQL_Injection;
+  sid:1000011; rev:1;
+)
+
+<span class="cm"># Rule 6: SQL injection quote + comment sequence in URI</span>
+<span class="cm"># Matches: id=1' OR 1=1-- (common injection pattern)</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  msg:"SQL INJECTION Quote + Comment in URI";
+  flow:established,to_server;
+  pcre:"/(\%27|%2527|\')\s*(or|and|union)\s+/Ui"; http_uri;
+  classtype:web-application-attack;
+  priority:1;
+  sid:1000012; rev:1;
+)
+
+<span class="cm"># Rule 7: Stacked queries / comment sequences in URI</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  msg:"SQL INJECTION Comment Sequence in URI";
+  flow:established,to_server;
+  pcre:"/(--|#|%23|%2D%2D)\s*$/Ui"; http_uri;
+  classtype:web-application-attack;
+  priority:1;
+  sid:1000013; rev:1;
+)</code></pre>
+
+  <h3>Rule Design Notes</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Rule</th><th>Design Choice</th><th>Rationale</th></tr></thead>
+      <tbody>
+        <tr><td>1000001 (Null)</td><td><code>flow:stateless</code></td><td>Null scan packets have no state — don't require established connection</td></tr>
+        <tr><td>1000003 (SYN scan)</td><td><code>detection_filter count 20 seconds 10</code></td><td>Prevents alerting on single SYN packets (normal web traffic); only fires on rapid scan behavior</td></tr>
+        <tr><td>1000010 (SQL error)</td><td><code>flow:established,to_client</code></td><td>Matches server response, not request — confirms injection succeeded</td></tr>
+        <tr><td>1000011 (UNION)</td><td><code>fast_pattern</code> on UNION</td><td>UNION is less common than SELECT — use as primary fast-pattern match for performance</td></tr>
+        <tr><td>1000012 (PCRE)</td><td>Case-insensitive PCRE with URL decode</td><td>Catches both <code>'OR</code> and <code>%27OR</code> (URL-encoded quote)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+</template>
+
+<!-- ════════════════════════ Run Snort ══════════════════════════════════════ -->
+<template id="tpl-run-snort">
+<article class="topic">
+  <h2>Step 2 — Validate &amp; Run Snort</h2>
+
+  <h3>Validate the Config and Rules</h3>
+  <pre><code><span class="cm"># Step 1: Validate snort.conf syntax and all included rule files</span>
+sudo snort -T -c /etc/snort/snort.conf
+<span class="cm"># Expected output (at the end):</span>
+<span class="cm">#   Snort successfully validated the configuration!</span>
+<span class="cm">#   Snort exiting</span>
+
+<span class="cm"># If there are rule syntax errors you'll see:</span>
+<span class="cm">#   ERROR: /etc/snort/rules/local.rules(7) Unknown rule option: 'nocase'.</span>
+<span class="cm"># (nocase must follow a content option — not standalone)</span></code></pre>
+
+  <h3>Run Against a PCAP File</h3>
+  <pre><code><span class="cm"># In a real lab, you'd capture the traffic first:</span>
+sudo tcpdump -i eth0 -w /tmp/lab_traffic.pcap host 203.0.113.50
+
+<span class="cm"># Then run Snort against the captured PCAP:</span>
+sudo snort \
+  -c /etc/snort/snort.conf \
+  -r /tmp/lab_traffic.pcap \
+  -A console \
+  -q \
+  -l /var/log/snort/
+
+<span class="cm"># Flags explained:</span>
+<span class="cm"># -c snort.conf  — load configuration (NIDS mode)</span>
+<span class="cm"># -r lab.pcap    — read from PCAP (not live interface)</span>
+<span class="cm"># -A console     — print alerts to terminal</span>
+<span class="cm"># -q             — quiet — suppress banner and statistics</span>
+<span class="cm"># -l /var/log/   — also write alert to fast file</span>
+
+<span class="cm"># For live capture instead:</span>
+sudo snort -c /etc/snort/snort.conf -i eth0 -A fast -l /var/log/snort/ -D</code></pre>
+
+  <h3>Snort Startup Output (with -v not -q)</h3>
+  <pre><code>        --== Initializing Snort ==--
+Initializing Output Plugins!
+Initializing Preprocessors!
+Initializing Plug-ins!
+Parsing Rules file "/etc/snort/snort.conf"
+PortVar 'HTTP_PORTS' defined :  [ 80:80 443:443 ]
+Var 'HOME_NET' defined, value is: 192.168.1.0/24
+Var 'EXTERNAL_NET' defined, value is: !192.168.1.0/24
+Var 'HTTP_SERVERS' defined, value is: 192.168.1.10/32
+
+...building detection engine, please wait...
+
++-------------------[Rule Port Counts]-----------------------------------
+|        tcp    udp   icmp    ip
+|   src    0      0      0     0
+|   dst    7      0      0     0
+|   any    0      0      0     0
+|    nc    0      0      0     0
+|   s+d    0      0      0     0
++------------------------------------------------------------------------
+
+Snort rules read
+
+   Snort rules loaded:      7
+   Dynamic rules loaded:    0
+
++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Snort successfully loaded all rules and checked all rule chains!
+
+        --== Initialization Complete ==--</code></pre>
+</article>
+</template>
+
+<!-- ════════════════════════ Port Scan Alerts ════════════════════════════════ -->
+<template id="tpl-port-scan-alerts">
+<article class="topic">
+  <h2>Step 3 — Port Scan Alert Output</h2>
+  <p>Running Snort against the lab traffic with <code>-A console</code> produces the following alerts during the SYN scan phase (14:20:00 – 14:20:45):</p>
+
+  <h3>Console Alert Output — Port Scan Phase</h3>
+  <pre><code><span class="cm"># Alert stream — SYN scan (203.0.113.50 scanning 192.168.1.10)</span>
+<span class="cm"># Note: no alerts fire for first 10 seconds (detection_filter threshold not met)</span>
+<span class="cm"># After 20 SYN packets within 10 seconds, the rule fires:</span>
+
+03/07-14:20:10.118923 [**] [1:1000003:1] SCAN TCP SYN Port Scan - Multiple Ports [**] [Classification: Network Scan] [Priority: 2] {TCP} 203.0.113.50:47821 -> 192.168.1.10:22
+
+03/07-14:20:10.119044 [**] [1:1000003:1] SCAN TCP SYN Port Scan - Multiple Ports [**] [Classification: Network Scan] [Priority: 2] {TCP} 203.0.113.50:47821 -> 192.168.1.10:80
+
+03/07-14:20:10.119178 [**] [1:1000003:1] SCAN TCP SYN Port Scan - Multiple Ports [**] [Classification: Network Scan] [Priority: 2] {TCP} 203.0.113.50:47821 -> 192.168.1.10:443
+
+03/07-14:20:10.120001 [**] [1:1000003:1] SCAN TCP SYN Port Scan - Multiple Ports [**] [Classification: Network Scan] [Priority: 2] {TCP} 203.0.113.50:47821 -> 192.168.1.10:3306
+
+<span class="cm">... approximately 200 more port scan alerts ...</span></code></pre>
+
+  <div class="callout warn">
+    <strong>Alert storm:</strong> The SYN scan generates approximately 200 alerts in 45 seconds. Even with <code>detection_filter</code> set to 20 packets per 10 seconds, a scan of all 65535 ports still generates hundreds of alerts. This is by design — each alert represents a new batch of ports being scanned. In production, you would add a <code>threshold</code> to limit to 1 alert per 60 seconds per source.
+  </div>
+
+  <h3>sfportscan Preprocessor Alert</h3>
+  <pre><code><span class="cm"># With sfportscan preprocessor enabled, you also get a dedicated scan summary alert:</span>
+03/07-14:20:45.998441 [**] [106:1:1] (portscan) TCP Portscan [**] [Classification: Network Scan] [Priority: 3] {PROTO:255} 203.0.113.50 -> 192.168.1.10
+<span class="cm"># GID 106 = sfportscan preprocessor</span>
+<span class="cm"># SID 1 = TCP portscan</span>
+<span class="cm"># sfportscan includes additional detail in the packet data section (full format):</span>
+<span class="cm">#   Priority Count: 1</span>
+<span class="cm">#   Connection Count: 65535</span>
+<span class="cm">#   IP Count: 1</span>
+<span class="cm">#   Scanned IP Range: 192.168.1.10:1 - 192.168.1.10:65535</span>
+<span class="cm">#   Port/Proto Count: 65535</span>
+<span class="cm">#   Port/Proto Range: 1:65535</span></code></pre>
+</article>
+</template>
+
+<!-- ════════════════════════ SQL Injection Alerts ════════════════════════════ -->
+<template id="tpl-sql-alerts">
+<article class="topic">
+  <h2>Step 4 — SQL Injection Alert Output</h2>
+  <p>After the port scan, the attacker begins HTTP reconnaissance and SQL injection. The alert stream for the injection phase (14:22:10 – 14:23:15):</p>
+
+  <h3>Console Alert Output — SQL Injection Phase</h3>
+  <pre><code><span class="cm"># 14:22:45 — First injection attempt (error-based, quote in parameter)</span>
+03/07-14:22:45.221018 [**] [1:1000012:1] SQL INJECTION Quote + Comment in URI [**] [Classification: Web Application Attack] [Priority: 1] {TCP} 203.0.113.50:54321 -> 192.168.1.10:80
+
+<span class="cm"># 14:22:45 — Server responds with SQL error (confirms injection worked)</span>
+03/07-14:22:45.335791 [**] [1:1000010:1] SQL INJECTION Error Response - SQL Syntax Exposed [**] [Classification: Web Application Attack] [Priority: 1] {TCP} 192.168.1.10:80 -> 203.0.113.50:54321
+
+<span class="cm"># 14:23:01 — UNION SELECT extraction attempt</span>
+03/07-14:23:01.440882 [**] [1:1000011:1] SQL INJECTION UNION SELECT in URI [**] [Classification: Web Application Attack] [Priority: 1] {TCP} 203.0.113.50:54321 -> 192.168.1.10:80
+
+<span class="cm"># 14:23:01 — Comment sequence in URI also fires</span>
+03/07-14:23:01.440910 [**] [1:1000013:1] SQL INJECTION Comment Sequence in URI [**] [Classification: Web Application Attack] [Priority: 1] {TCP} 203.0.113.50:54321 -> 192.168.1.10:80</code></pre>
+
+  <h3>Full Format Alert — SQL Injection (Additional Detail)</h3>
+  <pre><code><span class="cm"># Running with -A full provides packet header detail:</span>
+[**] [1:1000011:1] SQL INJECTION UNION SELECT in URI [**]
+[Classification: Web Application Attack] [Priority: 1]
+03/07-14:23:01.440882 203.0.113.50:54321 -> 192.168.1.10:80
+TCP TTL:54 TOS:0x0 ID:28741 IpLen:20 DgmLen:510 DF
+***AP*** Seq: 0x3F1A2B8C  Ack: 0x7D4E9A1C  Win: 0x8000 TcpLen: 20
+[Xref => http://owasp.org/www-community/attacks/SQL_Injection]
+
+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+</code></pre>
+
+  <h3>What the Alerts Tell Us</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Alert</th><th>Finding</th><th>Analyst Action</th></tr></thead>
+      <tbody>
+        <tr><td>1000012 fires at 14:22:45</td><td>First injection attempt with quote character</td><td>Flag 203.0.113.50 as hostile — block at firewall if IPS mode</td></tr>
+        <tr><td>1000010 fires at 14:22:45</td><td>Server returned SQL error — application is VULNERABLE and the injection worked</td><td>CRITICAL — escalate immediately. The app exposed its DB schema.</td></tr>
+        <tr><td>1000011 + 1000013 at 14:23:01</td><td>Attacker escalated to data extraction via UNION SELECT</td><td>Assume data exfiltration in progress. Check server logs for response body.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Correlating with Web Server Logs</h3>
+  <pre><code><span class="cm"># Cross-reference Snort alert timestamps with Apache access.log</span>
+grep "203.0.113.50" /var/log/apache2/access.log | grep "14:22\|14:23"
+
+<span class="cm"># Expected matching log entries:</span>
+203.0.113.50 - - [07/Mar/2026:14:22:45 +0000] "GET /search.php?id=1' HTTP/1.1" 500 1842
+203.0.113.50 - - [07/Mar/2026:14:23:01 +0000] "GET /search.php?id=1%20UNION%20SELECT%201,2,3,username,password%20FROM%20users-- HTTP/1.1" 200 3847
+
+<span class="cm"># The 200 response with 3847 bytes at 14:23:01 confirms data was returned</span>
+<span class="cm"># Follow up: check if the 3847 bytes included user table data</span></code></pre>
+</article>
+</template>
+
+<!-- ════════════════════════ Tuning ═════════════════════════════════════════ -->
+<template id="tpl-tuning">
+<article class="topic">
+  <h2>Step 5 — Tuning Rules</h2>
+
+  <h3>Problem: Port Scan Rule Too Noisy</h3>
+  <p>Rule 1000003 generated ~200 alerts during the 45-second SYN scan. In production, this would fill the alert file and make it hard to see other events. We need to rate-limit it without missing the scan.</p>
+
+  <h3>Solution 1: Add threshold to local.rules</h3>
+  <pre><code><span class="cm"># Modify rule 1000003 to alert at most once per source per 5 minutes</span>
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (
+  msg:"SCAN TCP SYN Port Scan - Multiple Ports";
+  flags:S,12;
+  flow:stateless;
+  detection_filter:track by_src, count 20, seconds 10;
+  threshold:type limit, track by_src, count 1, seconds 300;
+  classtype:network-scan;
+  priority:2;
+  sid:1000003; rev:2;   <span class="cm"># ← increment rev on rule changes</span>
+)</code></pre>
+
+  <h3>Solution 2: Suppress in threshold.conf (preferred for tuning)</h3>
+  <pre><code><span class="cm"># /etc/snort/threshold.conf</span>
+
+<span class="cm"># Rate-limit SYN scan rule — alert at most 3 times per source per 5 minutes</span>
+event_filter gen_id 1, sig_id 1000003, type limit, track by_src, count 3, seconds 300
+
+<span class="cm"># If your internal vulnerability scanner (192.168.1.200) triggers the scan rule:</span>
+suppress gen_id 1, sig_id 1000003, track by_src, ip 192.168.1.200
+
+<span class="cm"># Suppress sfportscan preprocessor from internal security tools</span>
+suppress gen_id 106, sig_id 1, track by_src, ip 192.168.1.200</code></pre>
+
+  <h3>Problem: SQL Injection Rule — High False Positives</h3>
+  <p>Rule 1000013 (comment sequence) may fire on legitimate web requests that happen to end with a comment-like pattern (e.g., some REST APIs). Let's tighten it.</p>
+  <pre><code><span class="cm"># Original (too broad):</span>
+pcre:"/(--|#|%23|%2D%2D)\s*$/Ui";
+
+<span class="cm"># Improved — require a quote or digit before the comment (more specific):</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  msg:"SQL INJECTION Comment After Quote in URI";
+  flow:established,to_server;
+  pcre:"/(\%27|\').*?(--|#|%23)/Ui"; http_uri;
+  classtype:web-application-attack;
+  priority:1;
+  sid:1000013; rev:2;
+)</code></pre>
+
+  <h3>Testing the Tuned Rules</h3>
+  <pre><code><span class="cm"># After editing rules, always re-validate:</span>
+sudo snort -T -c /etc/snort/snort.conf
+<span class="cm"># Look for: Snort successfully validated the configuration!</span>
+
+<span class="cm"># Re-run against the lab PCAP to confirm alerts still fire correctly:</span>
+sudo snort -c /etc/snort/snort.conf -r /tmp/lab_traffic.pcap \
+  -A console -q
+
+<span class="cm"># Count total alerts after tuning (should be fewer scan alerts):</span>
+sudo snort -c /etc/snort/snort.conf -r /tmp/lab_traffic.pcap \
+  -A fast -q -l /tmp/ 2&gt;/dev/null
+wc -l /tmp/alert
+<span class="cm"># Before tuning: ~210 alerts</span>
+<span class="cm"># After tuning:   ~7 alerts (1-3 scan + 4 SQL injection)</span></code></pre>
+</article>
+</template>
+
+<!-- ════════════════════════ Summary ════════════════════════════════════════ -->
+<template id="tpl-summary">
+<article class="topic">
+  <h2>Lab Summary</h2>
+
+  <h3>Complete local.rules File (Final)</h3>
+  <pre><code><span class="cm">######################################</span>
+<span class="cm"># /etc/snort/rules/local.rules (tuned)</span>
+<span class="cm">######################################</span>
+
+<span class="cm"># --- Reconnaissance ---</span>
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"SCAN TCP Null Scan"; flags:0; flow:stateless; classtype:network-scan; priority:2; sid:1000001; rev:1;)
+
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"SCAN TCP Xmas Scan"; flags:FPU; flow:stateless; classtype:network-scan; priority:2; sid:1000002; rev:1;)
+
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"SCAN TCP SYN Port Scan - Multiple Ports"; flags:S,12; flow:stateless; detection_filter:track by_src, count 20, seconds 10; threshold:type limit, track by_src, count 1, seconds 300; classtype:network-scan; priority:2; sid:1000003; rev:2;)
+
+<span class="cm"># --- SQL Injection ---</span>
+alert tcp $HTTP_SERVERS $HTTP_PORTS -> $EXTERNAL_NET any (msg:"SQL INJECTION Error Response - SQL Syntax Exposed"; flow:established,to_client; content:"You have an error in your SQL syntax"; nocase; fast_pattern; classtype:web-application-attack; priority:1; sid:1000010; rev:1;)
+
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"SQL INJECTION UNION SELECT in URI"; flow:established,to_server; content:"UNION"; http_uri; nocase; fast_pattern; content:"SELECT"; http_uri; nocase; distance:0; within:20; classtype:web-application-attack; priority:1; reference:url,owasp.org/www-community/attacks/SQL_Injection; sid:1000011; rev:1;)
+
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"SQL INJECTION Quote + OR/AND in URI"; flow:established,to_server; pcre:"/(\%27|%2527|\')\s*(or|and|union)\s+/Ui"; http_uri; classtype:web-application-attack; priority:1; sid:1000012; rev:1;)
+
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"SQL INJECTION Comment After Quote in URI"; flow:established,to_server; pcre:"/(\%27|\').*?(--|#|%23)/Ui"; http_uri; classtype:web-application-attack; priority:1; sid:1000013; rev:2;)</code></pre>
+
+  <h3>Final Alert Summary</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Time</th><th>SID</th><th>Alert Message</th><th>Priority</th><th>Finding</th></tr></thead>
+      <tbody>
+        <tr><td>14:20:10</td><td>1000003</td><td>SCAN TCP SYN Port Scan</td><td style="color:var(--yellow)">2</td><td>External IP scanned internal web server — reconnaissance phase</td></tr>
+        <tr><td>14:22:45</td><td>1000012</td><td>SQL INJECTION Quote + OR/AND</td><td style="color:var(--red)">1</td><td>Error-based injection attempt on search.php</td></tr>
+        <tr><td>14:22:45</td><td>1000010</td><td>SQL INJECTION Error Response</td><td style="color:var(--red)">1</td><td>App returned SQL syntax error — application vulnerable, injection succeeded</td></tr>
+        <tr><td>14:23:01</td><td>1000011</td><td>SQL INJECTION UNION SELECT</td><td style="color:var(--red)">1</td><td>Data extraction attempt — UNION-based injection</td></tr>
+        <tr><td>14:23:01</td><td>1000013</td><td>SQL INJECTION Comment After Quote</td><td style="color:var(--red)">1</td><td>Corroborating signal — comment terminator in URI</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Recommended Immediate Actions</h3>
+  <ol>
+    <li><strong>Block 203.0.113.50</strong> at the perimeter firewall immediately</li>
+    <li><strong>Emergency patch</strong> — review <code>search.php</code>, implement parameterized queries</li>
+    <li><strong>Check database logs</strong> — determine what data was returned in the 200 response at 14:23:01</li>
+    <li><strong>Review WAF rules</strong> — if a WAF is deployed, it should have blocked this without reaching Snort</li>
+    <li><strong>Rotate credentials</strong> — if user table was exposed, assume all passwords compromised</li>
+    <li><strong>If Snort is in IPS mode</strong> — change rules 1000011/1000012 from <code>alert</code> to <code>drop</code> to actively block future attempts</li>
+  </ol>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: "Snort — Detection Lab",
+  topics: [
+    { id: "scenario",          badge: "00", label: "Scenario" },
+    { id: "write-rules",       badge: "01", label: "Write Rules" },
+    { id: "run-snort",         badge: "02", label: "Validate &amp; Run" },
+    { id: "port-scan-alerts",  badge: "03", label: "Port Scan Alerts" },
+    { id: "sql-alerts",        badge: "04", label: "SQL Injection Alerts" },
+    { id: "tuning",            badge: "05", label: "Tuning Rules" },
+    { id: "summary",           badge: "06", label: "Summary" },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

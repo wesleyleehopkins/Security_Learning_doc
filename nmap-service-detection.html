@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nmap Service Detection — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Nmap</div>
+      <div class="sidebar-title">Service Detection</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">🔬</div>
+          <h2>Service Detection</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Service Detection',
+  topics: [
+    { id: 'sv-overview',   badge: '01', label: 'How -sV Works'             },
+    { id: 'sv-intensity',  badge: '02', label: 'Version Intensity Levels'  },
+    { id: 'os-detection',  badge: '03', label: 'OS Detection (-O)'         },
+    { id: 'banner-grab',   badge: '04', label: 'Banner Grabbing'           },
+    { id: 'aggressive',    badge: '05', label: 'Aggressive Flag (-A)'      },
+  ]
+};
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EMBEDDED CONTENT TEMPLATES — no server required
+     ═══════════════════════════════════════════════════════════════ -->
+
+<template id="tpl-sv-overview">
+<article class="topic">
+<h1>01 · How -sV Works — Service Version Detection</h1>
+<hr class="divider">
+
+<div class="callout"><code>-sV</code> probes open ports to determine the service name, version number, and sometimes additional metadata (hostname, device type, OS). This information is used to identify vulnerable software versions without running a separate vulnerability scanner.</div>
+
+<h2>Command</h2>
+<pre><code><span class="cm"># Basic version detection</span>
+nmap -sV 192.168.1.10
+
+<span class="cm"># Version detection + SYN scan (root required)</span>
+nmap -sS -sV 192.168.1.10
+
+<span class="cm"># Specific ports only</span>
+nmap -sV -p 22,80,443,3306,5432 192.168.1.10
+
+<span class="cm"># All ports + version detection</span>
+nmap -sS -sV -p- 192.168.1.10</code></pre>
+
+<h2>How Nmap Identifies Versions</h2>
+<pre><code><span class="cm">── Step 1: Port scan identifies open ports ────────────────────</span>
+22/tcp open
+80/tcp open
+3306/tcp open
+
+<span class="cm">── Step 2: -sV sends version probes to each open port ─────────</span>
+Nmap connects to port → sends probe string(s)
+→ reads banner / response
+→ matches against nmap-service-probes database
+
+<span class="cm">── nmap-service-probes probe example for SSH ──────────────────</span>
+Probe TCP NULL q||           ← send empty string; many services banner on connect
+match ssh m|^SSH-([\d.]+)-(.+)\n|  ← regex against response banner
+  p|OpenSSH| v|$2| i|protocol $1|  ← extract product, version, info</code></pre>
+
+<h2>Version Detection Output Fields</h2>
+<pre><code>PORT     STATE  SERVICE      VERSION
+22/tcp   open   ssh          OpenSSH 8.9p1 Ubuntu 3ubuntu0.6 (Ubuntu Linux; protocol 2.0)
+80/tcp   open   http         Apache httpd 2.4.52 ((Ubuntu))
+443/tcp  open   ssl/http     Apache httpd 2.4.52 ((Ubuntu))
+3306/tcp open   mysql        MySQL 8.0.36 (unauthorized)
+5432/tcp open   postgresql   PostgreSQL DB 9.6.0 or later
+
+<span class="cm"># Field breakdown:</span>
+<span class="cm"># SERVICE    = matched service name (from nmap-services)</span>
+<span class="cm"># VERSION    = product name + version from nmap-service-probes match</span>
+<span class="cm"># Extra info = parenthetical OS, protocol version, etc.</span></code></pre>
+
+<h2>Service Detection Fields in Detail</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Field</th><th>Description</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td>Product name (p)</td><td>Software product name</td><td>OpenSSH, Apache httpd, nginx</td></tr>
+    <tr><td>Version (v)</td><td>Version string</td><td>8.9p1, 2.4.52, 1.24.0</td></tr>
+    <tr><td>Info (i)</td><td>Additional information</td><td>protocol 2.0, Ubuntu</td></tr>
+    <tr><td>Hostname (h)</td><td>Hostname from banner</td><td>mail.example.com</td></tr>
+    <tr><td>OS (o)</td><td>OS from service banner</td><td>Linux, Windows</td></tr>
+    <tr><td>Device type (d)</td><td>Device category</td><td>router, printer, phone</td></tr>
+    <tr><td>CPE</td><td>Common Platform Enumeration URI</td><td>cpe:/a:openbsd:openssh:8.9p1</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>When -sV Fails or Returns ?</h2>
+<pre><code>PORT     STATE  SERVICE  VERSION
+8443/tcp open   ssl/http?
+
+<span class="cm"># ? means Nmap couldn't determine the service</span>
+<span class="cm"># Common causes:</span>
+<span class="cm">#  - Custom/proprietary protocol with no matching probe</span>
+<span class="cm">#  - Application sends nothing until client speaks first</span>
+<span class="cm">#  - Encrypted protocol (SSL without standard handshake)</span>
+<span class="cm">#  - Service rate-limits or closes connection too fast</span>
+<span class="cm"># Fix: try --version-intensity 9 or use NSE scripts</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-sv-intensity">
+<article class="topic">
+<h1>02 · Version Intensity Levels</h1>
+<hr class="divider">
+
+<p>Version intensity controls how many probe strings Nmap tries against each open port. Higher intensity = more probes = better accuracy but slower scans. The nmap-service-probes file assigns each probe a rarity value (0-9); intensity sets the threshold.</p>
+
+<h2>Intensity Levels</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Flag</th><th>Intensity</th><th>Probes Used</th><th>Speed</th><th>Use When</th></tr></thead>
+  <tbody>
+    <tr><td><code>--version-light</code></td><td>2</td><td>Only most common (rarity ≤ 2)</td><td>Fastest</td><td>Quick broad scans; common services only</td></tr>
+    <tr><td><code>--version-intensity 3</code></td><td>3</td><td>Moderate subset</td><td>Fast</td><td>Slightly better than light</td></tr>
+    <tr><td><code>--version-intensity 5</code></td><td>5</td><td>Moderate</td><td>Moderate</td><td></td></tr>
+    <tr><td>(default)</td><td>7</td><td>Most probes (rarity ≤ 7)</td><td>Normal</td><td>Default; good balance</td></tr>
+    <tr><td><code>--version-intensity 9</code></td><td>9</td><td>All probes in database</td><td>Slow</td><td>Obscure services; comprehensive audit</td></tr>
+    <tr><td><code>--version-all</code></td><td>9</td><td>All probes (alias for intensity 9)</td><td>Slowest</td><td>Same as intensity 9</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Commands</h2>
+<pre><code><span class="cm"># Light — fastest, catches only common services</span>
+nmap -sV --version-light 192.168.1.0/24
+
+<span class="cm"># Default (intensity 7) — best balance</span>
+nmap -sV 192.168.1.10
+
+<span class="cm"># All probes — use on individual hosts when identity is important</span>
+nmap -sV --version-all 192.168.1.10
+
+<span class="cm"># Explicit intensity value</span>
+nmap -sV --version-intensity 5 192.168.1.10</code></pre>
+
+<h2>Version Trace (Debug)</h2>
+<pre><code><span class="cm"># Show every probe sent and response received during version detection</span>
+nmap -sV --version-trace 192.168.1.10 2>&amp;1 | head -50
+
+<span class="cm"># Sample trace output:</span>
+NSOCK INFO: TCP connection to 192.168.1.10:22 completed successfully.
+NSOCK INFO: Write request for 0 bytes queued against IOD #1
+NSOCK INFO: Read request from IOD #1
+NSOCK INFO: READ [IOD #1 #2] SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.6
+<span class="cm"># → Nmap read the SSH banner and matched it against probes database</span></code></pre>
+
+<h2>Intensity vs Scan Coverage</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Scenario</th><th>Recommended Intensity</th><th>Command</th></tr></thead>
+  <tbody>
+    <tr><td>Large subnet — quick inventory</td><td>Light (2)</td><td><code>nmap -sV --version-light -T4 10.0.0.0/16</code></td></tr>
+    <tr><td>Standard pentest engagement</td><td>Default (7)</td><td><code>nmap -sS -sV -p- target</code></td></tr>
+    <tr><td>Deep audit of single host</td><td>All (9)</td><td><code>nmap -sV --version-all -p- target</code></td></tr>
+    <tr><td>Unknown service on custom port</td><td>All (9)</td><td><code>nmap -sV --version-all -p 9999 target</code></td></tr>
+    <tr><td>Version baseline for change detection</td><td>Default (7)</td><td><code>nmap -sV -oX baseline.xml subnet</code></td></tr>
+  </tbody>
+</table>
+</div>
+</article>
+</template>
+
+<template id="tpl-os-detection">
+<article class="topic">
+<h1>03 · OS Detection (-O)</h1>
+<hr class="divider">
+
+<div class="callout note"><strong>OS detection requires:</strong> root/admin privileges AND at least one open TCP port AND at least one closed TCP port on the target. Without both states, Nmap cannot generate the full fingerprint.</div>
+
+<h2>Command</h2>
+<pre><code><span class="cm"># OS detection only</span>
+sudo nmap -O 192.168.1.10
+
+<span class="cm"># Combined with service detection (common pairing)</span>
+sudo nmap -sS -sV -O 192.168.1.10
+
+<span class="cm"># Aggressive guess even when confidence is low</span>
+sudo nmap -O --osscan-guess 192.168.1.10
+
+<span class="cm"># Limit to hosts with ideal conditions (1 open + 1 closed)</span>
+sudo nmap -O --osscan-limit 192.168.1.0/24</code></pre>
+
+<h2>How OS Detection Works (TCP/IP Stack Fingerprinting)</h2>
+<pre><code><span class="cm"># Nmap sends 16 different probe packets and analyzes responses:</span>
+T1-T7   TCP probes to open + closed ports
+         → ISN (Initial Sequence Number) generation pattern
+         → TCP options (window size, order, timestamps)
+         → RST response behavior
+
+U1      UDP probe to closed port
+         → ICMP unreachable message format
+
+IE1-IE2 ICMP echo probes
+         → Response to varying DF bit, TOS, code fields
+
+<span class="cm"># Each target's responses create a fingerprint</span>
+<span class="cm"># Fingerprint is compared against nmap-os-db (5,000+ entries)</span>
+<span class="cm"># Best match = OS guess with confidence percentage</span></code></pre>
+
+<h2>Reading OS Detection Output</h2>
+<pre><code>$ sudo nmap -O 192.168.1.10
+
+Device type: general purpose
+Running: Linux 5.X
+OS CPE: cpe:/o:linux:linux_kernel:5
+OS details: Linux 5.4 - 5.11
+Network Distance: 1 hop
+
+<span class="cm"># Multiple candidates shown when confidence is split:</span>
+Aggressive OS guesses: Linux 5.4 (97%), Linux 4.15 (94%)
+No exact OS matches for host (If you know what OS it is,
+  see https://nmap.org/submit/ )
+
+<span class="cm"># CPE = Common Platform Enumeration — standard identifier</span>
+<span class="cm"># cpe:/o: = operating system</span>
+<span class="cm"># cpe:/a: = application</span>
+<span class="cm"># cpe:/h: = hardware</span></code></pre>
+
+<h2>OS Detection Limitations</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Limitation</th><th>Detail</th></tr></thead>
+  <tbody>
+    <tr><td>Requires open + closed port</td><td>If all ports filtered or all open, fingerprint is incomplete</td></tr>
+    <tr><td>Firewalls alter probes</td><td>Stateful firewall may modify TCP options, breaking fingerprint</td></tr>
+    <tr><td>NAT/load balancer</td><td>Fingerprints the NAT device or LB, not the backend host</td></tr>
+    <tr><td>Virtualization</td><td>VMs may expose hypervisor TCP stack instead of guest OS</td></tr>
+    <tr><td>OS hardening</td><td>Modified TCP stack parameters can confuse fingerprinting</td></tr>
+    <tr><td>Low confidence</td><td>Unknown/unusual OS → broad range guess ("Linux 2.6.32 - 4.6")</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>OS Detection Options</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Flag</th><th>Effect</th><th>When to Use</th></tr></thead>
+  <tbody>
+    <tr><td><code>--osscan-limit</code></td><td>Only OS-detect hosts with ideal conditions</td><td>Subnet scans — skip hosts likely to give bad results</td></tr>
+    <tr><td><code>--osscan-guess</code></td><td>Print best guess even with low confidence</td><td>When any OS info is better than none</td></tr>
+    <tr><td><code>--max-os-tries 1</code></td><td>Don't retry when conditions aren't ideal</td><td>Faster scans where OS accuracy is secondary</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>OS Fingerprints — Common Results</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>OS Details Output</th><th>Typical Indicator</th></tr></thead>
+  <tbody>
+    <tr><td>Linux 5.4 - 5.15</td><td>Ubuntu 20.04/22.04, Debian 11, modern distros</td></tr>
+    <tr><td>Linux 4.15</td><td>Ubuntu 18.04</td></tr>
+    <tr><td>Windows 10 1703 - 21H2</td><td>Modern Windows 10/11 workstation</td></tr>
+    <tr><td>Windows Server 2019</td><td>Server 2019 / Windows 10 1809</td></tr>
+    <tr><td>Cisco IOS 15.x</td><td>Cisco router or switch</td></tr>
+    <tr><td>FreeBSD 12.x</td><td>pfSense firewall, FreeBSD server</td></tr>
+    <tr><td>ESXi 6.x - 7.x</td><td>VMware hypervisor (management port)</td></tr>
+  </tbody>
+</table>
+</div>
+</article>
+</template>
+
+<template id="tpl-banner-grab">
+<article class="topic">
+<h1>04 · Banner Grabbing</h1>
+<hr class="divider">
+
+<p>Service banners are text strings that many services send immediately upon connection, containing version information, hostname, and other identifying data. Banner grabbing is a quick way to confirm service identity and version without full version detection probes.</p>
+
+<h2>Nmap Banner Grabbing with -sV</h2>
+<pre><code><span class="cm"># -sV reads banners as part of version detection</span>
+nmap -sV -p 21,22,25,110,143,3306 192.168.1.10
+
+<span class="cm"># Use --script=banner for explicit banner reading</span>
+nmap --script=banner 192.168.1.10
+
+<span class="cm"># Banner script on specific ports</span>
+nmap --script=banner -p 21,22,25,80,110 192.168.1.10</code></pre>
+
+<h2>NSE Banner Script Output</h2>
+<pre><code>$ nmap --script=banner -p 21,22,25,110,143 192.168.1.10
+
+PORT    STATE SERVICE
+21/tcp  open  ftp
+| banner: 220 ProFTPD 1.3.5 Server (Debian) [::ffff:192.168.1.10]
+22/tcp  open  ssh
+| banner: SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.6
+25/tcp  open  smtp
+| banner: 220 mail.corp.local ESMTP Postfix (Ubuntu)
+110/tcp open  pop3
+| banner: +OK Dovecot ready.
+143/tcp open  imap
+| banner: * OK [CAPABILITY IMAP4rev1 LITERAL+] Dovecot ready.
+
+<span class="cm"># Banners reveal:  product name, version, OS, hostname</span>
+<span class="cm"># ProFTPD 1.3.5 → check CVE database for known vulnerabilities</span></code></pre>
+
+<h2>Manual Banner Grabbing — nc / telnet / openssl</h2>
+<pre><code><span class="cm"># nc (netcat) — raw TCP banner grab</span>
+nc -v 192.168.1.10 21          <span class="cm"># FTP</span>
+nc -v 192.168.1.10 25          <span class="cm"># SMTP</span>
+nc -v 192.168.1.10 110         <span class="cm"># POP3</span>
+
+<span class="cm"># HTTP banner via nc</span>
+echo -e "HEAD / HTTP/1.0\r\n\r\n" | nc 192.168.1.10 80
+
+<span class="cm"># HTTPS / SSL banner via openssl</span>
+openssl s_client -connect 192.168.1.10:443 2>/dev/null | head -20
+
+<span class="cm"># SSH version fingerprint</span>
+nc 192.168.1.10 22   <span class="cm"># reads banner then Ctrl+C</span>
+<span class="cm"># Output: SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.6</span>
+
+<span class="cm"># SMTP EHLO command</span>
+nc 192.168.1.10 25
+EHLO test.local
+<span class="cm"># Reveals: Postfix version, supported extensions, hostname</span></code></pre>
+
+<h2>HTTP Server Headers</h2>
+<pre><code><span class="cm"># Nmap http-server-header script</span>
+nmap --script=http-server-header -p 80,443,8080,8443 192.168.1.10
+
+<span class="cm"># Combined with title grab</span>
+nmap --script=http-title,http-server-header -p 80,443 192.168.1.10
+
+<span class="cm"># Sample output:</span>
+80/tcp open  http
+| http-server-header: Apache/2.4.52 (Ubuntu)
+| http-title: Corporate Intranet — Login
+
+443/tcp open  ssl/http
+| http-server-header: nginx/1.18.0 (Ubuntu)
+| http-title: Company VPN Portal</code></pre>
+
+<h2>Identifying Vulnerable Versions from Banners</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Banner</th><th>Notable Vulnerability</th><th>CVE</th></tr></thead>
+  <tbody>
+    <tr><td>vsftpd 2.3.4</td><td>Backdoor — PASS :) triggers shell on port 6200</td><td>CVE-2011-2523</td></tr>
+    <tr><td>OpenSSH &lt; 7.2p2</td><td>Username enumeration</td><td>CVE-2016-6210</td></tr>
+    <tr><td>ProFTPD 1.3.3c</td><td>Backdoor in downloaded source</td><td>N/A</td></tr>
+    <tr><td>Apache 2.4.49</td><td>Path traversal / RCE</td><td>CVE-2021-41773</td></tr>
+    <tr><td>Apache 2.4.50</td><td>Path traversal bypass (incomplete fix)</td><td>CVE-2021-42013</td></tr>
+    <tr><td>nginx &lt; 1.1.17</td><td>Chunked encoding memory corruption</td><td>CVE-2012-1180</td></tr>
+    <tr><td>Postfix &lt; 3.6.14</td><td>SMTP smuggling</td><td>CVE-2023-51764</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout note">Always cross-reference identified versions against the NVD (nvd.nist.gov), Exploit-DB (exploit-db.com), and the vendor's security advisories. Banner versions may be modified/suppressed by security-hardened deployments.</div>
+</article>
+</template>
+
+<template id="tpl-aggressive">
+<article class="topic">
+<h1>05 · Aggressive Flag (-A)</h1>
+<hr class="divider">
+
+<div class="callout warn"><strong>-A is loud</strong> — it runs multiple scan types simultaneously and generates significantly more traffic than a simple port scan. Use only on networks/hosts where you have authorization and where IDS noise is acceptable.</div>
+
+<h2>What -A Enables</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Component</th><th>Flag</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>Version detection</td><td><code>-sV</code></td><td>Probe open ports to identify service and version</td></tr>
+    <tr><td>Default scripts</td><td><code>-sC</code></td><td>Run all NSE scripts in the "default" category</td></tr>
+    <tr><td>OS detection</td><td><code>-O</code></td><td>TCP/IP stack fingerprinting</td></tr>
+    <tr><td>Traceroute</td><td><code>--traceroute</code></td><td>Trace network path to target after scan</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Command</h2>
+<pre><code><span class="cm"># Aggressive scan — equivalent to -sV -sC -O --traceroute</span>
+sudo nmap -A 192.168.1.10
+
+<span class="cm"># Common combination: specific ports + aggressive</span>
+sudo nmap -A -p 22,80,443,3306,8080 192.168.1.10
+
+<span class="cm"># All ports + aggressive (very comprehensive, very slow)</span>
+sudo nmap -A -p- 192.168.1.10
+
+<span class="cm"># Aggressive with timing (fast network)</span>
+sudo nmap -A -T4 192.168.1.10</code></pre>
+
+<h2>Example -A Output</h2>
+<pre><code>$ sudo nmap -A -p 22,80,3306 192.168.1.10
+
+PORT     STATE SERVICE VERSION
+22/tcp   open  ssh     OpenSSH 8.9p1 Ubuntu 3ubuntu0.6
+| ssh-hostkey:
+|   3072 4e:c8:...:... (RSA)
+|   256 7f:ab:...:... (ECDSA)
+|_  256 5e:cd:...:... (ED25519)
+80/tcp   open  http    Apache httpd 2.4.52 ((Ubuntu))
+|_http-title: Login — Corporate Intranet
+|_http-server-header: Apache/2.4.52 (Ubuntu)
+| http-methods:
+|_  Supported Methods: GET HEAD POST OPTIONS
+3306/tcp open  mysql   MySQL 8.0.36
+| mysql-info:
+|   Protocol: 10
+|   Version: 8.0.36
+|   Thread ID: 48
+|_  Status: Autocommit
+
+Running: Linux 5.X
+OS details: Linux 5.4 - 5.11
+
+TRACEROUTE
+HOP RTT     ADDRESS
+1   1.02 ms 192.168.1.1
+2   1.88 ms 192.168.1.10
+
+<span class="cm"># NSE scripts auto-ran: ssh-hostkey, http-title, http-methods, mysql-info</span></code></pre>
+
+<h2>-A vs Manual Combination</h2>
+<pre><code><span class="cm"># These two commands are equivalent:</span>
+sudo nmap -A 192.168.1.10
+
+sudo nmap -sV -sC -O --traceroute 192.168.1.10
+
+<span class="cm"># Advantage of explicit flags: can tune each component</span>
+sudo nmap -sV --version-intensity 9 -sC -O --osscan-guess --traceroute 192.168.1.10
+<span class="cm"># -A doesn't let you set version intensity or osscan-guess directly</span></code></pre>
+
+<h2>When to Use -A</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Situation</th><th>Use -A?</th><th>Reason</th></tr></thead>
+  <tbody>
+    <tr><td>CTF enumeration</td><td>Yes</td><td>Fast comprehensive info on single target</td></tr>
+    <tr><td>Pentest initial recon (single host)</td><td>Yes</td><td>Gets OS + services + scripts in one shot</td></tr>
+    <tr><td>Pentest — need stealth</td><td>No</td><td>Use -sS -sV separately; skip -sC and -O</td></tr>
+    <tr><td>Large subnet scan</td><td>No</td><td>Too slow and noisy; run -sn first then -sV on targets</td></tr>
+    <tr><td>SOC: verify firewall exposure</td><td>No</td><td>Use -sA or targeted -sS -p; no need for full -A</td></tr>
+    <tr><td>Vulnerability assessment (single server)</td><td>Yes with --script=vuln</td><td>Add vuln scripts: <code>nmap -A --script=vuln target</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Reducing -A Noise</h2>
+<pre><code><span class="cm"># Skip OS detection if not needed (reduces probes)</span>
+nmap -sV -sC --traceroute 192.168.1.10   <span class="cm"># no -O</span>
+
+<span class="cm"># Skip traceroute (removes ICMP TTL probes)</span>
+nmap -sV -sC -O 192.168.1.10
+
+<span class="cm"># Lower version intensity for faster scan</span>
+nmap -sV --version-light -sC 192.168.1.10
+
+<span class="cm"># Run only specific default scripts instead of all</span>
+nmap -sV --script=http-title,ssh-hostkey,banner 192.168.1.10</code></pre>
+</article>
+</template>
+
+<script src="js/app.js"></script>
+</body>
+</html>

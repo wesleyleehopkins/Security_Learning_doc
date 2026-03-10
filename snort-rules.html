@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rule Syntax — Snort — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" aria-label="Toggle sidebar">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 5h14M3 10h14M3 15h14"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html" class="active">Snort</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">Rule Syntax</div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  </aside>
+  <main class="content" id="content-area"></main>
+</div>
+
+<!-- ════════════════════════ Rule Header ════════════════════════════════════ -->
+<template id="tpl-rule-header">
+<article class="topic">
+  <h2>Rule Header</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-note">The rule header operates at L3 (src/dst IP addresses, protocol field) and L4 (src/dst port numbers, direction). The options block adds L7 content inspection on top of the header match.</span>
+  </div>
+  <p>Every Snort rule has two parts: a <strong>header</strong> and an <strong>options block</strong> in parentheses. The header defines what traffic to match at the packet level; the options refine the match and define the response.</p>
+
+  <pre><code>action  proto  src_ip  src_port  direction  dst_ip  dst_port  (options)
+
+alert   tcp    $EXTERNAL_NET  any  ->  $HTTP_SERVERS  $HTTP_PORTS  (msg:"Example"; sid:1000001; rev:1;)</code></pre>
+
+  <h3>Action</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Action</th><th>Mode</th><th>Behavior</th></tr></thead>
+      <tbody>
+        <tr><td><code>alert</code></td><td>NIDS &amp; IPS</td><td>Generate an alert and log the packet</td></tr>
+        <tr><td><code>log</code></td><td>NIDS &amp; IPS</td><td>Log the packet without generating an alert</td></tr>
+        <tr><td><code>pass</code></td><td>NIDS &amp; IPS</td><td>Ignore the packet — used to whitelist traffic</td></tr>
+        <tr><td><code>drop</code></td><td>IPS only</td><td>Block the packet and generate an alert (inline mode required)</td></tr>
+        <tr><td><code>reject</code></td><td>IPS only</td><td>Block packet, generate alert, send TCP RST or ICMP unreachable to sender</td></tr>
+        <tr><td><code>sdrop</code></td><td>IPS only</td><td>Block silently — no alert generated</td></tr>
+        <tr><td><code>activate</code></td><td>NIDS</td><td>Alert and enable a dynamic rule</td></tr>
+        <tr><td><code>dynamic</code></td><td>NIDS</td><td>Stays dormant until activated by an activate rule</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Protocol</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Protocol</th><th>Matches</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>tcp</code></td><td>TCP packets</td><td>Supports stream reassembly rules via <code>flow</code> option</td></tr>
+        <tr><td><code>udp</code></td><td>UDP packets</td><td>Stateless — no stream reassembly</td></tr>
+        <tr><td><code>icmp</code></td><td>ICMP packets</td><td>Supports <code>itype</code> and <code>icode</code> options</td></tr>
+        <tr><td><code>ip</code></td><td>All IP packets</td><td>Matches any IP protocol including TCP, UDP, ICMP</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>IP Address Syntax</h3>
+  <pre><code>any                          <span class="cm"># Any IP address</span>
+192.168.1.1                  <span class="cm"># Single host</span>
+192.168.1.0/24               <span class="cm"># CIDR network</span>
+[192.168.1.0/24,10.0.0.0/8] <span class="cm"># List (comma-separated, square brackets)</span>
+!192.168.1.1                 <span class="cm"># Negation — NOT this IP</span>
+!192.168.1.0/24              <span class="cm"># NOT this network</span>
+$HOME_NET                    <span class="cm"># Variable (defined in snort.conf)</span>
+$EXTERNAL_NET                <span class="cm"># Variable — typically !$HOME_NET</span>
+!$HOME_NET                   <span class="cm"># NOT home net (same as $EXTERNAL_NET)</span></code></pre>
+
+  <h3>Port Syntax</h3>
+  <pre><code>any                          <span class="cm"># Any port</span>
+80                           <span class="cm"># Single port</span>
+[80,443,8080,8443]           <span class="cm"># Port list</span>
+1:1024                       <span class="cm"># Port range 1 through 1024</span>
+1024:                        <span class="cm"># Port 1024 and above</span>
+:1023                        <span class="cm"># Port 1023 and below</span>
+!22                          <span class="cm"># NOT port 22</span>
+!80                          <span class="cm"># NOT port 80</span>
+$HTTP_PORTS                  <span class="cm"># Variable (80,8080,8000,8443,...)</span>
+$ORACLE_PORTS                <span class="cm"># Variable (1521)</span></code></pre>
+
+  <h3>Direction Operator</h3>
+  <pre><code>->     <span class="cm"># Unidirectional: source → destination</span>
+&lt;&gt;     <span class="cm"># Bidirectional: matches both src→dst AND dst→src</span>
+
+<span class="cm"># Example: detect traffic in either direction between two hosts</span>
+alert tcp 192.168.1.0/24 any &lt;&gt; 10.0.0.5 445 (msg:"SMB Traffic Both Ways"; sid:1000010; rev:1;)</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Write a valid rule header with correct L3 and L4 fields</h4>
+      <ul>
+        <li>The protocol field (tcp/udp/icmp/ip) is an L4 designator — it controls which L4 segments Snort evaluates</li>
+        <li>Source and destination IPs are L3 addresses — use CIDR notation for subnets and <code>!</code> to negate</li>
+        <li>Ports are L4 — use <code>any</code> for unrestricted matching or a number/range for specific services</li>
+      </ul>
+      <pre><code><span class="cm"># Basic rule: alert on any TCP from external to HTTP servers on port 80</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS 80 (msg:"Test"; sid:1000001; rev:1;)</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Use variables and bidirectional operator effectively</h4>
+      <ul>
+        <li>Always use <code>$HOME_NET</code>/<code>$EXTERNAL_NET</code> variables instead of hard-coded IPs — rules become portable across environments</li>
+        <li>The <code>&lt;&gt;</code> bidirectional operator matches traffic in both directions — useful for monitoring lateral movement between two internal hosts</li>
+        <li>Port variables like <code>$HTTP_PORTS</code> ensure rules fire on non-standard ports (8080, 8443) not just 80</li>
+      </ul>
+      <pre><code><span class="cm"># Bidirectional SMB monitoring between two internal hosts</span>
+alert tcp 192.168.56.30 any &lt;&gt; 192.168.56.20 445 (msg:"Internal SMB Traffic"; sid:1000002; rev:1;)</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Rule ordering and action priority</h4>
+      <ul>
+        <li>In default mode, Snort processes rules in order: <code>pass</code> → <code>drop</code> → <code>sdrop</code> → <code>reject</code> → <code>alert</code> → <code>log</code></li>
+        <li>Use <code>-o</code> flag to change order to pass → alert → log — useful when you want pass rules to take priority over alert rules for whitelisting</li>
+        <li><code>activate</code>/<code>dynamic</code> rule pairs allow conditional activation — detect a trigger event then capture subsequent packets on that flow</li>
+      </ul>
+      <pre><code><span class="cm"># Pass rule to whitelist a trusted scanner before alert rules</span>
+pass tcp 192.168.56.200 any -> $HOME_NET any (msg:"Authorized Scanner"; sid:9000001; rev:1;)</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ════════════════════════ Payload Options ════════════════════════════════ -->
+<template id="tpl-payload-options">
+<article class="topic">
+  <h2>Payload Detection Options</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Payload options operate exclusively at L7 — they inspect the application-layer data carried inside the L4 TCP/UDP segment after the L3 IP header and L4 transport header are stripped.</span>
+  </div>
+  <p>Payload options match against the packet data (application layer content). These are the most powerful and commonly used rule options for detecting specific attacks.</p>
+
+  <h3>content</h3>
+  <p>The primary payload matching option. Searches for a literal string or hex pattern in the packet payload.</p>
+  <pre><code><span class="cm"># Literal string (case-sensitive by default)</span>
+content:"SELECT";
+
+<span class="cm"># Hex bytes (pipe-delimited)</span>
+content:"|90 90 90 90|";     <span class="cm"># NOP sled (shellcode indicator)</span>
+
+<span class="cm"># Mixed: literal string + hex</span>
+content:"User-Agent|3a 20|curl";  <span class="cm"># 0x3a 0x20 = ": " (colon space)</span>
+
+<span class="cm"># Multiple content matches (all must match, in order)</span>
+content:"SELECT"; content:"FROM"; content:"WHERE";</code></pre>
+
+  <h3>Content Modifiers</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Modifier</th><th>Applies To</th><th>Description</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td><code>nocase</code></td><td>Previous content</td><td>Case-insensitive match</td><td><code>content:"select"; nocase;</code></td></tr>
+        <tr><td><code>rawbytes</code></td><td>Previous content</td><td>Match raw bytes before preprocessing (disables HTTP decoding)</td><td><code>content:"%73elect"; rawbytes;</code></td></tr>
+        <tr><td><code>depth:N</code></td><td>Previous content</td><td>Look only in first N bytes of payload</td><td><code>content:"GET"; depth:4;</code></td></tr>
+        <tr><td><code>offset:N</code></td><td>Previous content</td><td>Start searching N bytes from start of payload</td><td><code>content:"SELECT"; offset:20;</code></td></tr>
+        <tr><td><code>distance:N</code></td><td>Previous content</td><td>Start N bytes after end of previous match</td><td><code>content:"FROM"; distance:1;</code></td></tr>
+        <tr><td><code>within:N</code></td><td>Previous content</td><td>Must match within N bytes of previous match end</td><td><code>content:"FROM"; within:20;</code></td></tr>
+        <tr><td><code>http_uri</code></td><td>Previous content</td><td>Match in normalized HTTP URI</td><td><code>content:"/admin"; http_uri;</code></td></tr>
+        <tr><td><code>http_method</code></td><td>Previous content</td><td>Match in HTTP method field</td><td><code>content:"POST"; http_method;</code></td></tr>
+        <tr><td><code>http_header</code></td><td>Previous content</td><td>Match in HTTP header section</td><td><code>content:"User-Agent"; http_header;</code></td></tr>
+        <tr><td><code>http_client_body</code></td><td>Previous content</td><td>Match in HTTP POST body</td><td><code>content:"password="; http_client_body;</code></td></tr>
+        <tr><td><code>fast_pattern</code></td><td>Previous content</td><td>Mark this content as the fast-pattern matcher (optimization)</td><td><code>content:"UNION SELECT"; fast_pattern;</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>pcre — Perl Compatible Regular Expressions</h3>
+  <pre><code><span class="cm"># PCRE syntax: /pattern/flags</span>
+<span class="cm"># Flags: i (case-insensitive), s (dot matches newline), m (multiline)</span>
+<span class="cm">#        x (ignore whitespace), A (anchored), G (relative), R (relative to last match)</span>
+
+<span class="cm"># Match SQL UNION SELECT (case-insensitive, variations)</span>
+pcre:"/union\s+select/i";
+
+<span class="cm"># Match base64-encoded PowerShell command in URL</span>
+pcre:"/powershell.*-[eE]ncodedCommand/i";
+
+<span class="cm"># Match any .exe or .dll download attempt</span>
+pcre:"/\.(exe|dll|bat|ps1)(\?|$|\s)/i";
+
+<span class="cm"># Match IP address in Host header (suspicious — real domains use names)</span>
+pcre:"/^Host:\s*\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/m";</code></pre>
+
+  <h3>byte_test — Numeric Value Testing</h3>
+  <pre><code><span class="cm"># byte_test:bytes,operator,value,offset[,relative][,big|little][,string][,hex|dec|oct]</span>
+
+<span class="cm"># Test if byte at offset 0 equals 0x41 ("A")</span>
+byte_test:1,=,0x41,0;
+
+<span class="cm"># Test if 2-byte value at offset 4 is greater than 1000</span>
+byte_test:2,&gt;,1000,4;
+
+<span class="cm"># Test if 4-byte big-endian value at offset 0 is 0xDEADBEEF</span>
+byte_test:4,=,0xDEADBEEF,0,big;</code></pre>
+
+  <h3>dsize — Packet Data Size</h3>
+  <pre><code><span class="cm"># Match packets where payload is exactly 0 bytes</span>
+dsize:0;
+
+<span class="cm"># Match large payloads (possible exfil or overflow)</span>
+dsize:&gt;1460;
+
+<span class="cm"># Match a specific size range</span>
+dsize:100&lt;&gt;500;</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Use content and nocase for basic L7 string matching</h4>
+      <ul>
+        <li><code>content:"SELECT"</code> matches the literal string in the L7 payload — case-sensitive by default</li>
+        <li>Add <code>nocase</code> after the content option to match regardless of capitalization (<code>select</code>, <code>SELECT</code>, <code>Select</code>)</li>
+        <li>Multiple content options in one rule must ALL match, in the order specified, before the rule fires</li>
+      </ul>
+      <pre><code>alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  msg:"SQL Keywords in Payload";
+  content:"UNION"; nocase;
+  content:"SELECT"; nocase; distance:0;
+  sid:1000010; rev:1;)</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Combine http_uri/http_header stickybuffers with content modifiers</h4>
+      <ul>
+        <li><code>http_uri</code> tells Snort to search only the normalized URI portion of the L7 HTTP request — reduces false positives from body or headers</li>
+        <li><code>fast_pattern</code> marks one content string as the primary pattern for the MPSE engine — use on the longest or rarest string for performance</li>
+        <li><code>distance</code> and <code>within</code> create positional anchors between consecutive content matches within L7 payload</li>
+      </ul>
+      <pre><code>content:"UNION"; http_uri; nocase; fast_pattern;
+content:"SELECT"; http_uri; nocase; distance:0; within:20;</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Write PCRE patterns for complex L7 evasion scenarios</h4>
+      <ul>
+        <li>URL-encoded injection characters (%27 = single quote, %20 = space) bypass naive content matches — use PCRE <code>/(\%27|\')/</code> to catch both forms</li>
+        <li>Use PCRE <code>R</code> and <code>G</code> flags for matching relative to the end of the previous content match</li>
+        <li>Combine <code>content:"UNION"</code> (fast-pattern) with a PCRE for the complex variant — the fast-pattern pre-filters at MPSE speed, then PCRE verifies</li>
+      </ul>
+      <pre><code><span class="cm"># Detect URL-encoded UNION SELECT with flexible whitespace</span>
+content:"UNION"; http_uri; nocase; fast_pattern;
+pcre:"/union\s+(all\s+)?select/Ui"; http_uri;</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ════════════════════════ Non-Payload Options ════════════════════════════ -->
+<template id="tpl-non-payload-options">
+<article class="topic">
+  <h2>Non-Payload &amp; Flow Options</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-note">Non-payload options match on L3 header fields (TTL, IP ID, fragmentation flags) and L4 connection state (TCP flags, flow direction, stream reassembly) — no L7 content inspection required.</span>
+  </div>
+  <p>Non-payload options match on packet header fields and connection state without inspecting the application layer content.</p>
+
+  <h3>flow — Connection State</h3>
+  <p>The <code>flow</code> option is critical for TCP rules — it restricts matching to specific connection states, preventing false positives and enabling accurate direction tracking. Requires <code>stream5</code> preprocessor.</p>
+  <pre><code><span class="cm"># Established TCP connections only (most HTTP/HTTPS rules use this)</span>
+flow:established,to_server;
+
+<span class="cm"># Keywords:</span>
+to_server / from_client    <span class="cm"># Packet traveling from client to server</span>
+to_client / from_server    <span class="cm"># Packet traveling from server to client</span>
+established                <span class="cm"># Match on established TCP connections only</span>
+stateless                  <span class="cm"># Match regardless of TCP state</span>
+no_stream                  <span class="cm"># Match on non-reassembled packets only</span>
+only_stream                <span class="cm"># Match on reassembled stream data only</span>
+
+<span class="cm"># Common combinations:</span>
+flow:established,to_server;   <span class="cm"># Client → Server (requests, attacks going in)</span>
+flow:established,to_client;   <span class="cm"># Server → Client (responses, data going out)</span>
+flow:stateless;               <span class="cm"># SYN scans, malformed TCP (no state)</span></code></pre>
+
+  <h3>flags — TCP Flags</h3>
+  <pre><code><span class="cm"># Flag characters: F=FIN, S=SYN, R=RST, P=PSH, A=ACK, U=URG, 0=No flags</span>
+
+flags:S;          <span class="cm"># SYN only (new connection)</span>
+flags:SA;         <span class="cm"># SYN + ACK (server response to SYN)</span>
+flags:R;          <span class="cm"># RST (reset)</span>
+flags:SF;         <span class="cm"># SYN + FIN (invalid combination — scan indicator)</span>
+flags:FPU;        <span class="cm"># FIN + PSH + URG (Xmas scan)</span>
+flags:0;          <span class="cm"># No flags set (Null scan)</span>
+flags:SA,12;      <span class="cm"># SYN+ACK with mask 12 (bits 3+4 checked)</span></code></pre>
+
+  <h3>ICMP Options</h3>
+  <pre><code><span class="cm"># itype — ICMP type</span>
+itype:8;    <span class="cm"># Echo request (ping)</span>
+itype:0;    <span class="cm"># Echo reply</span>
+itype:3;    <span class="cm"># Destination unreachable</span>
+itype:11;   <span class="cm"># Time exceeded (traceroute)</span>
+
+<span class="cm"># icode — ICMP code (within a type)</span>
+icode:0;    <span class="cm"># For type 3: Net unreachable</span>
+icode:3;    <span class="cm"># For type 3: Port unreachable</span></code></pre>
+
+  <h3>IP Header Options</h3>
+  <pre><code>ttl:&lt;10;              <span class="cm"># TTL less than 10 (possible spoofed/malformed)</span>
+ttl:128;              <span class="cm"># TTL exactly 128 (Windows default)</span>
+tos:16;               <span class="cm"># Type of Service value</span>
+id:31337;             <span class="cm"># IP ID field (hping signature, etc.)</span>
+fragbits:M;           <span class="cm"># More fragments flag set</span>
+fragbits:D;           <span class="cm"># Don't fragment flag set</span>
+ipopts:rr;            <span class="cm"># IP record route option set</span>
+ipopts:lsrr;          <span class="cm"># Loose source routing</span>
+ipopts:ssrr;          <span class="cm"># Strict source routing</span></code></pre>
+
+  <h3>flowbits — Cross-Rule State Tracking</h3>
+  <pre><code><span class="cm"># flowbits allow rules to communicate state across packets in a session</span>
+<span class="cm"># Useful for multi-stage attacks (detect login → detect command on same session)</span>
+
+<span class="cm"># Rule 1: Set a flag when login page is requested</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  msg:"HTTP Login Page Accessed";
+  flow:established,to_server;
+  content:"/login.php"; http_uri;
+  flowbits:set,http.login_page;
+  flowbits:noalert;
+  sid:1000020; rev:1;
+)
+
+<span class="cm"># Rule 2: Alert only if SQL injection comes AFTER login page visit</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  msg:"SQL Injection After Login";
+  flow:established,to_server;
+  content:"UNION"; http_uri; nocase;
+  flowbits:isset,http.login_page;
+  sid:1000021; rev:1;
+)</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Use flow and flags to match specific L4 connection states</h4>
+      <ul>
+        <li><code>flow:established,to_server</code> only matches packets in established TCP connections heading toward the server — eliminates alerting on SYN/SYN-ACK setup</li>
+        <li><code>flags:S</code> matches only SYN packets — useful for detecting new connection attempts to restricted ports</li>
+        <li><code>flow:stateless</code> is required for scan detection rules — SYN scan packets have no established state</li>
+      </ul>
+      <pre><code><span class="cm"># Only match on established HTTP sessions going to the server</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS 80 (
+  flow:established,to_server;
+  content:"GET"; http_method;
+  msg:"HTTP GET Request"; sid:1000020; rev:1;)</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Use itype/icode for specific ICMP-based detection</h4>
+      <ul>
+        <li>ICMP type and code are L3-level fields — <code>itype:8</code> matches echo requests (ping); <code>itype:11</code> matches time-exceeded (traceroute)</li>
+        <li>Large ICMP payloads (<code>dsize:>800</code>) can indicate ICMP tunneling used to exfiltrate data over blocked firewall paths</li>
+        <li>TTL-based rules (<code>ttl:&lt;5</code>) catch potentially spoofed or crafted packets that are unlikely from legitimate hosts</li>
+      </ul>
+      <pre><code><span class="cm"># Detect ICMP tunneling: echo request with unusually large payload</span>
+alert icmp $EXTERNAL_NET any -> $HOME_NET any (
+  itype:8; dsize:>500;
+  msg:"ICMP Oversized Payload - Possible Tunneling"; sid:1000030; rev:1;)</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Multi-stage detection with flowbits</h4>
+      <ul>
+        <li>Flowbits persist state across multiple packets in the same L4 TCP session — enabling multi-step attack detection</li>
+        <li>Use <code>flowbits:noalert</code> on the first stage rule to set the flag silently without generating noise</li>
+        <li>Combine flowbits with IP reputation lists to detect a known malicious IP first, then alert on all subsequent traffic from that IP in the session</li>
+      </ul>
+      <pre><code><span class="cm"># Stage 1: silently flag the session on /admin access</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  flow:established,to_server; content:"/admin"; http_uri;
+  flowbits:set,http.admin_access; flowbits:noalert;
+  sid:1000031; rev:1;)
+<span class="cm"># Stage 2: only alert on POST to /admin if Stage 1 was seen</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  flow:established,to_server; content:"POST"; http_method;
+  flowbits:isset,http.admin_access;
+  msg:"POST to Admin After Admin Access"; sid:1000032; rev:1;)</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ════════════════════════ General Options ════════════════════════════════ -->
+<template id="tpl-general-options">
+<article class="topic">
+  <h2>General &amp; Post-Detection Options</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">General options apply across all OSI layers — they define rule identity (SID, msg), priority, external references, and rate-limiting for alerts generated from L3/L4/L7 match conditions.</span>
+  </div>
+  <p>These options define rule metadata, unique identifiers, classification, and how alerts are rate-limited to prevent alert storms.</p>
+
+  <h3>Identification Options</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Option</th><th>Required?</th><th>Description</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td><code>msg</code></td><td>Yes</td><td>Human-readable alert message shown in alert output</td><td><code>msg:"SQL Injection Attempt";</code></td></tr>
+        <tr><td><code>sid</code></td><td>Yes</td><td>Unique rule ID (1–999999 reserved; use 1000000+ for custom)</td><td><code>sid:1000001;</code></td></tr>
+        <tr><td><code>rev</code></td><td>Yes</td><td>Rule revision number — increment on each update</td><td><code>rev:1;</code></td></tr>
+        <tr><td><code>gid</code></td><td>No</td><td>Generator ID — 1 for rules engine (default, rarely set manually)</td><td><code>gid:1;</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Classification Options</h3>
+  <pre><code><span class="cm"># classtype — maps to classification.config for priority and alert type</span>
+classtype:attempted-admin;         <span class="cm"># Priority 1 — High</span>
+classtype:web-application-attack;  <span class="cm"># Priority 1 — High</span>
+classtype:attempted-user;          <span class="cm"># Priority 1 — High</span>
+classtype:shellcode-detect;        <span class="cm"># Priority 1 — High</span>
+classtype:successful-admin;        <span class="cm"># Priority 1 — High</span>
+classtype:denial-of-service;       <span class="cm"># Priority 2 — Medium</span>
+classtype:attempted-dos;           <span class="cm"># Priority 2 — Medium</span>
+classtype:network-scan;            <span class="cm"># Priority 3 — Low</span>
+classtype:icmp-event;              <span class="cm"># Priority 3 — Low</span>
+classtype:misc-activity;           <span class="cm"># Priority 3 — Low</span>
+classtype:policy-violation;        <span class="cm"># Priority 2 — Medium</span>
+classtype:trojan-activity;         <span class="cm"># Priority 1 — High</span>
+
+<span class="cm"># priority — override classtype priority manually (1=highest, 10=lowest)</span>
+priority:1;   <span class="cm"># Most urgent</span>
+priority:3;   <span class="cm"># Low severity</span></code></pre>
+
+  <h3>reference — External Links</h3>
+  <pre><code><span class="cm"># Link alert to external vulnerability databases</span>
+reference:cve,2021-44228;          <span class="cm"># CVE number</span>
+reference:url,exploit-db.com/exploits/12345;  <span class="cm"># URL reference</span>
+reference:bugtraq,12345;           <span class="cm"># BugTraq ID</span>
+reference:arachnids,101;           <span class="cm"># Arachnids ID</span>
+reference:nessus,12345;            <span class="cm"># Nessus plugin ID</span>
+
+<span class="cm"># Multiple references allowed</span>
+reference:cve,2021-44228; reference:url,logging.apache.org/log4j/2.x/security.html;</code></pre>
+
+  <h3>threshold — Alert Rate Limiting</h3>
+  <pre><code><span class="cm"># Prevent alert storms from noisy rules</span>
+<span class="cm"># threshold:type TYPE, track by_src|by_dst, count N, seconds S;</span>
+
+<span class="cm"># type limit: alert at most N times per S seconds per tracking unit</span>
+threshold:type limit, track by_src, count 1, seconds 60;
+<span class="cm"># ^ Alert only ONCE per source IP per 60 seconds</span>
+
+<span class="cm"># type threshold: alert every Nth event per S seconds</span>
+threshold:type threshold, track by_src, count 5, seconds 60;
+<span class="cm"># ^ Alert every 5th occurrence from a given source per 60 seconds</span>
+
+<span class="cm"># type both: alert once per S seconds ONLY if seen N times</span>
+threshold:type both, track by_src, count 10, seconds 60;
+<span class="cm"># ^ Alert only if source hits 10 times in 60s, then alert once</span></code></pre>
+
+  <h3>detection_filter — Conditional Alerting</h3>
+  <pre><code><span class="cm"># Like threshold but fires ONLY after N occurrences in S seconds</span>
+<span class="cm"># Useful for brute force detection — alert after N failed attempts</span>
+<span class="cm"># detection_filter:track by_src|by_dst, count N, seconds S;</span>
+
+<span class="cm"># Fire alert only after 5 hits from the same source in 30 seconds</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  msg:"HTTP Brute Force Detected";
+  flow:established,to_server;
+  content:"/login"; http_uri;
+  content:"POST"; http_method;
+  detection_filter:track by_src, count 5, seconds 30;
+  classtype:attempted-admin;
+  sid:1000030; rev:1;
+)</code></pre>
+
+  <div class="callout note">
+    <strong>threshold vs detection_filter:</strong> <code>threshold</code> can appear in both rules and separately in <code>threshold.conf</code>. <code>detection_filter</code> must be in the rule itself. Use <code>detection_filter</code> for brute force detection; use <code>threshold</code> in <code>threshold.conf</code> to globally suppress noisy SIDs.
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Every rule needs msg, sid, and rev</h4>
+      <ul>
+        <li><code>msg</code> is the human-readable alert text — write something descriptive that appears in alert logs</li>
+        <li><code>sid</code> must be unique — use 1000001+ for custom rules to avoid conflicts with official Snort SIDs</li>
+        <li><code>rev</code> starts at 1 and increments each time you edit the rule — helps track which version of a rule is deployed</li>
+      </ul>
+      <pre><code>alert tcp any any -> any 80 (msg:"HTTP Traffic Observed"; sid:1000050; rev:1;)</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Use classtype and reference to enrich alert context</h4>
+      <ul>
+        <li><code>classtype:web-application-attack</code> sets priority 1 and adds classification context to the alert output</li>
+        <li><code>reference:cve,2021-44228</code> links the alert to a specific CVE — invaluable when triaging alerts in a SIEM</li>
+        <li>Priority 1 alerts should generate immediate SOC response; priority 3 can be reviewed in batches</li>
+      </ul>
+      <pre><code>classtype:web-application-attack;
+reference:cve,2021-44228;
+priority:1;
+sid:1000051; rev:1;</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Rate-limit noisy rules without losing detection coverage</h4>
+      <ul>
+        <li><code>detection_filter:track by_src, count 5, seconds 30</code> requires 5 hits in 30s from the same L3 source IP before alerting — ideal for brute force detection</li>
+        <li>Use <code>threshold:type both</code> to alert once per timeframe only when a count threshold is reached — balances alert volume with detection fidelity</li>
+        <li>Manage global rate-limits in <code>threshold.conf</code> without touching individual rule files — keeps rules portable</li>
+      </ul>
+      <pre><code><span class="cm"># Brute force: only fire after 10 POST attempts in 30s</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  content:"POST"; http_method;
+  content:"/login"; http_uri;
+  detection_filter:track by_src, count 10, seconds 30;
+  classtype:attempted-admin; sid:1000052; rev:1;)</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ════════════════════════ Example Rules ══════════════════════════════════ -->
+<template id="tpl-example-rules">
+<article class="topic">
+  <h2>Real Attack Detection Examples</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Attack detection rules combine L3 src/dst IP scoping, L4 protocol and port targeting, and L7 payload content/PCRE patterns — all three layers work together to detect real attacks with low false positives.</span>
+  </div>
+  <p>Complete, syntactically correct Snort rules for common attack types. Each rule has every required field and uses proper variables.</p>
+
+  <h3>SQL Injection</h3>
+  <pre><code><span class="cm"># Classic UNION-based SQL injection in HTTP URI</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  msg:"SQL Injection UNION SELECT in URI";
+  flow:established,to_server;
+  content:"UNION"; http_uri; nocase; fast_pattern;
+  content:"SELECT"; http_uri; nocase; distance:0;
+  classtype:web-application-attack;
+  sid:1000100; rev:1;
+)
+
+<span class="cm"># SQL injection via POST body (login form)</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  msg:"SQL Injection in POST Body - OR 1=1";
+  flow:established,to_server;
+  content:"POST"; http_method;
+  pcre:"/(\%27|\')\s*(or|and)\s*(\%271|1\%3D1|\'1\'=\'1)/i"; http_client_body;
+  classtype:web-application-attack;
+  reference:cve,2007-0993;
+  sid:1000101; rev:1;
+)
+
+<span class="cm"># SQL error response from server (indicates injection success)</span>
+alert tcp $HTTP_SERVERS $HTTP_PORTS -> $EXTERNAL_NET any (
+  msg:"SQL Error Response - Possible Injection Success";
+  flow:established,to_client;
+  content:"You have an error in your SQL syntax"; nocase; fast_pattern;
+  classtype:web-application-attack;
+  sid:1000102; rev:1;
+)
+
+<span class="cm"># Blind SQL injection timing attack (SLEEP/BENCHMARK in URI)</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  msg:"SQL Injection Blind - SLEEP Function";
+  flow:established,to_server;
+  pcre:"/SLEEP\s*\(\s*\d+\s*\)/i";
+  classtype:web-application-attack;
+  sid:1000103; rev:1;
+)</code></pre>
+
+  <h3>Port Scan Detection</h3>
+  <pre><code><span class="cm"># SYN scan — SYN packets without established connection (sfportscan handles this better,</span>
+<span class="cm"># but this rule catches targeted SYN to specific ports)</span>
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (
+  msg:"TCP SYN Scan - Multiple Ports";
+  flags:S,12;
+  flow:stateless;
+  detection_filter:track by_src, count 20, seconds 10;
+  classtype:network-scan;
+  sid:1000200; rev:1;
+)
+
+<span class="cm"># NULL scan (no TCP flags)</span>
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (
+  msg:"TCP Null Scan";
+  flags:0;
+  classtype:network-scan;
+  sid:1000201; rev:1;
+)
+
+<span class="cm"># Xmas scan (FIN + PSH + URG)</span>
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (
+  msg:"TCP Xmas Scan";
+  flags:FPU;
+  classtype:network-scan;
+  sid:1000202; rev:1;
+)
+
+<span class="cm"># FIN scan</span>
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (
+  msg:"TCP FIN Scan";
+  flags:F,12;
+  classtype:network-scan;
+  sid:1000203; rev:1;
+)</code></pre>
+
+  <h3>ICMP Flood</h3>
+  <pre><code><span class="cm"># ICMP echo request flood from single source</span>
+alert icmp $EXTERNAL_NET any -> $HOME_NET any (
+  msg:"ICMP Flood from External - Possible DoS";
+  itype:8;
+  icode:0;
+  threshold:type both, track by_src, count 100, seconds 10;
+  classtype:attempted-dos;
+  sid:1000300; rev:1;
+)
+
+<span class="cm"># Large ICMP packet (possible ICMP tunnel)</span>
+alert icmp $EXTERNAL_NET any -> $HOME_NET any (
+  msg:"ICMP Large Packet - Possible Tunneling";
+  itype:8;
+  dsize:&gt;800;
+  classtype:policy-violation;
+  sid:1000301; rev:1;
+)
+
+<span class="cm"># ICMP sweep (ping sweep / host discovery)</span>
+alert icmp $EXTERNAL_NET any -> $HOME_NET any (
+  msg:"ICMP Ping Sweep";
+  itype:8;
+  detection_filter:track by_src, count 10, seconds 5;
+  classtype:network-scan;
+  sid:1000302; rev:1;
+)</code></pre>
+
+  <h3>Shellcode Detection</h3>
+  <pre><code><span class="cm"># NOP sled detection (repeated 0x90 bytes preceding shellcode)</span>
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (
+  msg:"Shellcode NOP Sled Detected";
+  content:"|90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90|";
+  classtype:shellcode-detect;
+  sid:1000400; rev:1;
+)
+
+<span class="cm"># Reverse shell in HTTP response (common web exploit payload)</span>
+alert tcp $HTTP_SERVERS $HTTP_PORTS -> $EXTERNAL_NET any (
+  msg:"Shellcode in HTTP Response - Possible Drive-By";
+  flow:established,to_client;
+  content:"Content-Type|3a 20|text/html";
+  content:"|eb|"; within:500;
+  content:"|90 90|"; within:200;
+  classtype:shellcode-detect;
+  sid:1000401; rev:1;
+)
+
+<span class="cm"># Metasploit windows/meterpreter/reverse_tcp pattern</span>
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (
+  msg:"Metasploit Reverse TCP Meterpreter Stage";
+  content:"|fc e8 82 00 00 00|";
+  classtype:shellcode-detect;
+  reference:url,metasploit.com;
+  sid:1000402; rev:1;
+)</code></pre>
+
+  <h3>Web Exploits</h3>
+  <pre><code><span class="cm"># Directory traversal attack</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  msg:"Directory Traversal Attack";
+  flow:established,to_server;
+  content:"/../"; http_uri; fast_pattern;
+  classtype:web-application-attack;
+  sid:1000500; rev:1;
+)
+
+<span class="cm"># Log4Shell (CVE-2021-44228)</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  msg:"Log4Shell CVE-2021-44228 JNDI Injection";
+  flow:established,to_server;
+  content:"${jndi:"; nocase; fast_pattern;
+  classtype:attempted-admin;
+  reference:cve,2021-44228;
+  priority:1;
+  sid:1000501; rev:2;
+)
+
+<span class="cm"># Webshell cmd parameter</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  msg:"Webshell Command Execution via URL";
+  flow:established,to_server;
+  pcre:"/(\?|&amp;)(cmd|exec|command|shell|passthru|system)=/i"; http_uri;
+  classtype:web-application-attack;
+  sid:1000502; rev:1;
+)
+
+<span class="cm"># CVE-2017-5638 Apache Struts (EternalBlue in web)</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  msg:"Apache Struts Content-Type Remote Code Execution CVE-2017-5638";
+  flow:established,to_server;
+  content:"Content-Type"; http_header;
+  content:"multipart/form-data"; http_header; within:50;
+  pcre:"/%\{[^}]*?ognl[^}]*?\}/i"; http_header;
+  classtype:attempted-admin;
+  reference:cve,2017-5638;
+  priority:1;
+  sid:1000503; rev:1;
+)</code></pre>
+
+  <h3>Complete Rule Options Reference Table</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Option</th><th>Category</th><th>Purpose</th><th>Required</th></tr></thead>
+      <tbody>
+        <tr><td><code>msg</code></td><td>General</td><td>Alert message text</td><td>Yes</td></tr>
+        <tr><td><code>sid</code></td><td>General</td><td>Unique rule ID</td><td>Yes</td></tr>
+        <tr><td><code>rev</code></td><td>General</td><td>Rule revision</td><td>Yes</td></tr>
+        <tr><td><code>gid</code></td><td>General</td><td>Generator ID (default 1)</td><td>No</td></tr>
+        <tr><td><code>classtype</code></td><td>General</td><td>Attack classification + priority</td><td>No</td></tr>
+        <tr><td><code>priority</code></td><td>General</td><td>Override classtype priority</td><td>No</td></tr>
+        <tr><td><code>reference</code></td><td>General</td><td>External CVE/URL link</td><td>No</td></tr>
+        <tr><td><code>metadata</code></td><td>General</td><td>Key-value metadata (policy, service, etc.)</td><td>No</td></tr>
+        <tr><td><code>content</code></td><td>Payload</td><td>Literal string or hex pattern match</td><td>No</td></tr>
+        <tr><td><code>nocase</code></td><td>Payload modifier</td><td>Case-insensitive content match</td><td>No</td></tr>
+        <tr><td><code>rawbytes</code></td><td>Payload modifier</td><td>Match before preprocessing</td><td>No</td></tr>
+        <tr><td><code>depth</code></td><td>Payload modifier</td><td>Search limit from start/offset</td><td>No</td></tr>
+        <tr><td><code>offset</code></td><td>Payload modifier</td><td>Start search N bytes in</td><td>No</td></tr>
+        <tr><td><code>distance</code></td><td>Payload modifier</td><td>Relative start after last match</td><td>No</td></tr>
+        <tr><td><code>within</code></td><td>Payload modifier</td><td>Must match within N bytes of last match</td><td>No</td></tr>
+        <tr><td><code>pcre</code></td><td>Payload</td><td>Perl-compatible regex</td><td>No</td></tr>
+        <tr><td><code>byte_test</code></td><td>Payload</td><td>Test numeric byte value</td><td>No</td></tr>
+        <tr><td><code>dsize</code></td><td>Payload</td><td>Match on payload size</td><td>No</td></tr>
+        <tr><td><code>flow</code></td><td>Non-payload</td><td>TCP connection state and direction</td><td>No</td></tr>
+        <tr><td><code>flags</code></td><td>Non-payload</td><td>TCP flag matching</td><td>No</td></tr>
+        <tr><td><code>itype</code></td><td>Non-payload</td><td>ICMP type matching</td><td>No</td></tr>
+        <tr><td><code>icode</code></td><td>Non-payload</td><td>ICMP code matching</td><td>No</td></tr>
+        <tr><td><code>ttl</code></td><td>Non-payload</td><td>IP TTL value</td><td>No</td></tr>
+        <tr><td><code>id</code></td><td>Non-payload</td><td>IP ID field value</td><td>No</td></tr>
+        <tr><td><code>fragbits</code></td><td>Non-payload</td><td>IP fragmentation flags</td><td>No</td></tr>
+        <tr><td><code>flowbits</code></td><td>Non-payload</td><td>Cross-rule session state flags</td><td>No</td></tr>
+        <tr><td><code>threshold</code></td><td>Post-detection</td><td>Rate-limit alert generation</td><td>No</td></tr>
+        <tr><td><code>detection_filter</code></td><td>Post-detection</td><td>Alert only after N occurrences</td><td>No</td></tr>
+        <tr><td><code>tag</code></td><td>Post-detection</td><td>Tag and log subsequent packets</td><td>No</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Start with known attack patterns and adapt them</h4>
+      <ul>
+        <li>SQL injection rules target L7 HTTP URI content — combine <code>content:"UNION"</code> with <code>http_uri</code> and <code>flow:established,to_server</code></li>
+        <li>Port scan rules target L4 TCP flags — use <code>flags:S,12</code> with <code>flow:stateless</code> and <code>detection_filter</code></li>
+        <li>ICMP flood rules target L3 ICMP type — use <code>itype:8</code> with a <code>threshold</code> to detect high-rate pings</li>
+      </ul>
+      <pre><code><span class="cm"># Detect Log4Shell at L7 — JNDI injection in any HTTP header or URI</span>
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
+  content:"${jndi:"; nocase; fast_pattern;
+  msg:"Log4Shell CVE-2021-44228"; classtype:attempted-admin; priority:1;
+  reference:cve,2021-44228; sid:1000501; rev:2;)</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Write bidirectional rules for command-and-control detection</h4>
+      <ul>
+        <li>C2 detection often requires correlating outbound requests with responses — use server-to-client rules with <code>flow:established,to_client</code></li>
+        <li>The SQL error response rule (to_client direction) confirms injection succeeded — pair it with the inbound injection rule for correlated alerting</li>
+        <li>Use <code>pcre</code> to detect polymorphic L7 payloads that vary but share a structural pattern (e.g., base64-encoded PowerShell)</li>
+      </ul>
+      <pre><code><span class="cm"># Detect base64-encoded PowerShell in HTTP response</span>
+alert tcp $HTTP_SERVERS $HTTP_PORTS -> $EXTERNAL_NET any (
+  flow:established,to_client;
+  pcre:"/powershell.*-[eE]ncode/i";
+  msg:"Encoded PowerShell in HTTP Response"; classtype:trojan-activity;
+  sid:1000502; rev:1;)</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Shellcode detection combining L4 and L7 indicators</h4>
+      <ul>
+        <li>NOP sled detection (<code>content:"|90 90 90 90..."</code>) is an L7 payload check — combine with <code>dsize:>100</code> to avoid triggering on tiny packets</li>
+        <li>Use <code>byte_test</code> to match binary protocol magic bytes at specific L7 payload offsets — essential for custom protocol analysis</li>
+        <li>For Meterpreter detection, combine the L4 destination port with the specific L7 stage bytes — reduce false positives from other large TCP payloads</li>
+      </ul>
+      <pre><code><span class="cm"># Meterpreter reverse_tcp stage signature at L7</span>
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (
+  content:"|fc e8 82 00 00 00|"; fast_pattern;
+  dsize:>200;
+  msg:"Metasploit Meterpreter Reverse TCP Stage";
+  classtype:shellcode-detect; reference:url,metasploit.com;
+  sid:1000402; rev:1;)</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: "Snort — Rule Syntax",
+  topics: [
+    { id: "rule-header",         badge: "01", label: "Rule Header" },
+    { id: "payload-options",     badge: "02", label: "Payload Options" },
+    { id: "non-payload-options", badge: "03", label: "Flow &amp; Non-Payload" },
+    { id: "general-options",     badge: "04", label: "General Options" },
+    { id: "example-rules",       badge: "05", label: "Example Rules" },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

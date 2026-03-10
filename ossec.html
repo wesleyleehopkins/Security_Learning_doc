@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OSSEC / Wazuh — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" aria-label="Toggle sidebar">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 5h14M3 10h14M3 15h14"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html" class="active">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">OSSEC / Wazuh</div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  </aside>
+  <main class="content" id="content-area"></main>
+</div>
+
+<!-- ══════════════════════════ Overview ═════════════════════════════════════ -->
+<template id="tpl-overview">
+<article class="topic">
+  <h2>OSSEC / Wazuh Overview</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">OSSEC parses application-layer logs to extract network indicators (source IPs, ports). Active response blocks threats at L3 via iptables/firewalld rules.</span>
+  </div>
+  <p><strong>OSSEC</strong> is an open-source host-based intrusion detection system (HIDS) that performs log analysis, file integrity monitoring (FIM), rootkit detection, and active response. <strong>Wazuh</strong> is an actively maintained fork of OSSEC with a full web UI, REST API, Elastic Stack integration, and extended rule sets.</p>
+
+  <div class="callout note">
+    <strong>OSSEC vs Wazuh:</strong> OSSEC is the original project (now community-maintained). Wazuh forked from OSSEC in 2015 and is the recommended choice for new deployments — it has a full UI, better agent support, more built-in rules, and cloud-native integrations.
+  </div>
+
+  <h3>OSSEC vs Wazuh Feature Comparison</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Feature</th><th>OSSEC</th><th>Wazuh</th></tr></thead>
+      <tbody>
+        <tr><td>UI</td><td>None (CLI only)</td><td>Wazuh Dashboard (Kibana-based)</td></tr>
+        <tr><td>API</td><td>None</td><td>REST API on port 55000</td></tr>
+        <tr><td>Log analysis</td><td>Yes</td><td>Yes + MITRE ATT&amp;CK mapping</td></tr>
+        <tr><td>FIM</td><td>Yes</td><td>Yes + real-time (inotify/audit)</td></tr>
+        <tr><td>Active response</td><td>Yes</td><td>Yes + custom scripts</td></tr>
+        <tr><td>Vulnerability detection</td><td>No</td><td>Yes — CVE correlation</td></tr>
+        <tr><td>Compliance</td><td>PCI-DSS, CIS (partial)</td><td>PCI-DSS, HIPAA, NIST 800-53, GDPR, TSC</td></tr>
+        <tr><td>Cloud integrations</td><td>None</td><td>AWS, Azure, GCP log ingestion</td></tr>
+        <tr><td>Container monitoring</td><td>None</td><td>Docker, Kubernetes</td></tr>
+        <tr><td>Elastic Stack</td><td>Manual setup</td><td>Built-in (Wazuh indexer + Filebeat)</td></tr>
+        <tr><td>Agent platforms</td><td>Linux, Windows, macOS, BSD</td><td>Linux, Windows, macOS, BSD, Solaris, AIX</td></tr>
+        <tr><td>Maintenance</td><td>Community only</td><td>Active — commercial + community</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Core HIDS Capabilities</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Capability</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Log Analysis</strong></td><td>Parses system logs (auth.log, syslog, Windows Event Log, Apache, etc.) through decoders then rules to generate alerts</td></tr>
+        <tr><td><strong>File Integrity Monitoring (FIM)</strong></td><td>Tracks checksums, permissions, ownership, and timestamps of monitored files; alerts on unauthorized changes</td></tr>
+        <tr><td><strong>Rootkit Detection</strong></td><td>Checks for hidden processes, files, and kernel-level modifications using rootcheck module</td></tr>
+        <tr><td><strong>Active Response</strong></td><td>Executes scripts (block IP via iptables/firewalld, disable user, etc.) when specific rules fire</td></tr>
+        <tr><td><strong>Policy Monitoring</strong></td><td>CIS benchmark checks, audit trail, registry monitoring on Windows</td></tr>
+        <tr><td><strong>Vulnerability Detection</strong></td><td>Wazuh: correlates installed packages against CVE databases (NVD, OVAL)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>How OSSEC/Wazuh Processes Events</h3>
+  <pre><code>Log Source (auth.log, syslog, WEL, etc.)
+        ↓
+    Agent (local or remote)
+        ↓
+  Pre-decode → Decode (decoder.xml — extract fields: srcip, user, program)
+        ↓
+  Rule matching (rules/*.xml — level, frequency, timeframe conditions)
+        ↓
+  Alert generated (alerts.log / alerts.json)
+        ↓
+  Active Response? (if rule level ≥ threshold → run response script)
+        ↓
+  SIEM / Dashboard (Wazuh indexer, Kibana, Splunk, etc.)</code></pre>
+
+  <h3>What OSSEC/Wazuh Detects</h3>
+  <ul>
+    <li>SSH brute force and successful logins from blocked IPs</li>
+    <li>Privilege escalation (sudo, su, setuid execution)</li>
+    <li>Web application attacks (SQL injection, path traversal in web logs)</li>
+    <li>Unauthorized file modifications (webshell drops, /etc/passwd changes)</li>
+    <li>Rootkit and LKM (Loadable Kernel Module) installation</li>
+    <li>Windows lateral movement (pass-the-hash, Mimikatz artifacts in event logs)</li>
+    <li>Policy violations (login outside hours, use of banned commands)</li>
+    <li>Container escape attempts (Wazuh)</li>
+  </ul>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — What OSSEC/Wazuh Does</summary>
+    <div class="tier-body">
+      <h4>Understand Core HIDS Functions</h4>
+      <ul>
+        <li>OSSEC reads host log files and generates alerts based on rule matches</li>
+        <li>FIM tracks file checksums — alerts when monitored files change unexpectedly</li>
+        <li>Active response can automatically block an IP with iptables when a rule fires</li>
+        <li>Wazuh extends OSSEC with a web UI (Dashboard), REST API, and MITRE ATT&amp;CK mapping</li>
+      </ul>
+      <pre><code><span class="cm"># Check OSSEC/Wazuh status</span>
+sudo /var/ossec/bin/ossec-control status
+<span class="cm"># View live alerts</span>
+sudo tail -f /var/ossec/logs/alerts/alerts.log</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Alert Level Tuning</summary>
+    <div class="tier-body">
+      <h4>Understand Alert Levels and Tune Thresholds</h4>
+      <ul>
+        <li>Alert levels range 0–15: levels 7+ trigger email, levels 10+ trigger IP blocks</li>
+        <li>SSH brute force typically fires rule 5720 at level 10 (frequency-based composite rule)</li>
+        <li>Tune <code>email_alert_level</code> and active response <code>level</code> in <code>ossec.conf</code></li>
+        <li>Compare OSSEC (CLI-only) vs Wazuh (full stack) — choose Wazuh for new deployments</li>
+      </ul>
+      <pre><code><span class="cm"># In ossec.conf — set email threshold</span>
+&lt;alerts&gt;
+  &lt;email_alert_level&gt;7&lt;/email_alert_level&gt;
+&lt;/alerts&gt;</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — MITRE ATT&amp;CK Integration</summary>
+    <div class="tier-body">
+      <h4>Map OSSEC Alerts to the ATT&amp;CK Framework</h4>
+      <ul>
+        <li>Wazuh rules include MITRE technique IDs (e.g., T1110 = Brute Force, T1055 = Process Injection)</li>
+        <li>Build Kibana dashboards pivoting on <code>rule.mitre.technique</code> field</li>
+        <li>SSH brute force → T1110.001 (Password Guessing), lateral movement → T1021</li>
+        <li>Correlate OSSEC FIM alerts (T1565 — Data Manipulation) with active response blocks</li>
+      </ul>
+      <pre><code><span class="cm"># Query Wazuh API for MITRE-tagged alerts</span>
+curl -k -u admin:&lt;pass&gt; \
+  "https://localhost:55000/alerts?rule.mitre.id=T1110&amp;pretty=true"</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ Architecture ══════════════════════════════════ -->
+<template id="tpl-architecture">
+<article class="topic">
+  <h2>Architecture</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Agent-to-manager communication uses encrypted UDP/TCP on port 1514 (L4 Transport). All log analysis, rule matching, and alert generation operates on application-layer event data (L7).</span>
+  </div>
+
+  <h3>Manager / Agent Model</h3>
+  <pre><code>┌─────────────────────────────────────────────────────────────┐
+│                    OSSEC/Wazuh Manager                      │
+│                                                             │
+│  ossec-analysisd   ← decode + rule matching engine          │
+│  ossec-remoted     ← encrypted comms with agents (UDP 1514) │
+│  ossec-logcollector← reads local logs on manager           │
+│  ossec-monitord    ← monitors agent keepalives              │
+│  ossec-maild       ← email notifications                    │
+│  ossec-execd       ← runs active response on manager        │
+│  ossec-authd       ← agent auto-enrollment (port 1515)      │
+│                                                             │
+│  /var/ossec/logs/alerts/alerts.log                          │
+│  /var/ossec/logs/alerts/alerts.json                         │
+└─────────────────────────────────────────────────────────────┘
+           ↑ Encrypted UDP/TCP (port 1514)
+┌──────────┴──────────────────────────────────┐
+│  Agent (Linux / Windows / macOS / BSD)      │
+│                                             │
+│  ossec-agentd    ← comms with manager       │
+│  ossec-logcollector ← reads local log files │
+│  ossec-syscheckd ← FIM (file monitoring)    │
+│  ossec-rootcheck ← rootkit checks           │
+│  ossec-execd     ← runs active response     │
+└─────────────────────────────────────────────┘</code></pre>
+
+  <h3>Wazuh Extended Architecture</h3>
+  <pre><code>┌───────────────────────────────────────────────────────────────────┐
+│                         Wazuh Server                              │
+│                                                                   │
+│  wazuh-analysisd  ← decode + rule engine (MITRE ATT&amp;CK mapping)  │
+│  wazuh-remoted    ← agent comms (1514 UDP/TCP, 1515 enrollment)  │
+│  wazuh-authd      ← agent enrollment daemon                       │
+│  wazuh-db         ← agent state, FIM DB, vulnerability data       │
+│  wazuh-apid       ← REST API (port 55000)                         │
+│  Filebeat         ← forwards alerts.json to Wazuh Indexer        │
+└───────────────────────────────────────────────────────────────────┘
+         ↑                                   ↓
+    Agents (1514)                    Wazuh Indexer
+    REST API clients (55000)         (OpenSearch / Elastic)
+                                          ↓
+                                   Wazuh Dashboard
+                                   (Kibana-based UI)
+                                   port 443 (HTTPS)</code></pre>
+
+  <h3>Communication Ports</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Port</th><th>Protocol</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>1514</td><td>UDP (default) / TCP</td><td>Agent → Manager log forwarding (encrypted)</td></tr>
+        <tr><td>1515</td><td>TCP</td><td>Agent auto-enrollment (ossec-authd)</td></tr>
+        <tr><td>1516</td><td>TCP</td><td>Wazuh cluster node communication</td></tr>
+        <tr><td>55000</td><td>TCP (HTTPS)</td><td>Wazuh REST API</td></tr>
+        <tr><td>9200</td><td>TCP (HTTPS)</td><td>Wazuh Indexer (OpenSearch)</td></tr>
+        <tr><td>443</td><td>TCP (HTTPS)</td><td>Wazuh Dashboard</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Key Configuration Files</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>File</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td><code>/var/ossec/etc/ossec.conf</code></td><td>Main config — global settings, log collection, FIM, active response, alerts</td></tr>
+        <tr><td><code>/var/ossec/etc/decoders/</code></td><td>XML decoder files — extract fields from log lines</td></tr>
+        <tr><td><code>/var/ossec/etc/rules/</code></td><td>XML rule files — match decoded fields to generate alerts</td></tr>
+        <tr><td><code>/var/ossec/logs/alerts/alerts.log</code></td><td>Alert output (human-readable)</td></tr>
+        <tr><td><code>/var/ossec/logs/alerts/alerts.json</code></td><td>Alert output (JSON — for SIEM ingestion)</td></tr>
+        <tr><td><code>/var/ossec/logs/ossec.log</code></td><td>OSSEC daemon log — errors and startup info</td></tr>
+        <tr><td><code>/var/ossec/queue/syscheck/</code></td><td>FIM database — stored checksums</td></tr>
+        <tr><td><code>/var/ossec/active-response/bin/</code></td><td>Active response scripts</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Know the Key Components</summary>
+    <div class="tier-body">
+      <h4>Core Architecture Components</h4>
+      <ul>
+        <li><strong>Manager</strong>: Central server running <code>ossec-analysisd</code> (decode + rule engine) and <code>ossec-remoted</code> (agent comms)</li>
+        <li><strong>Agent</strong>: Runs on monitored hosts — collects logs, FIM, rootcheck; forwards to manager on port 1514</li>
+        <li><strong>ossec-authd</strong>: Handles agent auto-enrollment on port 1515</li>
+        <li>Alerts output to <code>/var/ossec/logs/alerts/alerts.json</code> for SIEM ingestion</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Wazuh Extended Stack</summary>
+    <div class="tier-body">
+      <h4>Understand the Wazuh Component Chain</h4>
+      <ul>
+        <li><strong>wazuh-db</strong>: Maintains agent state, FIM baseline checksums, vulnerability data in SQLite</li>
+        <li><strong>Filebeat</strong>: Ships <code>alerts.json</code> from Wazuh server to Wazuh Indexer (OpenSearch)</li>
+        <li><strong>Wazuh Dashboard</strong>: Kibana-based UI at port 443 — visualize alerts, FIM, MITRE heatmaps</li>
+        <li><strong>REST API</strong> (port 55000): Query agents, rules, alerts programmatically with <code>curl</code> or Python</li>
+      </ul>
+      <pre><code><span class="cm"># List all registered agents via API</span>
+curl -k -u wazuh-wui:&lt;pass&gt; \
+  "https://localhost:55000/agents?status=active&amp;pretty=true"</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Wazuh Cluster Deployment</summary>
+    <div class="tier-body">
+      <h4>Distribute Load Across Master/Worker Nodes</h4>
+      <ul>
+        <li>Wazuh cluster: one master node + multiple worker nodes communicating on port 1516</li>
+        <li>Workers receive agent connections and forward decoded events to master for rule processing</li>
+        <li>Configure <code>/var/ossec/etc/ossec.conf</code> cluster block with <code>node_type</code>, <code>key</code>, and peer IPs</li>
+        <li>Use load balancer (HAProxy/Nginx) in front of workers for agent-side distribution</li>
+      </ul>
+      <pre><code><span class="cm"># ossec.conf cluster config (master node)</span>
+&lt;cluster&gt;
+  &lt;name&gt;wazuh&lt;/name&gt;
+  &lt;node_name&gt;master-node&lt;/node_name&gt;
+  &lt;node_type&gt;master&lt;/node_type&gt;
+  &lt;key&gt;$(openssl rand -hex 16)&lt;/key&gt;
+  &lt;port&gt;1516&lt;/port&gt;
+  &lt;nodes&gt;&lt;node&gt;worker-ip&lt;/node&gt;&lt;/nodes&gt;
+  &lt;disabled&gt;no&lt;/disabled&gt;
+&lt;/cluster&gt;</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ Installation ══════════════════════════════════ -->
+<template id="tpl-installation">
+<article class="topic">
+  <h2>Installation</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Installation configures application-layer services — the OSSEC/Wazuh daemon stack, agent enrollment, and log collection pipelines all operate at L7.</span>
+  </div>
+
+  <h3>Wazuh All-in-One (Quickstart — Recommended)</h3>
+  <pre><code><span class="cm"># Download and run the Wazuh installation assistant</span>
+curl -sO https://packages.wazuh.com/4.7/wazuh-install.sh
+curl -sO https://packages.wazuh.com/4.7/config.yml
+
+<span class="cm"># Edit config.yml to set node names and IPs</span>
+<span class="cm"># Then install (installs indexer, server, and dashboard)</span>
+sudo bash wazuh-install.sh -a
+
+<span class="cm"># Output includes admin credentials — save these</span>
+<span class="cm"># Dashboard: https://&lt;your-ip&gt; (port 443)</span>
+<span class="cm"># Default user: admin / &lt;generated-password&gt;</span></code></pre>
+
+  <h3>OSSEC Server Install (Classic)</h3>
+  <pre><code><span class="cm"># Debian/Ubuntu</span>
+sudo apt update
+sudo apt install ossec-hids-server
+
+<span class="cm"># Or from source</span>
+wget https://github.com/ossec/ossec-hids/archive/3.7.0.tar.gz
+tar -xzf 3.7.0.tar.gz
+cd ossec-hids-3.7.0
+sudo ./install.sh
+<span class="cm"># Install wizard: choose (s)erver, set email, enable FIM, active response</span>
+
+<span class="cm"># After install, start OSSEC</span>
+sudo /var/ossec/bin/ossec-control start
+
+<span class="cm"># Check status</span>
+sudo /var/ossec/bin/ossec-control status</code></pre>
+
+  <h3>Wazuh Agent Install (Linux)</h3>
+  <pre><code><span class="cm"># Add Wazuh repo</span>
+curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | sudo gpg --dearmor \
+  -o /usr/share/keyrings/wazuh.gpg
+echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] \
+  https://packages.wazuh.com/4.x/apt/ stable main" | \
+  sudo tee /etc/apt/sources.list.d/wazuh.list
+
+sudo apt update
+sudo WAZUH_MANAGER="&lt;manager-ip&gt;" apt install wazuh-agent
+
+<span class="cm"># Enable and start agent</span>
+sudo systemctl enable wazuh-agent
+sudo systemctl start wazuh-agent</code></pre>
+
+  <h3>Wazuh Agent Install (Windows)</h3>
+  <pre><code><span class="cm"># PowerShell (run as Administrator)</span>
+Invoke-WebRequest -Uri https://packages.wazuh.com/4.x/windows/wazuh-agent-4.7.0-1.msi `
+  -OutFile wazuh-agent.msi
+
+msiexec /i wazuh-agent.msi WAZUH_MANAGER="&lt;manager-ip&gt;" /q
+
+<span class="cm"># Start the agent</span>
+NET START WazuhSvc</code></pre>
+
+  <h3>Register an Agent with Manager</h3>
+  <pre><code><span class="cm"># Method 1: Auto-enrollment (ossec-authd must be running on manager)</span>
+<span class="cm"># Agent connects to port 1515, receives signed key automatically</span>
+
+<span class="cm"># Method 2: Manual (on manager, add agent)</span>
+sudo /var/ossec/bin/manage_agents
+
+<span class="cm"># Choose (a) to add agent, enter name and IP</span>
+<span class="cm"># Choose (e) to extract key, copy the key</span>
+<span class="cm"># On the agent, run manage_agents, choose (i), paste key</span>
+sudo /var/ossec/bin/ossec-control restart</code></pre>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Get OSSEC/Wazuh Running</summary>
+    <div class="tier-body">
+      <h4>Quickest Path to a Working HIDS</h4>
+      <ul>
+        <li>Use the Wazuh all-in-one installer (<code>wazuh-install.sh -a</code>) — installs indexer, server, and dashboard in one shot</li>
+        <li>Dashboard available at <code>https://&lt;your-ip&gt;</code> — save the admin credentials from installer output</li>
+        <li>Install Wazuh agent on monitored hosts using the <code>WAZUH_MANAGER</code> env variable to point to your server</li>
+      </ul>
+      <pre><code><span class="cm"># Verify agent connected (on manager)</span>
+sudo /var/ossec/bin/agent_control -l
+<span class="cm"># Or via API</span>
+curl -k -u admin:&lt;pass&gt; "https://localhost:55000/agents?status=active"</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Register Agents and Verify</summary>
+    <div class="tier-body">
+      <h4>Agent Enrollment Methods</h4>
+      <ul>
+        <li><strong>Auto-enrollment</strong>: Enable <code>ossec-authd</code> on manager; agent self-registers on port 1515 during first start</li>
+        <li><strong>Manual key exchange</strong>: Run <code>manage_agents</code> on manager to extract key, paste into agent's <code>manage_agents</code></li>
+        <li>After enrollment, agent shows as <em>Active</em> in <code>agent_control -l</code> output</li>
+        <li>Check agent logs at <code>/var/ossec/logs/ossec.log</code> for connection errors</li>
+      </ul>
+      <pre><code><span class="cm"># Check manager daemon health</span>
+sudo /var/ossec/bin/ossec-control status
+<span class="cm"># Confirm agent forwarding events</span>
+sudo tail -f /var/ossec/logs/ossec.log | grep "ossec-agentd"</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Production Hardening</summary>
+    <div class="tier-body">
+      <h4>Secure and Harden the Wazuh Deployment</h4>
+      <ul>
+        <li>Change default Wazuh Dashboard admin credentials immediately post-install</li>
+        <li>Restrict API (port 55000) access to management networks via firewall rules</li>
+        <li>Enable TLS between Wazuh server and indexer; rotate certificates annually</li>
+        <li>Deploy agents with a dedicated enrollment key per environment (prod/staging/dev) for segmentation</li>
+        <li>Use Wazuh cluster (master + workers) for high-availability in enterprise environments</li>
+      </ul>
+      <pre><code><span class="cm"># Rotate Wazuh API credentials</span>
+sudo /usr/share/wazuh-indexer/plugins/opensearch-security/tools/\
+  wazuh-passwords-tool.sh -u admin -p &lt;new-pass&gt;</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ Sub-pages ════════════════════════════════════ -->
+<template id="tpl-sub-pages">
+<article class="topic">
+  <h2>OSSEC / Wazuh Notebooks</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">OSSEC/Wazuh spans the full host security stack: L7 log analysis and FIM, L3 active response via IP blocking at the firewall. Alert levels 10+ typically trigger L3 firewall-drop rules.</span>
+  </div>
+  <p>This section is organized into five focused notebooks covering all major aspects of OSSEC/Wazuh HIDS deployment and analysis.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Notebook</th><th>Contents</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><a href="ossec-fim.html" style="color:var(--accent-h)">File Integrity Monitoring</a></td>
+          <td>syscheck configuration, monitoring directories, real-time FIM, alert fields decoded, alert output interpretation, common FIM scenarios</td>
+        </tr>
+        <tr>
+          <td><a href="ossec-rules.html" style="color:var(--accent-h)">Rules &amp; Decoders</a></td>
+          <td>Decoder XML syntax with field extraction, rule XML structure (level, frequency, timeframe, child rules), writing custom rules, real examples covering SSH/sudo/Apache/Windows</td>
+        </tr>
+        <tr>
+          <td><a href="ossec-active-response.html" style="color:var(--accent-h)">Active Response</a></td>
+          <td>How active response works, built-in commands (firewall-drop, host-deny, disable-account), writing custom response scripts, risks and safe thresholds</td>
+        </tr>
+        <tr>
+          <td><a href="ossec-manager.html" style="color:var(--accent-h)">Manager &amp; Agents</a></td>
+          <td>ossec-control commands, agent lifecycle (add/register/remove), agent status, ossec.conf structure, Wazuh API queries, cluster setup</td>
+        </tr>
+        <tr>
+          <td><a href="ossec-lab.html" style="color:var(--accent-h)">Detection Lab</a></td>
+          <td>Static lab: SSH brute force scenario — raw auth.log, decoder output, rule matching, alert output, active response block, log correlation</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Alert Level Reference</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Level</th><th>Category</th><th>Examples</th></tr></thead>
+      <tbody>
+        <tr><td>0</td><td>Ignored</td><td>Unknown/noise events</td></tr>
+        <tr><td>1</td><td>None</td><td>Normal events</td></tr>
+        <tr><td>2</td><td>System low priority</td><td>User login success</td></tr>
+        <tr><td>3</td><td>Successful/authorized event</td><td>Successful sudo, FTP login</td></tr>
+        <tr><td>4</td><td>System low priority error</td><td>Invalid login, unknown IP</td></tr>
+        <tr><td>5</td><td>User error</td><td>Wrong password, missing auth</td></tr>
+        <tr><td>6</td><td>Low relevance attack</td><td>Worm or virus (already blocked)</td></tr>
+        <tr><td>7</td><td>Bad word matched</td><td>"bad word" in log line</td></tr>
+        <tr><td>8</td><td>First time seen</td><td>New user, new process, new file</td></tr>
+        <tr><td>9</td><td>Error from invalid source</td><td>Login attempt from blocked IP</td></tr>
+        <tr><td>10</td><td>Multiple user errors</td><td>Repeated auth failures (brute force)</td></tr>
+        <tr><td>11</td><td>Integrity check warning</td><td>Checksum changed, file modified</td></tr>
+        <tr><td>12</td><td>High importance event</td><td>Kernel message, rootcheck alert</td></tr>
+        <tr><td>13</td><td>Unusual error (high importance)</td><td>Reverse lookup failed (scan)</td></tr>
+        <tr><td>14</td><td>High importance security event</td><td>Pre-exploit pattern detected</td></tr>
+        <tr><td>15+</td><td>Severe attack</td><td>Attack in progress, rootkit found</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout note">
+    <strong>Alert thresholds:</strong> Email notifications typically at level 7+. Active response typically at level 6+ for low-risk actions, level 10+ for IP blocking. Tune based on your environment's noise floor.
+  </div>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Navigate the Notebooks</summary>
+    <div class="tier-body">
+      <h4>Start With the Core Areas</h4>
+      <ul>
+        <li><strong>FIM</strong>: Understand how syscheck monitors files — start here if new to HIDS</li>
+        <li><strong>Rules &amp; Decoders</strong>: See how OSSEC parses raw log lines into structured alerts</li>
+        <li>Alert level 10+ = active threat; level 7+ = investigate; level 3 = informational</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deploy and Tune</summary>
+    <div class="tier-body">
+      <h4>Configure OSSEC/Wazuh for Your Environment</h4>
+      <ul>
+        <li>Set up active response to auto-block SSH brute-force IPs at level 10+</li>
+        <li>Write custom decoders for application-specific log formats (e.g., Apache custom fields)</li>
+        <li>Use Manager &amp; Agents notebook to manage agent lifecycle and monitor connectivity</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Correlation and Automation</summary>
+    <div class="tier-body">
+      <h4>Build Composite Detection Logic</h4>
+      <ul>
+        <li>Chain composite rules: brute force (level 10) → privilege escalation attempt → alert at level 14</li>
+        <li>Use the Detection Lab notebook to trace SSH brute force from raw log through decoder → rule → alert → block</li>
+        <li>Automate triage with the Wazuh REST API: query alerts, suppress false positives, push new rules programmatically</li>
+      </ul>
+    </div>
+  </details>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: "OSSEC / Wazuh — HIDS Reference",
+  topics: [
+    { id: "overview",      badge: "01", label: "Overview" },
+    { id: "architecture",  badge: "02", label: "Architecture" },
+    { id: "installation",  badge: "03", label: "Installation" },
+    { id: "sub-pages",     badge: "04", label: "Notebooks" },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

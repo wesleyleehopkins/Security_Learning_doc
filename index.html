@@ -16,6 +16,23 @@
     <a href="index.html" class="active">Home</a>
     <a href="psaa.html">PSAA</a>
     <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
     <a href="log-sources.html">Log Sources</a>
   </div>
 </nav>
@@ -44,9 +61,11 @@
       <div class="nb-icon">🧅</div>
       <div class="nb-title">Security Onion</div>
       <div class="nb-sub">NSM Platform Reference</div>
-      <div class="nb-desc">Security Onion navigation, alert triage, dashboards, Kibana queries, Suricata rules, Zeek log fields, PCAP workflows and investigation playbooks.</div>
+      <div class="nb-desc">Alert triage workflow, Suricata rules, Zeek log fields &amp; zeek-cut one-liners, KQL hunt queries, PCAP retrieval, case management, so-* CLI reference, and a full 3-VM attack-to-case investigation lab.</div>
       <div class="nb-meta">
-        <span class="nb-tag">In Progress</span>
+        <span class="nb-tag blue">11 Sections</span>
+        <span class="nb-tag green">3-VM Lab</span>
+        <span class="nb-tag">Full Workflow</span>
       </div>
     </a>
 
@@ -61,15 +80,209 @@
       </div>
     </a>
 
-    <div class="nb-card dim">
-      <div class="nb-icon">📒</div>
-      <div class="nb-title">Add additional Notebook</div>
-      <div class="nb-sub">Extend as needed</div>
-      <div class="nb-desc">Drop a new HTML page + <code>content/</code> folder. The sidebar, routing and styles are all reusable — just point <code>window.NOTEBOOK</code> at your topics.</div>
+    <a href="nmap.html" class="nb-card">
+      <div class="nb-icon">🔭</div>
+      <div class="nb-title">Nmap</div>
+      <div class="nb-sub">Network Mapper Reference</div>
+      <div class="nb-desc">Scan types with packet-level behavior, host discovery methods, service version detection, NSE script categories with real examples, output parsing, and a full flag reference table.</div>
       <div class="nb-meta">
-        <span class="nb-tag">Placeholder</span>
+        <span class="nb-tag blue">6 Notebooks</span>
+        <span class="nb-tag green">Packet-Level</span>
+        <span class="nb-tag">CVE Examples</span>
       </div>
-    </div>
+    </a>
+
+    <a href="ossec.html" class="nb-card">
+      <div class="nb-icon">🛡️</div>
+      <div class="nb-title">OSSEC / Wazuh</div>
+      <div class="nb-sub">Host-Based Intrusion Detection</div>
+      <div class="nb-desc">Log analysis pipeline with decoders and rules, file integrity monitoring, active response scripts, manager/agent architecture, and a detection lab covering SSH brute force from raw auth.log through alert to IP block.</div>
+      <div class="nb-meta">
+        <span class="nb-tag blue">6 Notebooks</span>
+        <span class="nb-tag green">FIM Coverage</span>
+        <span class="nb-tag">Active Response</span>
+      </div>
+    </a>
+
+    <a href="snort.html" class="nb-card">
+      <div class="nb-icon">🚨</div>
+      <div class="nb-title">Snort</div>
+      <div class="nb-sub">Network Intrusion Detection System</div>
+      <div class="nb-desc">Rule syntax broken down field by field, operating modes (sniffer/NIDS/IPS), snort.conf variables, alert output formats, and a detection lab covering port scan and SQL injection rules with realistic alert output.</div>
+      <div class="nb-meta">
+        <span class="nb-tag blue">6 Notebooks</span>
+        <span class="nb-tag green">Rule Examples</span>
+        <span class="nb-tag">Detection Lab</span>
+      </div>
+    </a>
+
+    <a href="wireshark.html" class="nb-card">
+      <div class="nb-icon">🦈</div>
+      <div class="nb-title">Wireshark</div>
+      <div class="nb-sub">Packet Analysis Reference</div>
+      <div class="nb-desc">Display filter syntax, BPF capture filters, protocol analysis (HTTP/DNS/TLS/SMB), follow streams, statistics windows, and a C2 PCAP lab walkthrough with full IOC extraction.</div>
+      <div class="nb-meta">
+        <span class="nb-tag blue">7 Notebooks</span>
+        <span class="nb-tag green">Packet-Level</span>
+        <span class="nb-tag">C2 Lab</span>
+      </div>
+    </a>
+
+    <a href="splunk.html" class="nb-card">
+      <div class="nb-icon">🔍</div>
+      <div class="nb-title">Splunk</div>
+      <div class="nb-sub">SIEM &amp; SPL Reference</div>
+      <div class="nb-desc">SPL search language, stats &amp; counting, dashboard visualizations, alerts &amp; Enterprise Security, Universal Forwarder config, threat hunting queries, and a brute force lab walkthrough.</div>
+      <div class="nb-meta">
+        <span class="nb-tag blue">8 Notebooks</span>
+        <span class="nb-tag green">Real Queries</span>
+        <span class="nb-tag">BOTS Scenarios</span>
+      </div>
+    </a>
+
+    <a href="elk.html" class="nb-card">
+      <div class="nb-icon">🦌</div>
+      <div class="nb-title">ELK Stack</div>
+      <div class="nb-sub">Elastic Stack Reference</div>
+      <div class="nb-desc">Elasticsearch queries &amp; REST API, Logstash pipeline configs, Kibana Discover &amp; Lens, Beats agents (Filebeat/Winlogbeat/Packetbeat), KQL/EQL hunt queries, ILM lifecycle, Elastic SIEM, alerting/Watcher, and a full 3-VM brute force detection lab.</div>
+      <div class="nb-meta">
+        <span class="nb-tag blue">11 Sections</span>
+        <span class="nb-tag green">3-VM Lab</span>
+        <span class="nb-tag">EQL Detection</span>
+      </div>
+    </a>
+
+    <a href="openvas.html" class="nb-card">
+      <div class="nb-icon">🔬</div>
+      <div class="nb-title">OpenVAS / GVM</div>
+      <div class="nb-sub">Vulnerability Scanner</div>
+      <div class="nb-desc">Authenticated network vulnerability scanning, CVE database lookups, credentialed scan configs, severity ratings (CVSS), compliance checks, delta reports for remediation tracking, and custom scan targets.</div>
+      <div class="nb-meta">
+        <span class="nb-tag blue">11 Sections</span>
+        <span class="nb-tag green">3-VM Lab</span>
+        <span class="nb-tag">CVE Correlation</span>
+      </div>
+    </a>
+
+    <a href="kali.html" class="nb-card">
+      <div class="nb-icon">🐉</div>
+      <div class="nb-title">Kali Linux</div>
+      <div class="nb-sub">Penetration Testing Platform</div>
+      <div class="nb-desc">Tool categories across recon, exploitation, post-exploitation, and reporting. Covers Nmap, Metasploit, Hydra, Burp Suite, Aircrack-ng, wordlist generation, and lab-ready workflows for CTF and authorized pentests.</div>
+      <div class="nb-meta">
+        <span class="nb-tag blue">11 Sections</span>
+        <span class="nb-tag green">3-VM Lab</span>
+        <span class="nb-tag">CTF Ready</span>
+      </div>
+    </a>
+
+    <a href="metasploit.html" class="nb-card">
+      <div class="nb-icon">💀</div>
+      <div class="nb-title">Metasploit</div>
+      <div class="nb-sub">Exploitation Framework</div>
+      <div class="nb-desc">Module types (exploit/auxiliary/post/payload), msfconsole workflow, search and selection, payload generation with msfvenom, multi/handler setup, post-exploitation modules, and a full 3-VM exploitation lab.</div>
+      <div class="nb-meta">
+        <span class="nb-tag blue">11 Sections</span>
+        <span class="nb-tag green">3-VM Lab</span>
+        <span class="nb-tag">Post-Exploit</span>
+      </div>
+    </a>
+
+    <a href="yara.html" class="nb-card">
+      <div class="nb-icon">🎯</div>
+      <div class="nb-title">YARA</div>
+      <div class="nb-sub">Malware Pattern Matching</div>
+      <div class="nb-desc">Rule syntax with condition types, string matching (hex, regex, plaintext), metadata blocks, PE module for portable executables, custom rule writing for IOC detection, and a lab scanning malware samples against custom rules.</div>
+      <div class="nb-meta">
+        <span class="nb-tag blue">11 Sections</span>
+        <span class="nb-tag green">Rule Writing</span>
+        <span class="nb-tag">IOC Detection</span>
+      </div>
+    </a>
+
+    <a href="zeek.html" class="nb-card">
+      <div class="nb-icon">🌊</div>
+      <div class="nb-title">Zeek / Bro</div>
+      <div class="nb-sub">Network Security Monitor</div>
+      <div class="nb-desc">Log types and full field reference (conn/dns/http/ssl/files/weird/notice), zeek-cut command combinations, Zeek scripting language basics, writing custom detection scripts, and a lab analyzing PCAP files offline with Zeek.</div>
+      <div class="nb-meta">
+        <span class="nb-tag blue">11 Sections</span>
+        <span class="nb-tag green">NSM Logs</span>
+        <span class="nb-tag">Scripting</span>
+      </div>
+    </a>
+
+    <a href="clamav.html" class="nb-card">
+      <div class="nb-icon">🦠</div>
+      <div class="nb-title">ClamAV</div>
+      <div class="nb-sub">Open Source Antivirus</div>
+      <div class="nb-desc">Signature database management, on-demand clamscan combinations, clamd daemon config, mail gateway integration with Postfix/Amavis, custom signature writing, and integration with OSSEC/Wazuh for automated file scanning on alert.</div>
+      <div class="nb-meta">
+        <span class="nb-tag blue">11 Sections</span>
+        <span class="nb-tag green">Mail Gateway</span>
+        <span class="nb-tag">OSSEC Integration</span>
+      </div>
+    </a>
+
+    <a href="misp.html" class="nb-card">
+      <div class="nb-icon">🔗</div>
+      <div class="nb-title">MISP</div>
+      <div class="nb-sub">Threat Intelligence Platform</div>
+      <div class="nb-desc">Event and attribute structure, IOC types (IP/domain/hash/URL/email), sharing groups and distribution levels, TAXII/STIX feed ingestion, API automation, Sighting workflow, correlation engine, and exporting indicators to Suricata rules.</div>
+      <div class="nb-meta">
+        <span class="nb-tag blue">11 Sections</span>
+        <span class="nb-tag green">ATT&amp;CK Tags</span>
+        <span class="nb-tag">STIX/TAXII</span>
+      </div>
+    </a>
+
+    <a href="cuckoo.html" class="nb-card">
+      <div class="nb-icon">🥚</div>
+      <div class="nb-title">Cuckoo Sandbox</div>
+      <div class="nb-sub">Dynamic Malware Analysis</div>
+      <div class="nb-desc">Submission workflow, behavioral report reading (process tree, network activity, file/registry operations), signature matches, memory dumps, VirusTotal integration, custom analysis rules, and comparing verdicts against YARA and MISP IOCs.</div>
+      <div class="nb-meta">
+        <span class="nb-tag blue">11 Sections</span>
+        <span class="nb-tag green">Process Tree</span>
+        <span class="nb-tag">IOC Extraction</span>
+      </div>
+    </a>
+
+    <a href="velociraptor.html" class="nb-card">
+      <div class="nb-icon">🦖</div>
+      <div class="nb-title">Velociraptor</div>
+      <div class="nb-sub">DFIR &amp; Endpoint Hunting</div>
+      <div class="nb-desc">VQL (Velociraptor Query Language) basics, built-in artifact collection, writing custom artifacts, hunt creation across multiple endpoints, offline collection packs, triage packages, timeline analysis, and a lab hunting the Windows 10 VM.</div>
+      <div class="nb-meta">
+        <span class="nb-tag blue">11 Sections</span>
+        <span class="nb-tag green">3-VM Lab</span>
+        <span class="nb-tag">VQL</span>
+      </div>
+    </a>
+
+    <a href="autopsy.html" class="nb-card">
+      <div class="nb-icon">🩺</div>
+      <div class="nb-title">Autopsy</div>
+      <div class="nb-sub">Digital Forensics Platform</div>
+      <div class="nb-desc">Case creation and evidence ingestion, ingest module pipeline, file system analysis, keyword search and hash lookup, timeline analysis, carved file recovery, browser artifacts, email analysis, and report generation for court-ready documentation.</div>
+      <div class="nb-meta">
+        <span class="nb-tag blue">11 Sections</span>
+        <span class="nb-tag green">Disk Forensics</span>
+        <span class="nb-tag">File Recovery</span>
+      </div>
+    </a>
+
+    <a href="anyrun.html" class="nb-card">
+      <div class="nb-icon">🧪</div>
+      <div class="nb-title">ANY.RUN</div>
+      <div class="nb-sub">Interactive Malware Sandbox</div>
+      <div class="nb-desc">Task submission and environment configuration, live process tree navigation, network activity capture, IOC extraction, Suricata/Snort rule correlation, MITRE ATT&amp;CK technique mapping, report export, and API integration for automated hash lookups.</div>
+      <div class="nb-meta">
+        <span class="nb-tag blue">11 Sections</span>
+        <span class="nb-tag green">Live Sandbox</span>
+        <span class="nb-tag">ATT&amp;CK Mapping</span>
+      </div>
+    </a>
 
   </div>
 </main>

@@ -1,0 +1,1357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YARA — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .xref { display:inline; color:var(--accent,#3b82f6); font-size:.75em; font-weight:600; border:1px solid var(--accent,#3b82f6); border-radius:3px; padding:1px 5px; margin-left:4px; text-decoration:none; cursor:pointer; white-space:nowrap; opacity:.85; }
+    .xref:hover { background:rgba(59,130,246,.15); opacity:1; }
+    .xref-group { color:#8b949e; font-size:.82em; margin-left:2px; }
+    td .xref-group { display:block; margin-top:3px; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="index.html" class="nav-brand">
+    <span class="icon">⬡</span> SOC Notes
+  </a>
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()">☰</button>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html" class="active">YARA</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sb-title">YARA</div>
+    <nav id="sb-nav"></nav>
+  </aside>
+
+  <main id="main" class="main">
+    <div id="content-area"></div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 01 -->
+<template id="tpl-overview">
+<article class="topic">
+  <h2>Overview &amp; Architecture</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">YARA operates entirely at L7 — it scans file content and process memory for byte patterns and application-layer strings, with no interaction at L2 (Data Link), L3 (Network), or L4 (Transport).</span>
+  </div>
+
+  <p>YARA (Yet Another Ridiculous Acronym) is the de-facto standard for malware pattern matching. It was created by Victor Alvarez at VirusTotal and is used by virtually every major malware research team, AV vendor, EDR platform, and threat intelligence pipeline. A YARA rule describes what a malicious file <em>looks like</em> — its strings, byte patterns, and structural properties — rather than matching by hash alone.</p>
+
+  <h3>Why YARA Matters for SOC Analysts</h3>
+  <table>
+    <thead><tr><th>Use Case</th><th>How YARA Helps</th></tr></thead>
+    <tbody>
+      <tr><td>Hunt for malware family variants</td><td>One rule catches a whole family even when hashes change (packers, minor modifications)</td></tr>
+      <tr><td>Retrohunt across stored files</td><td>Scan historical PCAP, disk images, or memory dumps against new IOC rules</td></tr>
+      <tr><td>Incident response triage</td><td>Quickly scan a suspect system for known malware artifacts without running the sample</td></tr>
+      <tr><td>Threat intelligence automation</td><td>MISP, OpenCTI, and VirusTotal all support YARA rule sharing and automatic scanning</td></tr>
+      <tr><td>EDR custom detections</td><td>Many EDR platforms (CrowdStrike, SentinelOne, Elastic) support custom YARA rules in their pipeline</td></tr>
+    </tbody>
+  </table>
+
+  <h3>How YARA Works</h3>
+  <pre><code"># YARA scans files byte-by-byte, evaluating rules against file content
+# Matching is purely static — no execution required
+
+# Basic usage
+yara rule.yar /path/to/scan/             # scan a directory
+yara rule.yar /path/to/suspicious.exe    # scan a single file
+yara -r rule.yar /home/                  # recursive scan
+yara -s rule.yar malware.bin             # show matching strings
+
+# Multiple rules at once
+yara rules/ /path/to/scan/               # all .yar files in rules/
+yara -C compiled.yarc /path/             # pre-compiled rules (faster)</code></pre>
+
+  <h3>YARA Ecosystem</h3>
+  <table>
+    <thead><tr><th>Tool/Platform</th><th>YARA Integration</th></tr></thead>
+    <tbody>
+      <tr><td>VirusTotal</td><td>Retrohunt: scan entire VT corpus with custom rules; Intelligence feed</td></tr>
+      <tr><td>MISP</td><td>Store and share YARA rules as attributes; auto-match on uploaded samples</td></tr>
+      <tr><td>Cuckoo Sandbox</td><td>YARA scan run against all extracted samples and process memory during analysis</td></tr>
+      <tr><td>Velociraptor</td><td>Hunt endpoints with YARA via VQL artifact — scan across thousands of hosts</td></tr>
+      <tr><td>Elasticsearch / Elastic Security</td><td>YARA rules integrated into detection rules engine</td></tr>
+      <tr><td>OSSEC / Wazuh</td><td>File integrity monitoring with YARA scan on change detection</td></tr>
+    </tbody>
+  </table>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>What YARA Does and Why It Matters</h4>
+      <ul>
+        <li>YARA performs static L7 file-content matching — it reads bytes, does not execute code, and works safely in any environment</li>
+        <li>A single YARA rule can detect an entire malware family even when hashes change (packers, recompilation, minor modifications)</li>
+        <li>Use <code>-r</code> for recursive directory scanning and <code>-s</code> to display which strings matched in a hit</li>
+      </ul>
+      <pre><code>yara rule.yar suspicious.exe      <span class="cm"># scan a single file</span>
+yara -r rule.yar /malware_samples/ <span class="cm"># recursive directory scan</span>
+yara -s rule.yar sample.bin       <span class="cm"># show matched strings</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Scanning Multiple Rule Sets Efficiently</h4>
+      <ul>
+        <li>Pass a directory of <code>.yar</code> files to YARA instead of a single file to apply all rules in one pass</li>
+        <li>Pre-compile rules with <code>yarac</code> into a <code>.yarc</code> binary for significantly faster repeated scanning of large directories</li>
+        <li>Use <code>--timeout=30</code> to prevent YARA from hanging on large archive files during bulk scanning</li>
+      </ul>
+      <pre><code>yarac /opt/rules/ compiled.yarc    <span class="cm"># compile all rules to binary</span>
+yara compiled.yarc /evidence/ --timeout=30
+yara -r -p 8 /opt/rules/ /mnt/disk_image/  <span class="cm"># 8 threads for large datasets</span></code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>YARA Ecosystem Integration</h4>
+      <ul>
+        <li>Integrate YARA into Velociraptor VQL hunts to scan file-system patterns across thousands of endpoints simultaneously from a single artifact</li>
+        <li>Share rules via MISP as YARA attributes — ingested rules automatically scan new sample uploads against the entire TI database</li>
+        <li>Use VirusTotal Intelligence retrohunt to scan the full VT corpus against a new rule — identifies historical samples matching the pattern</li>
+      </ul>
+      <pre><code><span class="cm"># Velociraptor VQL hunt — scan all .exe files under C:\Users\</span>
+<span class="cm"># Artifact: Windows.Detection.Yara.Process</span>
+<span class="cm"># Parameters: YaraRule (paste rule), PathGlob: C:/Users/**/*.exe</span>
+yara -r /opt/rules/ /mnt/evidence/ > scan_results.txt 2>&amp;1</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 02 -->
+<template id="tpl-syntax">
+<article class="topic">
+  <h2>Rule Syntax &amp; Structure</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">YARA rule syntax defines L7 application-layer detection logic — the meta, strings, and condition sections describe what an application-layer artifact (file, binary, process memory) must contain to trigger a match.</span>
+  </div>
+  <p>Every YARA rule follows the same basic skeleton. Understanding each component is essential before writing effective detection rules.</p>
+
+  <h3>Anatomy of a YARA Rule</h3>
+  <pre><code>rule RuleName : tag1 tag2 {
+    meta:
+        author      = "Analyst Name"
+        date        = "2024-03-15"
+        description = "Detects XYZ malware family based on C2 URL and mutex"
+        reference   = "https://blog.example.com/malware-analysis"
+        hash        = "d41d8cd98f00b204e9800998ecf8427e"
+        severity    = "high"
+
+    strings:
+        $s1 = "http://evil.c2server.com/gate.php"
+        $s2 = "Global\\MalwareMutex" wide
+        $b1 = { 4D 5A 90 00 03 00 00 00 }   // MZ header bytes
+        $r1 = /[A-Z]{5}\.exe/               // regex
+
+    condition:
+        uint16(0) == 0x5A4D and            // PE file check
+        filesize < 500KB and
+        all of ($s*) and
+        $b1 at 0
+}</code></pre>
+
+  <h3>Rule Sections Explained</h3>
+  <table>
+    <thead><tr><th>Section</th><th>Required</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>meta:</code></td><td>No</td><td>Human-readable metadata — author, date, description, reference. Not used in matching. Appear in output when rule fires.</td></tr>
+      <tr><td><code>strings:</code></td><td>No (if condition is self-contained)</td><td>Define patterns to search for — plaintext, hex bytes, regex, or combinations. Variables start with <code>$</code>.</td></tr>
+      <tr><td><code>condition:</code></td><td><strong>Yes</strong></td><td>Boolean expression determining if the rule matches. Can reference string variables, file properties, and module functions.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Rule Tags &amp; Naming</h3>
+  <pre><code># Tags group rules for filtering
+rule Ransomware_LockBit3 : ransomware windows apt {
+    ...
+}
+
+# Run only rules with specific tag
+yara -t ransomware rules/ /suspect/</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>The Three-Section Rule Structure</h4>
+      <ul>
+        <li>Only the <code>condition:</code> section is required — <code>meta:</code> and <code>strings:</code> are optional but strongly recommended for documentation and matching</li>
+        <li>String variables always start with <code>$</code> — they are defined in <code>strings:</code> and referenced in <code>condition:</code></li>
+        <li>Add tags after the rule name for category filtering — run <code>yara -t ransomware rules/ /dir/</code> to apply only ransomware-tagged rules</li>
+      </ul>
+      <pre><code>rule Simple_Detection : malware {
+    meta:
+        description = "Detects suspicious mutex"
+        author      = "SOC Analyst"
+    strings:
+        $mutex = "Global\\EvilMutex"
+    condition:
+        $mutex
+}</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Metadata Best Practices</h4>
+      <ul>
+        <li>Always include <code>date</code>, <code>author</code>, <code>description</code>, and <code>reference</code> fields — meta fields appear in match output and are critical for rule management</li>
+        <li>Add a <code>hash</code> field with the sample SHA-256 that drove the rule — enables linking detections back to original evidence</li>
+        <li>Use TLP (<code>tlp = "GREEN"</code>) and MITRE ATT&CK technique IDs (<code>mitre = "T1486"</code>) as standard meta fields in SOC environments</li>
+      </ul>
+      <pre><code>rule Ransomware_LockBit3 : ransomware windows apt {
+    meta:
+        author    = "SOC Hunt Team"
+        date      = "2024-03-15"
+        tlp       = "AMBER"
+        mitre     = "T1486 Data Encrypted for Impact"
+        reference = "https://blog.example.com/lockbit3-analysis"
+        hash      = "d41d8cd98f00b204e9800998ecf8427e"
+}</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Rule Organization and Tag-Based Filtering at Scale</h4>
+      <ul>
+        <li>Use a consistent tag taxonomy across your rule library (malware family, platform, technique) to enable targeted subset scanning</li>
+        <li>Combine rule tags with <code>yarac</code> compilation — compile tagged subsets into separate <code>.yarc</code> files for fast category-specific scanning</li>
+        <li>Structure rule names with a prefix convention (e.g., <code>RAT_DarkComet</code>, <code>Ransomware_WannaCry</code>) for programmatic rule management and reporting</li>
+      </ul>
+      <pre><code>yara -t apt rules/ /evidence/      <span class="cm"># only APT-tagged rules</span>
+yara -t ransomware rules/ /evidence/ <span class="cm"># only ransomware rules</span>
+yarac -d ransomware_only compiled_ransomware.yarc  <span class="cm"># compile subset</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 03 -->
+<template id="tpl-strings">
+<article class="topic">
+  <h2>String Types &amp; Modifiers</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">String patterns in YARA match L7 application-layer content — plaintext strings embedded in binaries, UTF-16 Windows API calls, raw shellcode hex bytes, and regex patterns found in application data all exist above L4.</span>
+  </div>
+  <p>YARA strings are the patterns searched in file content. Three types cover all matching scenarios: plaintext, hex, and regex.</p>
+
+  <h3>Plaintext Strings</h3>
+  <pre><code>strings:
+    $plain  = "cmd.exe /c whoami"       // exact ASCII match
+    $wide   = "powershell" wide          // UTF-16LE (Windows Unicode strings)
+    $both   = "malware" ascii wide       // match either encoding
+    $nocase = "PASSWORD" nocase          // case-insensitive
+    $full   = "secret" fullword          // must be a whole word (not substring)
+    $xor_s  = "config" xor              // try all single-byte XOR keys (0x00–0xFF)
+    $xor_r  = "config" xor(0x01-0x7F)  // restricted XOR key range</code></pre>
+
+  <h3>Hex Strings (Byte Patterns)</h3>
+  <pre><code">strings:
+    // Exact sequence
+    $mz_hdr  = { 4D 5A }                    // MZ — PE magic bytes
+
+    // Wildcards (? = any nibble, ?? = any byte)
+    $nop_sled = { 90 90 90 90 90 ?? }       // 5 NOP instructions + any byte
+
+    // Jumps (skip variable-length data between patterns)
+    $pattern = { 6A 40 68 [4] 6A 14 }       // match with 4 unknown bytes between 68 and 6A
+    $range   = { 6A 40 68 [2-8] 6A 14 }     // variable skip: 2 to 8 bytes
+
+    // Alternatives (match any of the options)
+    $alt = { ( 4D 5A | 50 45 00 00 ) }      // MZ or PE\x00\x00</code></pre>
+
+  <h3>Regular Expressions</h3>
+  <pre><code">strings:
+    // Basic regex (PCRE-style)
+    $ip   = /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/
+    $url  = /https?:\/\/[a-zA-Z0-9\-\.]+\/[a-zA-Z0-9_\/\?\=\&]+/
+    $b64  = /[A-Za-z0-9+\/]{40,}={0,2}/    // Base64-encoded blob
+    $guid = /\{[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\}/i
+
+    // Regex with modifiers
+    $ci   = /windows/i                       // case insensitive
+    $wide_re = /powershell/i wide            // Unicode regex</code></pre>
+
+  <h3>String Identifiers in Conditions</h3>
+  <pre><code">condition:
+    $s1                     // $s1 must match at least once
+    $s1 and $s2             // both must match
+    $s1 or $s2              // either must match
+    not $s1                 // $s1 must NOT match (use carefully)
+
+    // Count occurrences
+    #s1 >= 3                // $s1 appears 3+ times
+
+    // Check offset / position
+    $s1 at 0                // $s1 must match at byte 0 (file start)
+    $s1 in (0..100)         // $s1 must be in first 100 bytes
+    $s1 in (filesize-200..filesize)   // $s1 near end of file
+
+    // Wildcards across string sets
+    any of ($s*)            // any string matching $s prefix
+    all of ($s*)            // all strings matching $s prefix
+    2 of ($s*)              // at least 2 of the $s strings</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Plaintext, Wide, and Hex Strings</h4>
+      <ul>
+        <li>Always use <code>ascii wide</code> together for Windows string detection — Windows APIs store strings as UTF-16LE (<code>wide</code>), not ASCII</li>
+        <li>Use <code>nocase</code> for URL and domain patterns — malware often mixes upper and lowercase in C2 domains to evade simple matching</li>
+        <li>Hex strings with wildcards (<code>??</code>) allow matching byte sequences with variable bytes — useful for shellcode with changing offsets</li>
+      </ul>
+      <pre><code>strings:
+    $mutex = "EvilMutex" ascii wide  <span class="cm"># match both encodings</span>
+    $c2    = "evil.c2.com" nocase    <span class="cm"># case-insensitive</span>
+    $mz    = { 4D 5A 90 00 ?? ?? }   <span class="cm"># MZ header with 2 wildcard bytes</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Hex Patterns with Jumps and Alternatives</h4>
+      <ul>
+        <li>Use jump syntax <code>[N]</code> or <code>[M-N]</code> to match variable-length byte gaps in shellcode or obfuscated strings</li>
+        <li>Use alternation <code>( 4D 5A | 50 45 )</code> to match either of two byte sequences in a single string variable</li>
+        <li>Combine <code>#s1 >= 3</code> (count) with <code>$s1 in (0..100)</code> (offset range) for highly precise L7 file structure matching</li>
+      </ul>
+      <pre><code>strings:
+    $pattern = { 6A 40 68 [2-8] 6A 14 }  <span class="cm"># variable 2-8 byte gap</span>
+    $alt     = { ( 4D 5A | 50 45 00 00 ) }  <span class="cm"># MZ or PE magic</span>
+condition:
+    #pattern >= 2 and               <span class="cm"># pattern appears at least twice</span>
+    $pattern in (0..512)            <span class="cm"># in first 512 bytes</span></code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>XOR Scanning and Regex for Encoded Artifacts</h4>
+      <ul>
+        <li>Use <code>xor</code> modifier to detect strings obfuscated with single-byte XOR — YARA tries all 256 key values automatically without writing separate rules</li>
+        <li>Use <code>fullword</code> to prevent false positives from substrings — ensures the match is a complete word bounded by non-alphanumeric characters</li>
+        <li>Combine regex with <code>wide</code> modifier to detect Unicode-encoded IP addresses or URLs in Windows application memory</li>
+      </ul>
+      <pre><code>strings:
+    $xor_config = "config.ini" xor(0x01-0x7F)  <span class="cm"># restricted XOR key range</span>
+    $full_cmd   = "whoami" fullword             <span class="cm"># not substring of longer word</span>
+    $b64        = /[A-Za-z0-9+\/]{40,}={0,2}/  <span class="cm"># Base64 blob regex</span>
+    $ip_wide    = /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/ wide  <span class="cm"># Unicode IP</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 04 -->
+<template id="tpl-conditions">
+<article class="topic">
+  <h2>Conditions &amp; Logic</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">YARA conditions evaluate L7 application-layer properties — file magic bytes, section structure, import tables, filesize, and string positions all describe the application-layer structure of a binary or document.</span>
+  </div>
+  <p>The condition is the heart of every YARA rule. It combines string matches, file metadata, and module functions into a precise detection expression.
+    <a href="#" class="xref" onclick="loadTopic('modules'); return false;">PE / ELF modules ↗</a>
+  </p>
+
+  <h3>Boolean Logic</h3>
+  <pre><code">condition:
+    $s1 and $s2             // both match
+    $s1 or $s2              // either matches
+    not $s1                 // negation
+    ($s1 or $s2) and $s3   // grouping
+
+    // Useful shorthand
+    any of them             // any defined string matches
+    all of them             // all defined strings match
+    any of ($malware_*)     // any string starting with $malware_
+    2 of ($c2_*)            // at least 2 C2-related strings match</code></pre>
+
+  <h3>File Properties</h3>
+  <pre><code">condition:
+    filesize < 1MB          // less than 1 megabyte
+    filesize > 500KB and filesize < 5MB
+
+    // First bytes (magic bytes / file type checks)
+    uint16(0) == 0x5A4D     // MZ header = PE executable
+    uint32(0) == 0x464C457F // ELF magic (\x7fELF)
+    uint16(0) == 0x8B1F     // gzip compressed
+    uint32(0) == 0x04034B50 // ZIP file (PK\x03\x04)
+
+    // uint8, uint16, uint32 read at specific file offsets
+    // uint16be, uint32be = big-endian variants
+    uint8(0)  == 0x4D       // first byte = 'M'
+    uint32(uint32(0x3C))    // PE header offset trick (read DWORD at 0x3C = PE offset)</code></pre>
+
+  <h3>Combined Conditions (Real Examples)</h3>
+  <pre><code">// Example 1: PE file with suspicious strings
+condition:
+    uint16(0) == 0x5A4D and           // is a PE file
+    filesize < 2MB and                 // not huge
+    all of ($s*)                       // all strings present
+
+// Example 2: Detect WannaCry ransomware
+condition:
+    uint16(0) == 0x5A4D and
+    ($wannacry_service or $kill_switch_url) and
+    $ransom_ext and
+    filesize < 5MB
+
+// Example 3: Memory scanning — no PE check needed
+condition:
+    any of ($mutex_*) and
+    $beacon_config
+
+// Example 4: Anti-sandbox evasion artifacts (suspicious but not malware by itself)
+condition:
+    $vmware_check or $virtualbox_check or
+    $sleep_api or $cpuid_trick
+
+// Example 5: High-entropy sections (packed/encrypted — common in malware)
+// Requires pe module (see Modules section)
+condition:
+    pe.number_of_sections > 3 and
+    for any i in (0..pe.number_of_sections - 1) :
+        (pe.sections[i].raw_data_size > 0x1000 and
+         math.entropy(pe.sections[i].raw_data_offset, pe.sections[i].raw_data_size) > 7.5)</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>File Type Guards and Size Constraints</h4>
+      <ul>
+        <li>Always add <code>uint16(0) == 0x5A4D</code> to Windows malware rules — prevents the rule from matching plaintext files that happen to contain the same strings</li>
+        <li>Add <code>filesize &lt; 5MB</code> to every rule targeting executables — most malware is under 5MB and this prevents scanning large archives</li>
+        <li>Use <code>any of them</code> and <code>all of them</code> as shorthand for condition logic across all defined strings</li>
+      </ul>
+      <pre><code>condition:
+    uint16(0) == 0x5A4D and    <span class="cm"># MZ magic = PE executable</span>
+    filesize &lt; 5MB and
+    all of them                <span class="cm"># all defined strings must match</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Offset-Based and Count-Based Conditions</h4>
+      <ul>
+        <li>Use <code>$magic at 0</code> to anchor a match to the very start of the file — essential for magic byte detection</li>
+        <li>Use <code>#string >= N</code> to require a string to appear at least N times — filters noise from incidental single occurrences</li>
+        <li>Use <code>$string in (filesize-200..filesize)</code> to check for ransom notes or config blocks appended at the end of a file</li>
+      </ul>
+      <pre><code>condition:
+    $mz at 0 and               <span class="cm"># magic bytes exactly at offset 0</span>
+    #c2_url >= 2 and           <span class="cm"># C2 URL appears 2+ times</span>
+    $config in (filesize-512..filesize)  <span class="cm"># config near end of file</span></code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>PE Header Tricks and Anti-Sandbox Detection Rules</h4>
+      <ul>
+        <li>Read the PE header offset with <code>uint32(uint32(0x3C))</code> — this is the canonical PE signature check used in virtually all production malware rules</li>
+        <li>Detect anti-sandbox/anti-VM artifacts as a behavioral indicator rule even if the binary is not itself malicious</li>
+        <li>Combine multiple condition examples (PE check + filesize + string anchor + offset check) for maximum precision with minimum false positives</li>
+      </ul>
+      <pre><code>condition:
+    uint16(0) == 0x5A4D and
+    uint32(uint32(0x3C)) == 0x00004550 and  <span class="cm"># PE signature at header offset</span>
+    filesize &lt; 3MB and
+    (
+        $vmware_check or $sandbox_detect or
+        ($sleep_api and $cpuid_trick)
+    )</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 05 -->
+<template id="tpl-modules">
+<article class="topic">
+  <h2>Modules — PE, ELF, Math &amp; More</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">YARA modules parse L7 application-layer file format structures — PE import tables, ELF section headers, .NET assembly metadata, and entropy calculations all analyze application binary format internals without any network layer involvement.</span>
+  </div>
+  <p>YARA modules expose file-format-specific metadata for use in conditions. The PE module is the most commonly used — it parses PE headers to provide import tables, sections, resources, and more.</p>
+
+  <h3>PE Module</h3>
+  <pre><code">import "pe"
+
+rule PE_with_suspicious_imports {
+    meta:
+        description = "PE with CreateRemoteThread + WriteProcessMemory (classic injection)"
+    condition:
+        pe.imports("kernel32.dll", "CreateRemoteThread") and
+        pe.imports("kernel32.dll", "WriteProcessMemory") and
+        pe.imports("kernel32.dll", "VirtualAllocEx")
+}
+
+rule PE_packed_UPX {
+    condition:
+        pe.sections[0].name == "UPX0" or
+        pe.sections[1].name == "UPX1"
+}
+
+rule PE_no_exports_few_imports {
+    // Common trait of shellcode loaders
+    condition:
+        uint16(0) == 0x5A4D and
+        pe.number_of_exports == 0 and
+        pe.number_of_imports < 5
+}</code></pre>
+
+  <h3>PE Module Reference (Key Fields)</h3>
+  <table>
+    <thead><tr><th>Field / Function</th><th>What It Returns</th></tr></thead>
+    <tbody>
+      <tr><td><code>pe.machine</code></td><td>Target architecture: <code>pe.MACHINE_AMD64</code>, <code>pe.MACHINE_I386</code></td></tr>
+      <tr><td><code>pe.timestamp</code></td><td>Compile timestamp (often manipulated by malware)</td></tr>
+      <tr><td><code>pe.number_of_sections</code></td><td>Total section count</td></tr>
+      <tr><td><code>pe.sections[i].name</code></td><td>Section name (e.g., ".text", ".data", "UPX0")</td></tr>
+      <tr><td><code>pe.sections[i].characteristics</code></td><td>Section flags (executable, writable, readable)</td></tr>
+      <tr><td><code>pe.imports("dll", "func")</code></td><td>Boolean — true if DLL::func is in import table</td></tr>
+      <tr><td><code>pe.exports("FuncName")</code></td><td>Boolean — true if named export exists</td></tr>
+      <tr><td><code>pe.version_info["ProductName"]</code></td><td>Version info resource strings</td></tr>
+      <tr><td><code>pe.number_of_resources</code></td><td>Count of PE resources (icon, manifest, etc.)</td></tr>
+      <tr><td><code>pe.is_dll()</code></td><td>Boolean — true if PE is a DLL</td></tr>
+      <tr><td><code>pe.entry_point</code></td><td>Virtual address of entry point</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Math Module (Entropy)</h3>
+  <pre><code">import "math"
+
+rule High_Entropy_PE_Section {
+    meta:
+        description = "PE section entropy > 7.0 (likely packed or encrypted)"
+    condition:
+        uint16(0) == 0x5A4D and
+        for any i in (0..pe.number_of_sections - 1) :
+            (math.entropy(pe.sections[i].raw_data_offset,
+                          pe.sections[i].raw_data_size) > 7.0 and
+             pe.sections[i].raw_data_size > 512)
+}
+
+// Entropy scale:
+// 0.0 = all same bytes (e.g., null-padded)
+// 8.0 = maximum randomness (perfect encryption/compression)
+// 6.5-7.0 = compressed (zip, deflate)
+// 7.0-7.9 = likely packed/encrypted — suspicious
+// 8.0 = fully random — typically encrypted payload</code></pre>
+
+  <h3>Other Useful Modules</h3>
+  <table>
+    <thead><tr><th>Module</th><th>Use Case</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td><code>elf</code></td><td>ELF Linux binary analysis</td><td><code>elf.type == elf.ET_EXEC</code> — is executable</td></tr>
+      <tr><td><code>hash</code></td><td>Compute MD5/SHA of sections or regions</td><td><code>hash.md5(0, filesize) == "d41d..."</code></td></tr>
+      <tr><td><code>dotnet</code></td><td>.NET assembly inspection</td><td><code>dotnet.assembly_name == "Malware"</code></td></tr>
+      <tr><td><code>time</code></td><td>Time-based conditions</td><td><code>time.now() > 1234567890</code></td></tr>
+    </tbody>
+  </table>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Using the PE Module for Import-Based Detection</h4>
+      <ul>
+        <li>Import the PE module with <code>import "pe"</code> at the top of the rule file — not inside the rule itself</li>
+        <li>Use <code>pe.imports("kernel32.dll", "FunctionName")</code> to detect suspicious import combinations (injection, hollowing, persistence APIs)</li>
+        <li>The combination of <code>CreateRemoteThread</code> + <code>WriteProcessMemory</code> + <code>VirtualAllocEx</code> is a classic process injection API triad</li>
+      </ul>
+      <pre><code>import "pe"
+
+rule Process_Injection_APIs {
+    condition:
+        pe.imports("kernel32.dll", "CreateRemoteThread") and
+        pe.imports("kernel32.dll", "WriteProcessMemory") and
+        pe.imports("kernel32.dll", "VirtualAllocEx")
+}</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Section Name and Packer Detection</h4>
+      <ul>
+        <li>Check <code>pe.sections[0].name == "UPX0"</code> to detect UPX-packed executables — the section name is preserved even after packing</li>
+        <li>Use <code>pe.number_of_exports == 0</code> combined with <code>pe.number_of_imports &lt; 5</code> to flag shellcode loaders — they import minimally to avoid AV</li>
+        <li>Use <code>pe.timestamp</code> to identify binaries with anomalous compile timestamps (e.g., year 1970 = timestamp wiped by malware author)</li>
+      </ul>
+      <pre><code>import "pe"
+
+rule UPX_Packed_Executable {
+    condition:
+        (pe.sections[0].name == "UPX0" or
+         pe.sections[1].name == "UPX1") and
+        uint16(0) == 0x5A4D
+}</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Entropy-Based Packed/Encrypted Section Detection</h4>
+      <ul>
+        <li>Use the <code>math</code> module to calculate entropy on PE sections — entropy above 7.0 on a code section strongly suggests packing or encryption</li>
+        <li>Combine entropy check with section size (<code>raw_data_size > 512</code>) to exclude padding sections that naturally have high or low entropy</li>
+        <li>Use <code>for any i in (0..pe.number_of_sections - 1)</code> to iterate over all sections without knowing the section count in advance</li>
+      </ul>
+      <pre><code>import "pe"
+import "math"
+
+rule Packed_PE_High_Entropy {
+    condition:
+        uint16(0) == 0x5A4D and
+        for any i in (0..pe.number_of_sections - 1) : (
+            pe.sections[i].raw_data_size > 512 and
+            math.entropy(pe.sections[i].raw_data_offset,
+                         pe.sections[i].raw_data_size) > 7.0
+        )
+}</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 06 -->
+<template id="tpl-writing">
+<article class="topic">
+  <h2>Writing Effective Rules</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Rule writing is entirely an L7 discipline — analysts extract unique artifacts from application-layer binaries (mutexes, API calls, C2 URLs, byte sequences) and encode them as detection patterns that fire on matching application content.</span>
+  </div>
+  <p>A good YARA rule is specific enough to avoid false positives but general enough to catch variants. Writing rules from malware analysis is a core threat hunter skill.
+    <a href="#" class="xref" onclick="loadTopic('lab'); return false;">Practice in the lab ↗</a>
+  </p>
+
+  <h3>Rule Writing Workflow</h3>
+  <pre><code"># Step 1 — Acquire the sample (safely: sandboxed VM, no execution on host)
+# Use Cuckoo / ANY.RUN sandbox report or static analysis tools
+
+# Step 2 — Static analysis to find unique strings
+strings -n 8 malware.exe | less            # all strings 8+ chars
+strings -el malware.exe | less             # Unicode strings
+strings -n 8 malware.exe | grep -E "(http|cmd|power|mutex|Global)" # filter interesting
+
+# Step 3 — Hex analysis for byte patterns
+xxd malware.exe | head -50                 # view raw hex
+hexdump -C malware.exe | grep "4D 5A"
+
+# Step 4 — Identify unique, stable artifacts
+# Good candidates:
+# - Mutex names (Global\\SomeMutex)
+# - Registry key paths (SOFTWARE\Malware\Config)
+# - C2 URLs / domain patterns
+# - Error messages / ransom notes
+# - Unique import combinations
+# - Custom encryption keys (fixed bytes)
+# Bad candidates:
+# - Short generic strings ("cmd", "exe", "http")
+# - System DLL names shared by legitimate software
+# - Easily changed values (version strings, filenames)
+
+# Step 5 — Write the rule
+# Step 6 — Test (validate and check for FPs)</code></pre>
+
+  <h3>Testing Rules</h3>
+  <pre><code"># Test against target file
+yara -s rule.yar malware.exe    # -s shows matched strings
+
+# Test against clean system files (check for false positives)
+yara rule.yar C:\Windows\System32\
+yara -r rule.yar /usr/bin/
+
+# Test against clean collection
+yara rule.yar /home/user/clean_software/
+
+# Compile rules to check syntax
+yarac rule.yar compiled.yarc     # compile; errors shown if syntax wrong
+
+# Validate with yara -d (performance debug)
+yara -p 8 rule.yar /large/directory/   # -p = number of threads</code></pre>
+
+  <h3>Rule Quality Guidelines</h3>
+  <table>
+    <thead><tr><th>Principle</th><th>Why It Matters</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td>Specificity</td><td>Avoid FPs — generic strings fire on legitimate software</td><td>Bad: <code>"CreateThread"</code>; Good: <code>"Global\\WannaCry_Mutex_V2"</code></td></tr>
+      <tr><td>Stability</td><td>Patterns should survive minor code changes / repacking</td><td>Avoid: version strings, filenames. Use: mutex names, C2 URLs, unique config structures</td></tr>
+      <tr><td>PE file guard</td><td>Always add <code>uint16(0) == 0x5A4D</code> for Windows malware rules</td><td>Prevents matching plaintext files that happen to contain the string</td></tr>
+      <tr><td>Size constraint</td><td><code>filesize &lt; 5MB</code> prevents scanning huge archive files</td><td>Most malware executables are under 5MB</td></tr>
+      <tr><td>Multiple anchors</td><td>Require 2+ unique strings — reduces FP risk dramatically</td><td><code>$mutex and $c2_url and $ransom_note</code></td></tr>
+      <tr><td>Document source</td><td>Meta fields for tracking provenance and updating rules</td><td><code>reference = "https://blog.example.com/analysis"</code></td></tr>
+    </tbody>
+  </table>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Extracting Good Strings from a Sample</h4>
+      <ul>
+        <li>Run <code>strings -n 8 malware.exe</code> to extract all 8+ character printable strings — the minimum length filters out short generic tokens</li>
+        <li>Good detection candidates are unique to the malware family: mutex names, registry paths, ransom note text, C2 domain patterns</li>
+        <li>Bad candidates: generic Windows API names (<code>CreateThread</code>), short strings (<code>cmd</code>, <code>exe</code>), or values easily changed between builds</li>
+      </ul>
+      <pre><code>strings -n 8 malware.exe | less
+strings -el malware.exe | less    <span class="cm"># Unicode strings</span>
+strings -n 8 malware.exe | grep -E "(mutex|Global|http|WNCRY|ransom)"</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Testing Rules and Checking for False Positives</h4>
+      <ul>
+        <li>Always test new rules against clean system files (<code>C:\Windows\System32\</code> or <code>/usr/bin/</code>) to check for false positives before deploying</li>
+        <li>Use <code>yarac</code> to compile the rule — syntax errors are caught at compile time before scanning large datasets</li>
+        <li>Use <code>yara -p 8</code> with multiple threads when testing against large directories to get results faster</li>
+      </ul>
+      <pre><code>yara -s new_rule.yar malware.exe   <span class="cm"># verify match with string details</span>
+yara new_rule.yar /usr/bin/        <span class="cm"># check FPs against clean binaries</span>
+yarac new_rule.yar compiled.yarc   <span class="cm"># compile to check syntax</span>
+yara -p 8 new_rule.yar /evidence/  <span class="cm"># parallel scan for speed</span></code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Stability and Variant Coverage Strategies</h4>
+      <ul>
+        <li>Prefer structural artifacts (PE section names, import table combinations) over version strings or filenames — structural artifacts survive repacking and minor code changes</li>
+        <li>Require 2+ independent string anchors in conditions — a rule matching on a single generic string will produce unacceptable false positive rates at scale</li>
+        <li>Use hex patterns with jumps (<code>[M-N]</code>) for shellcode sequences that have variable-length data between stable landmarks</li>
+      </ul>
+      <pre><code><span class="cm"># Stable multi-anchor rule pattern:</span>
+condition:
+    uint16(0) == 0x5A4D and   <span class="cm"># PE guard</span>
+    filesize &lt; 3MB and        <span class="cm"># size guard</span>
+    $mutex and                <span class="cm"># unique mutex</span>
+    ($c2_url or $key_bytes) and  <span class="cm"># at least one of C2/key</span>
+    any of ($func_*)          <span class="cm"># behavioral API set</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 07 -->
+<template id="tpl-ioc">
+<article class="topic">
+  <h2>IOC Detection &amp; Hunting</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">IOC hunting with YARA is entirely L7 — threat intelligence artifacts (mutex names, C2 URLs, decryption keys, ransom note strings) are all application-layer content embedded in malware binaries and memory.</span>
+  </div>
+  <p>YARA rules operationalize IOCs from threat intelligence reports into automated detection. This section covers converting TI reports into rules.
+    <a href="#" class="xref" onclick="loadTopic('integration'); return false;">SIEM integration ↗</a>
+  </p>
+
+  <h3>Converting a TI Report to YARA Rules</h3>
+  <pre><code"># Scenario: TI report for "DarkComet RAT" variant
+# Report says: mutex = "DC_MUTEX-xyz123", C2 = "update.evil-domain.com",
+# decryption key bytes = { DE AD BE EF 01 23 45 67 }
+
+rule RAT_DarkComet_Variant_2024 {
+    meta:
+        author      = "SOC Analyst"
+        date        = "2024-03-15"
+        description = "DarkComet RAT variant — mutex and C2 pattern"
+        tlp         = "GREEN"
+        source      = "Internal TI"
+        mitre       = "T1571 Non-Standard Port, T1082 System Info Discovery"
+
+    strings:
+        $mutex   = "DC_MUTEX-xyz123" wide ascii
+        $c2      = "update.evil-domain.com" nocase
+        $key     = { DE AD BE EF 01 23 45 67 }
+        $func1   = "keylogger" nocase
+        $func2   = "screenshot" nocase
+
+    condition:
+        uint16(0) == 0x5A4D and
+        filesize < 3MB and
+        $mutex and
+        ($c2 or $key) and
+        any of ($func*)
+}</code></pre>
+
+  <h3>Bulk Scanning for Threat Hunting</h3>
+  <pre><code"># Scan a directory recursively with multiple rules
+yara -r /opt/yara-rules/ /mnt/evidence/disk_image/
+
+# Scan memory dumps
+yara -r rules/ memory_dump.dmp
+
+# Scan with process scan (live system — requires admin)
+yara rules/ $(pgrep -d, .)   # scan all process memory
+
+# Timeout per file (prevent hanging on huge files)
+yara --timeout=30 rules/ /large_dir/
+
+# Output only matching file names (no string details)
+yara rules/ /dir/ 2>/dev/null | cut -d' ' -f1  # rule name only
+yara rules/ /dir/ 2>/dev/null | awk '{print $2}' # filename only
+
+# Save results
+yara -r rules/ /evidence/ > scan_results.txt 2>&1</code></pre>
+
+  <h3>YARA Rule Repositories</h3>
+  <table>
+    <thead><tr><th>Repository</th><th>Content</th><th>URL</th></tr></thead>
+    <tbody>
+      <tr><td>YARA-Rules (GitHub)</td><td>Community rules for malware families, packers, email</td><td>github.com/Yara-Rules/rules</td></tr>
+      <tr><td>Neo23x0 / Signature-Base</td><td>Florian Roth's high-quality rules — updated frequently</td><td>github.com/Neo23x0/signature-base</td></tr>
+      <tr><td>elastic/protections-artifacts</td><td>Elastic Security YARA rules from their malware research team</td><td>github.com/elastic/protections-artifacts</td></tr>
+      <tr><td>reversinglabs/reversinglabs-yara-rules</td><td>ReversingLabs threat intelligence rules</td><td>github.com/reversinglabs/reversinglabs-yara-rules</td></tr>
+      <tr><td>mandiant/red_team_tool_countermeasures</td><td>Mandiant YARA rules for red team tools (Cobalt Strike, etc.)</td><td>github.com/mandiant/red_team_tool_countermeasures</td></tr>
+    </tbody>
+  </table>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Converting a TI Report to a YARA Rule</h4>
+      <ul>
+        <li>A TI report typically provides IOCs: file hashes, mutex names, C2 URLs, registry keys — extract the non-hash IOCs as YARA string patterns</li>
+        <li>Hashes alone make poor YARA rules — convert hash IOCs to structural patterns (mutex + C2 URL) that survive malware family variants</li>
+        <li>Always add TLP, MITRE ATT&amp;CK technique, and source reference to the <code>meta:</code> section for traceability</li>
+      </ul>
+      <pre><code><span class="cm"># TI report IOCs → YARA strings</span>
+strings:
+    $mutex = "DC_MUTEX-xyz123" wide ascii
+    $c2    = "update.evil-domain.com" nocase
+    $key   = { DE AD BE EF 01 23 45 67 }
+condition:
+    uint16(0) == 0x5A4D and $mutex and ($c2 or $key)</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Bulk Scanning Techniques for Threat Hunting</h4>
+      <ul>
+        <li>Use <code>yara -r /opt/rules/ /evidence/</code> to recursively scan a disk image or evidence directory with all rules in one pass</li>
+        <li>Redirect output to a file and use <code>sort | uniq -c</code> to identify which rules fire most frequently across an evidence corpus</li>
+        <li>Use <code>--timeout=30</code> per file when scanning archives — prevents single large files from blocking the entire hunt</li>
+      </ul>
+      <pre><code>yara -r /opt/rules/ /mnt/evidence/ --timeout=30 > results.txt 2>&amp;1
+sort results.txt | uniq -c | sort -rn | head -20  <span class="cm"># top matching rules</span>
+yara -r /opt/rules/ /mnt/evidence/ 2>/dev/null | awk '{print $2}' | sort -u</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Using Public Rule Repositories Effectively</h4>
+      <ul>
+        <li>Use Neo23x0/signature-base as a baseline rule set — Florian Roth's rules are high-quality, regularly updated, and used by major SIEM platforms</li>
+        <li>Clone elastic/protections-artifacts to get YARA rules actively used in production by Elastic Security — useful for benchmarking your own rules</li>
+        <li>Never deploy community rules to production without testing for false positives against your own clean baseline first</li>
+      </ul>
+      <pre><code>git clone https://github.com/Neo23x0/signature-base /opt/yara-rules/
+git clone https://github.com/elastic/protections-artifacts /opt/elastic-rules/
+yara -r /opt/yara-rules/ /usr/bin/ 2>/dev/null | wc -l  <span class="cm"># count FPs on clean system</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 08 -->
+<template id="tpl-integration">
+<article class="topic">
+  <h2>Integration with Security Tools</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">YARA integrates with security platforms at L7 — Cuckoo sandbox, Wazuh FIM, Velociraptor hunts, and VirusTotal all pass application-layer file content or memory to YARA for pattern matching; the integration points are API calls and file paths, not network packets.</span>
+  </div>
+  <p>YARA is most powerful when integrated into the broader detection stack. Isolated scanning is useful for IR; integrated scanning provides continuous coverage.
+    <a href="#" class="xref" onclick="loadTopic('ioc'); return false;">IOC hunting ↗</a>
+  </p>
+
+  <h3>YARA with Cuckoo Sandbox</h3>
+  <pre><code"># Place rules in Cuckoo's signatures directory
+cp my_rules.yar /opt/cuckoo/data/yara/
+
+# Cuckoo automatically scans:
+# - Submitted sample
+# - All dropped files
+# - Extracted memory regions
+# - Network PCAP artifacts
+
+# Results appear in JSON report under "signatures" section
+# Example:
+# "yara_matches": [
+#   {"rule": "RAT_DarkComet_Variant_2024", "namespace": "default", "tags": ["rat"]}
+# ]</code></pre>
+
+  <h3>YARA with OSSEC / Wazuh</h3>
+  <pre><code"># Wazuh integrates YARA for FIM (File Integrity Monitoring)
+# Edit /var/ossec/etc/ossec.conf — add active-response
+
+# Example: scan new/modified files with YARA automatically
+# 1. Configure FIM to trigger active-response on file create/modify
+# 2. Active response script runs yara against the file
+# 3. Alert generated if match found
+
+# Basic active-response YARA script:
+#!/bin/bash
+FILE="$3"
+RULES="/opt/yara-rules/"
+yara -r "$RULES" "$FILE" >> /var/log/wazuh-yara.log 2>&1
+if [ $? -eq 0 ]; then
+    echo "YARA match on $FILE" | logger -t wazuh-yara
+fi</code></pre>
+
+  <h3>YARA with Velociraptor</h3>
+  <pre><code"># Velociraptor VQL hunt using YARA
+# Create a new hunt → select artifact: Windows.Detection.Yara.Process
+
+# Custom artifact YAML:
+name: Custom.Yara.FileScan
+parameters:
+  - name: YaraRule
+    type: yara
+    default: |
+      rule TestRule { strings: $s = "suspicious" condition: $s }
+  - name: PathGlob
+    default: "C:/Users/**/*.exe"
+
+sources:
+  - query: |
+      SELECT * FROM foreach(
+        row=glob(globs=PathGlob),
+        query={
+          SELECT File.FullPath, Rule, Meta, Tags, Strings
+          FROM yara(files=File.FullPath, rules=YaraRule)
+        })
+
+# This scans all .exe files under C:\Users\ on EVERY endpoint in the hunt</code></pre>
+
+  <h3>YARA with VirusTotal Intelligence</h3>
+  <pre><code"># VT Intelligence retrohunt (requires VT Intelligence subscription)
+# Upload YARA rule → VT scans entire corpus (~1 billion files)
+# Returns all matching file hashes
+
+# VT Livehunt — rules run against all newly submitted files
+# Notifications when rule matches (for monitoring new malware variants)
+
+# via API (VTI subscription required)
+curl -X POST "https://www.virustotal.com/api/v3/intelligence/retrohunt_jobs" \
+  -H "x-apikey: YOUR_KEY" \
+  -F "rules=@my_rule.yar"
+
+# Python VT API
+import vt
+client = vt.Client("YOUR_KEY")
+analysis = client.scan_file(open("sample.exe", "rb"))
+print(analysis.id)</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>YARA in Cuckoo Sandbox</h4>
+      <ul>
+        <li>Drop <code>.yar</code> files into Cuckoo's <code>/opt/cuckoo/data/yara/</code> directory — rules run automatically against all submitted samples and dropped files</li>
+        <li>YARA matches appear in the Cuckoo JSON report under the <code>signatures</code> section — no configuration needed beyond placing the rule file</li>
+        <li>Cuckoo also scans extracted memory regions and network PCAP artifacts — YARA catches in-memory L7 content that file scanning alone would miss</li>
+      </ul>
+      <pre><code>cp my_rules.yar /opt/cuckoo/data/yara/   <span class="cm"># deploy rule to Cuckoo</span>
+<span class="cm"># Results in JSON report:</span>
+<span class="cm"># "yara_matches": [{"rule": "RAT_DarkComet", "tags": ["rat"]}]</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Wazuh Active-Response YARA Integration</h4>
+      <ul>
+        <li>Configure Wazuh FIM (File Integrity Monitoring) to trigger a YARA active-response script whenever a file is created or modified</li>
+        <li>The active-response script runs <code>yara</code> against the changed file and logs matches to a dedicated log file for SIEM ingestion</li>
+        <li>This provides near-real-time L7 content scanning of all file-system changes — far more powerful than hash-only FIM</li>
+      </ul>
+      <pre><code><span class="cm">#!/bin/bash — active-response script</span>
+FILE="$3"
+RULES="/opt/yara-rules/"
+yara -r "$RULES" "$FILE" >> /var/log/wazuh-yara.log 2>&amp;1
+if [ $? -eq 0 ]; then
+    echo "YARA match: $FILE" | logger -t wazuh-yara
+fi</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Velociraptor VQL Hunt Across Thousands of Endpoints</h4>
+      <ul>
+        <li>Create a custom Velociraptor artifact that accepts a YARA rule as a parameter and a path glob — the hunt deploys to every enrolled endpoint simultaneously</li>
+        <li>VQL's <code>foreach</code> + <code>glob</code> + <code>yara()</code> combination scans file content at L7 across the entire fleet, returning matches with full file paths</li>
+        <li>Results aggregate in the Velociraptor server in real time — enables IR triage of thousands of endpoints in minutes rather than days</li>
+      </ul>
+      <pre><code><span class="cm"># Velociraptor artifact snippet (VQL):</span>
+SELECT File.FullPath, Rule, Meta, Strings
+FROM foreach(
+  row=glob(globs="C:/Users/**/*.exe"),
+  query={
+    SELECT File.FullPath, Rule, Meta, Strings
+    FROM yara(files=File.FullPath, rules=YaraRule)
+  })
+<span class="cm"># Deploy as hunt → applies to all enrolled endpoints</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 09 -->
+<template id="tpl-advanced">
+<article class="topic">
+  <h2>Advanced Techniques</h2>
+  <p>Advanced YARA usage covers external variables, private rules, rule chaining, and performance optimization for large-scale scanning.</p>
+
+  <h3>Private Rules (Rule Helpers)</h3>
+  <pre><code">// Private rules don't appear in output — used as building blocks
+private rule Is_PE {
+    condition:
+        uint16(0) == 0x5A4D and
+        uint32(uint32(0x3C)) == 0x00004550
+}
+
+private rule Is_Large_Entropy {
+    import "math"
+    import "pe"
+    condition:
+        for any i in (0..pe.number_of_sections - 1) :
+            (math.entropy(pe.sections[i].raw_data_offset,
+                          pe.sections[i].raw_data_size) > 7.0)
+}
+
+// Public rule uses private rules as building blocks
+rule Packed_PE_Malware {
+    condition:
+        Is_PE and Is_Large_Entropy and filesize < 2MB
+}</code></pre>
+
+  <h3>External Variables</h3>
+  <pre><code">// Define external variable in rule (must be provided at runtime)
+rule Contextual_Scan {
+    meta:
+        description = "Matches files from untrusted download sources"
+    condition:
+        filesize < 5MB and
+        ext_var_source == "internet_download"  // external variable
+}
+
+// Pass external variable at scan time
+yara -d ext_var_source="internet_download" rule.yar /downloads/</code></pre>
+
+  <h3>Performance Optimization</h3>
+  <pre><code"># Common performance tips
+
+# 1. Put fast conditions first (short-circuit evaluation)
+condition:
+    uint16(0) == 0x5A4D and    // fast: reads 2 bytes
+    filesize < 5MB and          // fast: no scan needed
+    $expensive_regex            // slow: put last
+
+# 2. Use anchored strings (at specific offsets) when possible
+$magic at 0                    // faster than unanchored search
+
+# 3. Use hex instead of regex for byte patterns
+{ 4D 5A 90 00 }                // faster than /MZ\x90\x00/
+
+# 4. Compile rules for repeated scanning
+yarac combined_rules.yar compiled.yarc
+yara compiled.yarc /path/      # much faster for large rule sets
+
+# 5. Limit regex complexity (avoid catastrophic backtracking)
+# Bad:  /(a+)+b/
+# Good: /a+b/
+
+# 6. Use threads for directory scanning
+yara -p 8 rules/ /evidence/    # use 8 threads</code></pre>
+
+  <h3>Rule Chaining with Global Rules</h3>
+  <pre><code">// Global rules act as a pre-filter — if they fail, other rules don't run
+global rule Only_PE_Files {
+    condition:
+        uint16(0) == 0x5A4D
+}
+
+// Now ALL other rules in this scan will only apply to PE files
+// This dramatically speeds up scanning large mixed directories</code></pre>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 10 -->
+<template id="tpl-memory">
+<article class="topic">
+  <h2>Memory Scanning</h2>
+  <p>YARA can scan process memory for in-memory-only malware (fileless attacks), injected shellcode, and unpacked payloads that never touch disk.</p>
+
+  <h3>Why Scan Memory?</h3>
+  <table>
+    <thead><tr><th>Scenario</th><th>Why Memory Scan Catches It</th></tr></thead>
+    <tbody>
+      <tr><td>Fileless malware (PowerShell payloads)</td><td>Payload exists only in memory — no file to scan on disk</td></tr>
+      <tr><td>Process injection (shellcode in notepad.exe)</td><td>Malicious code in legitimate process memory space</td></tr>
+      <tr><td>Packed malware (UPX, custom packer)</td><td>File on disk is packed; memory shows unpacked plaintext strings</td></tr>
+      <tr><td>Cobalt Strike Beacon</td><td>Beacon config in memory — hunt for config structure bytes</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Scanning Live Process Memory (Linux)</h3>
+  <pre><code"># Scan all running processes (requires root)
+sudo yara -r rules/ --scan-pid $(pgrep -d, .)
+
+# Scan a specific PID
+sudo yara -r rules/ --scan-pid 1234
+
+# Dump process memory then scan
+# cat /proc/1234/maps    # view memory maps
+# dd if=/proc/1234/mem bs=1 skip=$OFFSET count=$SIZE of=dump.bin
+
+# Volatility 3 + YARA (memory forensics — dump file)
+vol -f memory.dmp windows.vadyarascan --yara-file rule.yar
+vol -f memory.dmp linux.yarascan --yara-file rule.yar</code></pre>
+
+  <h3>Cobalt Strike Beacon Detection Example</h3>
+  <pre><code">// Hunt for Cobalt Strike Beacon config in memory
+rule CobaltStrike_Beacon_Config {
+    meta:
+        description = "Cobalt Strike Beacon malleable config block in memory"
+        author = "SentinelOne Research"
+    strings:
+        // Beacon config magic bytes (XOR key at start)
+        $cfg1 = { 2E 2F 2E 2F 2E 2F }
+        // Watermark / license check pattern
+        $cfg2 = { 00 01 00 01 00 02 00 }
+        // Sleep mask
+        $sleep = "sleep" fullword
+        // Common default profile artifacts
+        $ua = "Mozilla/5.0 (compatible; MSIE"
+    condition:
+        any of ($cfg*) or
+        ($sleep and $ua and filesize < 1MB)
+}</code></pre>
+
+  <h3>Scanning Memory Dumps (Forensics)</h3>
+  <pre><code"># Scan raw memory dump
+yara -r rules/ memory_dump.dmp
+
+# Scan specific memory segments from Volatility output
+# Extract a memory region first:
+vol -f memory.dmp windows.dumpfiles --virtaddr 0xffff... -o /tmp/extracted/
+yara rules/ /tmp/extracted/
+
+# Scan hibernation file (Windows hiberfil.sys)
+# Note: decompress first if compressed
+yara rules/ hiberfil.sys
+
+# Combine with strings for quick triage before full YARA scan
+strings memory_dump.dmp | grep -E "(C2|beacon|payload|\.onion)"</code></pre>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 11 -->
+<template id="tpl-lab">
+<article class="topic">
+  <h2>Investigation Lab — Writing &amp; Testing Rules</h2>
+  <div class="callout warn">
+    <strong>Sample safety.</strong> All malware samples in this lab should be in a sandboxed VM with no network access. Never run malware on a production system.
+  </div>
+
+  <h3>Lab Environment</h3>
+  <table>
+    <thead><tr><th>VM</th><th>IP</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td>Kali Linux</td><td>192.168.56.10</td><td>YARA rule development, scanning</td></tr>
+      <tr><td>Windows 10 (sandbox)</td><td>192.168.56.30</td><td>Target for memory scanning exercises (YARA for Windows)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Exercise 1 — Write a Rule from Strings Output</h3>
+  <pre><code"># Step 1: Get a test sample (use EICAR test file — safe, detected by AV)
+echo 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' > eicar.com
+
+# Step 2: Run strings
+strings eicar.com
+# Output: X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*
+
+# Step 3: Write rule targeting the unique EICAR string
+cat > eicar_rule.yar << 'EOF'
+rule EICAR_Test_File {
+    meta:
+        description = "EICAR standard anti-malware test file"
+        author      = "Lab Exercise"
+    strings:
+        $eicar = "EICAR-STANDARD-ANTIVIRUS-TEST-FILE"
+    condition:
+        $eicar
+}
+EOF
+
+# Step 4: Test the rule
+yara eicar_rule.yar eicar.com
+# Output: EICAR_Test_File eicar.com   ← match!
+
+# Step 5: Verify no FPs on clean files
+yara eicar_rule.yar /bin/ls    # should produce no output</code></pre>
+
+  <h3>Exercise 2 — PE-based Rule with Imports</h3>
+  <pre><code"># Step 1: Create a simple C program that uses suspicious imports
+cat > test.c << 'EOF'
+#include <windows.h>
+int main() {
+    // Suspicious combo: remote thread injection
+    LPVOID mem = VirtualAllocEx(NULL, NULL, 4096, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+    WriteProcessMemory(NULL, mem, "shellcode", 9, NULL);
+    CreateRemoteThread(NULL, NULL, 0, (LPTHREAD_START_ROUTINE)mem, NULL, 0, NULL);
+    return 0;
+}
+EOF
+# Compile on Windows: gcc test.c -o test.exe
+
+# Step 2: Write detection rule
+cat > injection_rule.yar << 'EOF'
+import "pe"
+
+rule Suspicious_Remote_Injection_APIs {
+    meta:
+        description = "PE with process injection API combo"
+        severity    = "high"
+        mitre       = "T1055 Process Injection"
+    condition:
+        uint16(0) == 0x5A4D and
+        filesize < 5MB and
+        pe.imports("kernel32.dll", "VirtualAllocEx") and
+        pe.imports("kernel32.dll", "WriteProcessMemory") and
+        pe.imports("kernel32.dll", "CreateRemoteThread")
+}
+EOF
+
+# Step 3: Test
+yara injection_rule.yar test.exe</code></pre>
+
+  <h3>Exercise 3 — Retrohunt a Malware Family</h3>
+  <pre><code"># Scenario: TI report provides WannaCry ransomware IOCs
+# Mutex: "Global\MsWinZonesCacheCounterMutexA0"
+# Service: "mssecsvc2.0"
+# Kill switch URL pattern: iuqerfsodp9ifjaposdfjhgosurijfaewrwergwea.com
+
+cat > wannacry_hunt.yar << 'EOF'
+rule Ransomware_WannaCry_2017 {
+    meta:
+        description = "WannaCry ransomware — mutex and kill-switch URL artifacts"
+        author      = "SOC Hunt Team"
+        date        = "2024-03-15"
+        tlp         = "AMBER"
+        mitre       = "T1486 Data Encrypted for Impact"
+        reference   = "https://attack.mitre.org/software/S0366/"
+
+    strings:
+        $mutex1   = "Global\\MsWinZonesCacheCounterMutexA0" wide ascii
+        $svc      = "mssecsvc2.0" wide ascii
+        $kill_sw  = "iuqerfsodp9ifjaposdfjhgosurijfaewrwergwea.com" nocase
+        $wncry    = ".WNCRY" ascii wide
+        $readme   = "@Please_Read_Me@.txt" ascii wide
+
+    condition:
+        uint16(0) == 0x5A4D and
+        filesize < 10MB and
+        (
+            ($mutex1 and $svc) or
+            ($kill_sw) or
+            (2 of ($wncry, $readme, $mutex1))
+        )
+}
+EOF
+
+# Scan evidence directory
+yara -r wannacry_hunt.yar /mnt/evidence/
+yara -s wannacry_hunt.yar suspect_file.exe  # show matched strings</code></pre>
+
+  <div class="callout lab">
+    <strong>Lab Extension:</strong> Download YARA rules from Neo23x0/signature-base and test them against EICAR variants. Write a rule for Metasploit Meterpreter shellcode using its characteristic string patterns. Integrate the rules into Wazuh active-response for automated FIM-triggered scanning.
+    <a href="#" class="xref" onclick="loadTopic('integration'); return false;">Integration guide ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('ioc'); return false;">IOC hunting ↗</a>
+  </div>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: 'YARA',
+  topics: [
+    { id: 'overview',    badge: '01', label: 'Overview & Architecture'   },
+    { id: 'syntax',      badge: '02', label: 'Rule Syntax & Structure'    },
+    { id: 'strings',     badge: '03', label: 'String Types & Modifiers'  },
+    { id: 'conditions',  badge: '04', label: 'Conditions & Logic'         },
+    { id: 'modules',     badge: '05', label: 'Modules — PE, ELF, Math'   },
+    { id: 'writing',     badge: '06', label: 'Writing Effective Rules'    },
+    { id: 'ioc',         badge: '07', label: 'IOC Detection & Hunting'   },
+    { id: 'integration', badge: '08', label: 'Tool Integration'           },
+    { id: 'advanced',    badge: '09', label: 'Advanced Techniques'        },
+    { id: 'memory',      badge: '10', label: 'Memory Scanning'            },
+    { id: 'lab',         badge: '11', label: 'Investigation Lab'          },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

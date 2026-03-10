@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nmap Host Discovery — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Nmap</div>
+      <div class="sidebar-title">Host Discovery</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">🔎</div>
+          <h2>Host Discovery</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Host Discovery',
+  topics: [
+    { id: 'ping-types',       badge: '01', label: 'Ping Probe Types'         },
+    { id: 'arp-discovery',    badge: '02', label: 'ARP Discovery'             },
+    { id: 'no-ping',          badge: '03', label: '-Pn — Skip Discovery'      },
+    { id: 'target-specs',     badge: '04', label: 'Target Specification'      },
+    { id: 'discovery-output', badge: '05', label: 'Discovery Output & Tips'   },
+  ]
+};
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EMBEDDED CONTENT TEMPLATES — no server required
+     ═══════════════════════════════════════════════════════════════ -->
+
+<template id="tpl-ping-types">
+<article class="topic">
+<h1>01 · Ping Probe Types</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-note">Ping probes span L3 (ICMP echo/timestamp) and L4 (TCP SYN/ACK ping) — multiple probe types are needed because firewalls may block specific protocols at each layer.</span>
+</div>
+<hr class="divider">
+
+<p>Before port scanning, Nmap performs host discovery to determine which targets are online. Multiple probe types are available — each has different network behavior and firewall bypass capability. By default, Nmap uses ICMP echo + TCP SYN to port 443 + TCP ACK to port 80 + ICMP timestamp when run as root.</p>
+
+<h2>Discovery Probe Reference</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Flag</th><th>Probe Type</th><th>Default Port(s)</th><th>Best For</th></tr></thead>
+  <tbody>
+    <tr><td><code>-PE</code></td><td>ICMP echo request (ping)</td><td>—</td><td>Simple networks; often blocked at perimeter</td></tr>
+    <tr><td><code>-PP</code></td><td>ICMP timestamp request (type 13)</td><td>—</td><td>Hosts that block echo but respond to timestamp</td></tr>
+    <tr><td><code>-PM</code></td><td>ICMP address mask request (type 17)</td><td>—</td><td>Rarely useful; most hosts ignore</td></tr>
+    <tr><td><code>-PS[ports]</code></td><td>TCP SYN probe</td><td>443</td><td>Firewalled hosts; evades ICMP filtering</td></tr>
+    <tr><td><code>-PA[ports]</code></td><td>TCP ACK probe</td><td>80</td><td>Stateless firewalls; ACK bypasses inbound rules</td></tr>
+    <tr><td><code>-PU[ports]</code></td><td>UDP probe</td><td>40125</td><td>Hosts that filter TCP but pass UDP</td></tr>
+    <tr><td><code>-PY[ports]</code></td><td>SCTP INIT probe</td><td>80</td><td>SCTP-capable hosts; telecom environments</td></tr>
+    <tr><td><code>-PR</code></td><td>ARP request</td><td>—</td><td>Local Ethernet — fastest, most reliable</td></tr>
+    <tr><td><code>-PO[protocols]</code></td><td>IP protocol probe</td><td>—</td><td>Protocol-specific discovery</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>ICMP Probes</h2>
+<pre><code><span class="cm"># ICMP echo — most basic ping; often blocked by Windows firewall</span>
+nmap -PE -sn 192.168.1.0/24
+
+<span class="cm"># ICMP timestamp — type 13 request; may bypass ICMP echo filters</span>
+nmap -PP -sn 192.168.1.0/24
+
+<span class="cm"># Combine ICMP types for better coverage</span>
+nmap -PE -PP -sn 192.168.1.0/24</code></pre>
+
+<h2>TCP Ping Probes</h2>
+<pre><code><span class="cm"># TCP SYN ping to port 443 (default) — works through many firewalls</span>
+nmap -PS -sn 192.168.1.0/24
+
+<span class="cm"># SYN ping to custom ports</span>
+nmap -PS22,80,443,8080 -sn 192.168.1.0/24
+
+<span class="cm"># TCP ACK ping to port 80 — gets through stateless filters</span>
+nmap -PA -sn 192.168.1.0/24
+
+<span class="cm"># Combine SYN and ACK for better host detection</span>
+nmap -PS443 -PA80 -sn 192.168.1.0/24</code></pre>
+
+<h3>Why TCP ACK (-PA) Bypasses Some Firewalls</h3>
+<pre><code><span class="cm"># Stateless/ACL firewall rule example:
+#   ALLOW outbound established  (src=internal, flags=ACK)
+#   DENY  inbound SYN
+#
+# Nmap -PA sends ACK from outside → rule sees "established" flag
+# → passes through → target sees unexpected ACK → sends RST
+# → RST confirms host is alive</span>
+
+<span class="cm"># This only works against stateless firewalls</span>
+<span class="cm"># Stateful firewalls drop ACKs that don't match connection table</span></code></pre>
+
+<h2>UDP Ping</h2>
+<pre><code><span class="cm"># UDP ping to high port (default 40125 — chosen to get ICMP unreachable)</span>
+nmap -PU -sn 192.168.1.0/24
+
+<span class="cm"># UDP ping to specific port</span>
+nmap -PU53,161 -sn 192.168.1.0/24
+
+<span class="cm"># Host response options:</span>
+<span class="cm">#   ICMP port unreachable → host is UP (no service on that port)</span>
+<span class="cm">#   UDP response         → host is UP (service is running)</span>
+<span class="cm">#   No response          → host may be down OR UDP filtered</span></code></pre>
+
+<h2>Choosing the Right Probe</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Environment</th><th>Recommended Probes</th></tr></thead>
+  <tbody>
+    <tr><td>Internal LAN (same subnet)</td><td><code>-PR</code> (ARP — fastest, most reliable)</td></tr>
+    <tr><td>Internal LAN (routed subnets)</td><td><code>-PE -PS22,80,443</code></td></tr>
+    <tr><td>DMZ / internet-facing</td><td><code>-PS80,443 -PA80</code> (TCP; ICMP usually blocked)</td></tr>
+    <tr><td>Strict firewall environment</td><td><code>-PS443 -PA80 -PU53</code> (combine all)</td></tr>
+    <tr><td>Windows hosts (ICMP blocked)</td><td><code>-PS135,139,445 -PA3389</code></td></tr>
+    <tr><td>Want to skip discovery entirely</td><td><code>-Pn</code> (treat all as up)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Why you need multiple probe types</h4>
+    <ul>
+      <li>L3 ICMP echo (<code>-PE</code>) is the classic "ping" — most firewalls and Windows Firewall block it by default</li>
+      <li>L4 TCP SYN ping (<code>-PS</code>) works through many firewalls that block ICMP but allow TCP traffic</li>
+      <li>Nmap's default probe combo (ICMP + TCP SYN/443 + TCP ACK/80) gives the best hit rate for mixed networks</li>
+    </ul>
+    <pre><code>sudo nmap -sn 192.168.56.0/24  <span class="cm"># default probe combo — discovers Kali, Security Onion, Windows</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Probe selection for different firewall environments</h4>
+    <ul>
+      <li>Windows hosts block L3 ICMP by default — use <code>-PS135,139,445,3389</code> to probe known Windows L4 ports</li>
+      <li>TCP ACK ping (<code>-PA80</code>) may bypass stateless firewalls that allow "established" traffic by examining the ACK flag</li>
+      <li>Combine multiple probe types to maximize host detection: <code>-PE -PS443 -PA80 -PU53</code></li>
+    </ul>
+    <pre><code>sudo nmap -PE -PS22,443 -PA80 -sn 192.168.56.0/24
+<span class="cm"># ICMP echo + TCP SYN to 22,443 + TCP ACK to 80 — covers most scenarios</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Maximizing host detection across segmented networks</h4>
+    <ul>
+      <li>Use <code>-PS</code> with multiple port combinations to fingerprint which ports a host's firewall allows — each open port = a viable discovery vector</li>
+      <li>SCTP INIT (<code>-PY</code>) works in telecom/carrier environments where TCP/UDP are filtered but SCTP passes</li>
+      <li>Combine discovery output with <code>-R</code> (DNS reverse lookup) to get hostnames for asset identification without full port scanning</li>
+    </ul>
+    <pre><code>sudo nmap -PE -PP -PS22,80,135,443,445,3389 -PA80,443 -PU53,161 -sn -R -oA discovery 192.168.56.0/24
+<span class="cm"># Maximum coverage: all L3/L4 probe types + DNS reverse lookups</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-arp-discovery">
+<article class="topic">
+<h1>02 · ARP Discovery</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l2">L2 Data Link</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-note">ARP operates at L2 (Ethernet broadcast frames) to resolve L3 IP addresses to MAC addresses — it functions below the IP stack and cannot be blocked by host-based firewalls.</span>
+</div>
+<hr class="divider">
+
+<div class="callout"><strong>ARP is the fastest and most reliable discovery method</strong> on local Ethernet networks — it cannot be blocked by host firewalls and produces zero false negatives on the local segment. Nmap uses ARP automatically when the target is on the same subnet.</div>
+
+<h2>How ARP Discovery Works</h2>
+<pre><code><span class="cm">── ARP Request ────────────────────────────────────────────────</span>
+Nmap broadcasts:
+  "Who has 192.168.1.10? Tell 192.168.1.100"
+  (Ethernet dest: ff:ff:ff:ff:ff:ff)
+
+<span class="cm">── ARP Reply (host is UP) ─────────────────────────────────────</span>
+Target replies:
+  "192.168.1.10 is at aa:bb:cc:dd:ee:ff"
+  (Nmap records MAC address and marks host as up)
+
+<span class="cm">── No Reply (host is DOWN or doesn't exist) ───────────────────</span>
+No response within timeout → host marked as down</code></pre>
+
+<h2>Commands</h2>
+<pre><code><span class="cm"># ARP scan only — no port scan (Nmap auto-selects ARP on local subnet)</span>
+nmap -sn 192.168.1.0/24
+
+<span class="cm"># Force ARP scan explicitly</span>
+nmap -PR -sn 192.168.1.0/24
+
+<span class="cm"># ARP scan with MAC vendor lookup</span>
+nmap -PR -sn --spoof-mac 0 192.168.1.0/24
+
+<span class="cm"># Larger subnet — ARP only works if on the same segment</span>
+nmap -sn 10.0.0.0/24   <span class="cm"># ARP used if on 10.0.0.x subnet</span>
+nmap -sn 10.0.1.0/24   <span class="cm"># ICMP/TCP used if on different subnet (routed)</span></code></pre>
+
+<h2>ARP vs Other Discovery Methods</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Property</th><th>ARP</th><th>ICMP Ping</th><th>TCP Ping</th></tr></thead>
+  <tbody>
+    <tr><td>Works across routers</td><td>No — local segment only</td><td>Yes (if not filtered)</td><td>Yes (if not filtered)</td></tr>
+    <tr><td>Host firewall can block</td><td>No — ARP is below IP stack</td><td>Yes (Windows blocks by default)</td><td>Depends on rules</td></tr>
+    <tr><td>Speed</td><td>Fastest</td><td>Fast</td><td>Moderate</td></tr>
+    <tr><td>Reliability</td><td>Near-perfect on local LAN</td><td>High false negatives (ICMP blocked)</td><td>Good</td></tr>
+    <tr><td>Returns MAC address</td><td>Yes — reveals hardware vendor</td><td>No</td><td>No</td></tr>
+    <tr><td>Requires root</td><td>Yes</td><td>Yes</td><td>No (for -PA)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Reading MAC Address / Vendor Info</h2>
+<pre><code>$ sudo nmap -sn 192.168.1.0/24
+
+Starting Nmap 7.94 ( https://nmap.org )
+Nmap scan report for 192.168.1.1
+Host is up (0.0010s latency).
+MAC Address: C8:D7:19:2A:3F:01 (Cisco Systems)
+
+Nmap scan report for 192.168.1.10
+Host is up (0.0032s latency).
+MAC Address: 00:50:56:AB:CD:EF (VMware)
+
+Nmap scan report for 192.168.1.15
+Host is up (0.0045s latency).
+MAC Address: 28:CF:E9:11:22:33 (Apple)
+
+Nmap done: 256 IP addresses (3 hosts up) scanned in 2.14 seconds
+
+<span class="cm"># MAC OUI prefix identifies vendor — useful for rogue device detection</span>
+<span class="cm"># VMware / VirtualBox OUI: look for unexpected virtualization platforms</span>
+<span class="cm"># Unknown OUI (00:00:00 pattern) may indicate spoofed MACs</span></code></pre>
+
+<h2>SOC Use: Rogue Device Detection</h2>
+
+<pre><code><span class="cm"># Run ARP sweep, save to grepable format, extract MAC+IP pairs</span>
+sudo nmap -sn 192.168.1.0/24 -oG - | grep "Status: Up"
+
+<span class="cm"># Compare against DHCP lease table / asset inventory</span>
+<span class="cm"># Flag any MACs not in the authorized device list</span>
+<span class="cm"># Vendor lookup: nmap embeds the IEEE OUI database</span>
+<span class="cm"># Custom MAC 02:xx:xx:xx:xx:xx = locally administered (suspicious)</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Why ARP is the best discovery method on local networks</h4>
+    <ul>
+      <li>ARP operates at L2 — it sends Ethernet broadcast frames, which bypass all L3/L4 firewalls and Windows Firewall</li>
+      <li>Nmap automatically uses ARP when the target is on the same subnet — you don't need to specify <code>-PR</code></li>
+      <li>ARP reveals MAC addresses and vendor (OUI) — critical for identifying device type and detecting rogue hardware</li>
+    </ul>
+    <pre><code>sudo nmap -sn 192.168.56.0/24  <span class="cm"># ARP sweep of lab network — fastest, most reliable on LAN</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Reading MAC/OUI data for asset identification</h4>
+    <ul>
+      <li>OUI prefix identifies vendor — VMware (00:50:56), VirtualBox (08:00:27), Cisco (C8:D7:19) are recognizable patterns</li>
+      <li>Locally-administered MACs (02:xx:xx prefix) may indicate spoofed addresses — flag for investigation</li>
+      <li>Save to grepable format and diff against DHCP lease table to find unauthorized devices on the segment</li>
+    </ul>
+    <pre><code>sudo nmap -PR -sn -oG arp_sweep.gnmap 192.168.56.0/24
+grep "Status: Up" arp_sweep.gnmap | awk '{print $2}'  <span class="cm"># extract live IPs for follow-up scan</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>ARP sweep in SOC asset inventory and rogue detection workflows</h4>
+    <ul>
+      <li>Run periodic ARP sweeps and diff MAC tables against authorized device list — any unknown OUI warrants immediate investigation</li>
+      <li>Correlate ARP sweep results with Security Onion's Zeek conn.log — hosts visible in ARP but absent from network logs may be passive eavesdroppers</li>
+      <li>Use <code>--send-eth</code> to force Ethernet-level ARP on systems where Nmap defaults to IP-based routing — critical on bridge/tap interfaces</li>
+    </ul>
+    <pre><code>sudo nmap -PR -sn --send-eth -oA arp_baseline 192.168.56.0/24
+ndiff arp_baseline_prev.xml arp_baseline.xml  <span class="cm"># detect new/removed L2 devices</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-no-ping">
+<article class="topic">
+<h1>03 · -Pn — Skip Host Discovery</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-note">-Pn bypasses L3 ICMP and L4 TCP ping probes entirely, proceeding directly to port scanning — necessary when targets drop all discovery packets at the network perimeter.</span>
+</div>
+<hr class="divider">
+
+<div class="callout note"><strong>-Pn treats all targets as online</strong> — skips the discovery phase entirely and proceeds directly to port scanning. Essential when targets block all ping probes.</div>
+
+<h2>Command</h2>
+<pre><code><span class="cm"># Skip discovery — scan port(s) regardless of ping response</span>
+nmap -Pn 192.168.1.10
+
+<span class="cm"># Combine with scan type and ports</span>
+nmap -Pn -sS -p 80,443,8080 192.168.1.10
+
+<span class="cm"># Scanning Windows hosts that block ICMP</span>
+nmap -Pn -sS -p 135,139,445,3389 192.168.1.10
+
+<span class="cm"># Scan through firewall that drops all discovery probes</span>
+nmap -Pn -sT -p 80,443 target.example.com</code></pre>
+
+<h2>What Happens Without -Pn</h2>
+<pre><code><span class="cm"># Without -Pn — Nmap sends discovery probes first</span>
+Nmap sends: ICMP echo + TCP SYN/443 + TCP ACK/80 + ICMP timestamp
+
+<span class="cm">If all probes timeout:</span>
+"Note: Host seems down. If it is really up, but blocking our ping probes,
+try -Pn"
+<span class="cm">→ Nmap SKIPS the host — no port scan performed</span>
+
+<span class="cm"># With -Pn — Nmap skips discovery entirely</span>
+<span class="cm">→ All 65535 ports scanned (or whatever -p specifies)</span>
+<span class="cm">→ Even if host is actually down, Nmap will show "host up" and</span>
+<span class="cm">   all ports as "filtered" (no response = filtered, not "down")</span></code></pre>
+
+<h2>When to Use -Pn</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Scenario</th><th>Reason</th></tr></thead>
+  <tbody>
+    <tr><td>Windows hosts (default firewall)</td><td>Windows Firewall blocks ICMP echo by default; host appears down to -PE</td></tr>
+    <tr><td>Internet-facing hosts</td><td>Most perimeter firewalls block ICMP and unexpected TCP probes</td></tr>
+    <tr><td>Known alive host</td><td>You've confirmed the host exists (DNS resolves, previous scan, asset DB)</td></tr>
+    <tr><td>CTF / pentest targets</td><td>Common CTF VMs block ping deliberately to add realism</td></tr>
+    <tr><td>Scanning behind load balancer</td><td>VIP may respond to ping but individual backends may not</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Performance Consideration</h2>
+<div class="callout warn"><strong>-Pn on large subnets is slow</strong> — if scanning 192.168.1.0/24 with -Pn, Nmap port-scans all 256 addresses (including those with no host). Discovery first is much faster on internal networks where most hosts will respond to ARP or TCP pings.</div>
+
+<pre><code><span class="cm"># Efficient approach: discover first, then -Pn on known live hosts</span>
+
+<span class="cm"># Step 1: Identify live hosts (save to grepable)</span>
+sudo nmap -sn 192.168.1.0/24 -oG hosts_up.gnmap
+
+<span class="cm"># Step 2: Extract live IPs</span>
+grep "Status: Up" hosts_up.gnmap | awk '{print $2}' > live_hosts.txt
+
+<span class="cm"># Step 3: Full scan on only live hosts (use -iL, no need for -Pn)</span>
+sudo nmap -sS -sV -p- -iL live_hosts.txt -oA full_scan</code></pre>
+
+<h2>-Pn vs -sn Comparison</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Flag</th><th>Discovery</th><th>Port Scan</th><th>Use When</th></tr></thead>
+  <tbody>
+    <tr><td><code>-sn</code></td><td>Performed</td><td>No</td><td>Want host list only; no port scanning</td></tr>
+    <tr><td><code>-Pn</code></td><td>Skipped (all assumed up)</td><td>Yes</td><td>Targets block all ping; host known to be up</td></tr>
+    <tr><td><code>-sn -Pn</code></td><td>Skipped</td><td>No</td><td>List targets without any probing (like -sL)</td></tr>
+    <tr><td>(default)</td><td>Performed</td><td>Yes</td><td>Standard balanced scan</td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>When and why to use -Pn</h4>
+    <ul>
+      <li>Use <code>-Pn</code> when the host is known to be up but blocks all L3 ICMP and L4 TCP ping probes</li>
+      <li>Without <code>-Pn</code>, Nmap skips the port scan entirely if all discovery probes time out</li>
+      <li>Windows Firewall blocks ICMP by default — <code>-Pn</code> is often needed to scan Windows hosts on segmented networks</li>
+    </ul>
+    <pre><code>sudo nmap -Pn -sS -p 135,139,445,3389 192.168.56.30  <span class="cm"># skip discovery, scan Windows ports directly</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Efficient use of -Pn on large scopes</h4>
+    <ul>
+      <li>Avoid <code>-Pn</code> on entire subnets — it port-scans all addresses including those with no host, wasting time</li>
+      <li>Better approach: run <code>-sn</code> first → extract live IPs → use <code>-iL</code> with normal scanning (no <code>-Pn</code> needed)</li>
+      <li>Combine <code>-Pn</code> with specific known-important ports rather than <code>-p-</code> to reduce scan time on uncertain targets</li>
+    </ul>
+    <pre><code>sudo nmap -sn -PS135,445,3389 192.168.56.0/24 -oG live.gnmap
+grep "Status: Up" live.gnmap | awk '{print $2}' > live_ips.txt
+sudo nmap -sS -sV -p 1-1000 --open -iL live_ips.txt -oA full_scan</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>-Pn in complex network topologies</h4>
+    <ul>
+      <li>Behind load balancers: the VIP may respond to pings but backends may not — use <code>-Pn</code> to scan each backend IP directly</li>
+      <li>Cloud environments often rate-limit or blackhole ICMP — <code>-Pn</code> with TCP probes is more reliable for AWS/Azure/GCP targets</li>
+      <li>Combine <code>-Pn</code> with <code>--max-retries 1</code> and <code>--host-timeout 5m</code> to prevent stalled scans on unresponsive ranges</li>
+    </ul>
+    <pre><code>sudo nmap -Pn -sS -sV -O -p 1-1000 --open --max-retries 1 --host-timeout 5m -oA pn_scan 192.168.56.30
+<span class="cm"># Skip discovery + SYN + version + OS + timeout protection for firewall-heavy targets</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-target-specs">
+<article class="topic">
+<h1>04 · Target Specification</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-note">Target specification defines the L3 IP address space to scan — CIDR notation, ranges, and exclusions all operate at the network layer to determine which hosts receive probe packets.</span>
+</div>
+<hr class="divider">
+
+<h2>Target Formats</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Format</th><th>Example</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>Single IP</td><td><code>192.168.1.10</code></td><td>Scan one specific host</td></tr>
+    <tr><td>Hostname</td><td><code>web01.corp.local</code></td><td>Nmap resolves DNS and scans result</td></tr>
+    <tr><td>CIDR</td><td><code>192.168.1.0/24</code></td><td>Entire subnet — /24 = 256 IPs, /16 = 65536</td></tr>
+    <tr><td>Range (octet)</td><td><code>192.168.1-5.1</code></td><td>IPs 192.168.1.1 through 192.168.5.1</td></tr>
+    <tr><td>Range (last octet)</td><td><code>192.168.1.1-254</code></td><td>IPs .1 through .254 (skip .0 and .255)</td></tr>
+    <tr><td>Comma list</td><td><code>192.168.1.1,5,10,20</code></td><td>Specific IPs in same subnet</td></tr>
+    <tr><td>File input</td><td><code>-iL targets.txt</code></td><td>One target per line; supports all formats above</td></tr>
+    <tr><td>Random targets</td><td><code>-iR 100</code></td><td>Scan 100 random internet hosts</td></tr>
+    <tr><td>Multiple ranges</td><td><code>10.0.0.0/8 172.16.0.0/12</code></td><td>Space-separate multiple targets</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Exclusions</h2>
+<pre><code><span class="cm"># Exclude specific host from subnet scan</span>
+nmap 192.168.1.0/24 --exclude 192.168.1.1
+
+<span class="cm"># Exclude multiple hosts</span>
+nmap 192.168.1.0/24 --exclude 192.168.1.1,192.168.1.5
+
+<span class="cm"># Exclude from file</span>
+nmap 192.168.1.0/24 --excludefile exclude.txt
+
+<span class="cm"># Exclude the scanner's own IP (good practice)</span>
+nmap 192.168.1.0/24 --exclude 192.168.1.100</code></pre>
+
+<h2>Target File Format (-iL)</h2>
+<pre><code><span class="cm"># targets.txt — supports all target formats, comments with #</span>
+192.168.1.1
+192.168.1.10-20
+10.0.0.0/24
+web01.corp.local
+# This line is a comment
+172.16.0.0/16</code></pre>
+
+<h2>CIDR Quick Reference</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>CIDR</th><th>Subnet Mask</th><th>Host Count</th><th>Use</th></tr></thead>
+  <tbody>
+    <tr><td>/32</td><td>255.255.255.255</td><td>1</td><td>Single host</td></tr>
+    <tr><td>/30</td><td>255.255.255.252</td><td>4 (2 usable)</td><td>Point-to-point link</td></tr>
+    <tr><td>/29</td><td>255.255.255.248</td><td>8 (6 usable)</td><td>Small segment</td></tr>
+    <tr><td>/28</td><td>255.255.255.240</td><td>16 (14 usable)</td><td>Small LAN</td></tr>
+    <tr><td>/27</td><td>255.255.255.224</td><td>32 (30 usable)</td><td>Department segment</td></tr>
+    <tr><td>/24</td><td>255.255.255.0</td><td>256 (254 usable)</td><td>Standard LAN</td></tr>
+    <tr><td>/22</td><td>255.255.252.0</td><td>1,024 (1,022 usable)</td><td>Campus block</td></tr>
+    <tr><td>/16</td><td>255.255.0.0</td><td>65,536</td><td>Large network</td></tr>
+    <tr><td>/8</td><td>255.0.0.0</td><td>16,777,216</td><td>Class A (10.x.x.x range)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>DNS Options</h2>
+<pre><code><span class="cm"># No DNS resolution — faster, no DNS traffic</span>
+nmap -n 192.168.1.0/24
+
+<span class="cm"># Always resolve (even for IPs that don't respond to ping)</span>
+nmap -R 192.168.1.0/24
+
+<span class="cm"># Use custom DNS server</span>
+nmap --dns-servers 8.8.8.8,8.8.4.4 target.example.com
+
+<span class="cm"># Use OS resolver (respects /etc/resolv.conf)</span>
+nmap --system-dns target.example.com
+
+<span class="cm"># DNS reverse lookup on discovery results</span>
+nmap -sn -R 192.168.1.0/24   <span class="cm"># resolves each discovered host</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-discovery-output">
+<article class="topic">
+<h1>05 · Discovery Output &amp; Tips</h1>
+<hr class="divider">
+
+<h2>Reading Ping Sweep Output</h2>
+<pre><code>$ sudo nmap -sn 192.168.1.0/24
+
+Starting Nmap 7.94 ( https://nmap.org ) at 2024-03-07 09:15 UTC
+
+Nmap scan report for 192.168.1.1
+Host is up (0.00059s latency).
+MAC Address: C8:D7:19:2A:3F:01 (Cisco Systems)   ← gateway
+
+Nmap scan report for 192.168.1.5
+Host is up (0.0082s latency).
+MAC Address: 00:50:56:AB:11:22 (VMware)           ← VM
+
+Nmap scan report for 192.168.1.10
+Host is up (0.00034s latency).
+MAC Address: 28:CF:E9:44:55:66 (Apple)
+
+Nmap scan report for 192.168.1.50
+Host is up (0.0023s latency).
+MAC Address: 00:1A:A0:77:88:99 (Dell)             ← physical server
+
+Nmap done: 256 IP addresses (4 hosts up) scanned in 2.07 seconds
+
+<span class="cm"># Latency clues:</span>
+<span class="cm"># &lt; 1ms  = local VM or switch (same segment)</span>
+<span class="cm"># 1-5ms  = local LAN (normal)</span>
+<span class="cm"># &gt;10ms  = possible WAN hop or busy host</span></code></pre>
+
+<h2>Extracting Live Hosts from Grepable Output</h2>
+<pre><code><span class="cm"># Save discovery to grepable format</span>
+sudo nmap -sn 192.168.1.0/24 -oG discovery.gnmap
+
+<span class="cm"># Extract just the live IPs</span>
+grep "Status: Up" discovery.gnmap | awk '{print $2}'
+
+<span class="cm"># Sample discovery.gnmap content:</span>
+# Host: 192.168.1.1 ()        Status: Up
+# Host: 192.168.1.5 ()        Status: Up
+# Host: 192.168.1.10 ()       Status: Up
+# Host: 192.168.1.50 ()       Status: Up
+# Host: 192.168.1.100 ()      Status: Down
+
+<span class="cm"># Pass live hosts directly to next scan</span>
+grep "Status: Up" discovery.gnmap | awk '{print $2}' | \
+  sudo nmap -sS -sV -iL - -oA full_scan</code></pre>
+
+<h2>Discovery One-Liners for SOC</h2>
+<pre><code><span class="cm"># Fast LAN sweep (ARP-based) — identify all live hosts</span>
+sudo nmap -sn -T4 192.168.0.0/16 -oA lan_discovery
+
+<span class="cm"># Sweep with vendor info, save hostnames</span>
+sudo nmap -sn -R 192.168.1.0/24 | grep -E "report|MAC|latency"
+
+<span class="cm"># Count live hosts on subnet</span>
+sudo nmap -sn 10.0.0.0/8 | grep "Host is up" | wc -l
+
+<span class="cm"># Find new hosts (compare against baseline)</span>
+sudo nmap -sn 192.168.1.0/24 -oG current.gnmap
+grep "Status: Up" current.gnmap | awk '{print $2}' | sort > current_ips.txt
+diff baseline_ips.txt current_ips.txt</code></pre>
+
+<h2>Common Discovery Problems &amp; Fixes</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Problem</th><th>Symptom</th><th>Fix</th></tr></thead>
+  <tbody>
+    <tr><td>Windows hosts not detected</td><td>Host shows down but you know it's up</td><td>Use <code>-PS135,139,445</code> or <code>-Pn</code></td></tr>
+    <tr><td>All hosts appear down</td><td>ICMP blocked at perimeter</td><td>Use <code>-PS80,443 -PA80</code> instead of <code>-PE</code></td></tr>
+    <tr><td>Very slow scan</td><td>Scanning /16 or /8 takes forever</td><td>Add <code>-T4 --min-hostgroup 64</code></td></tr>
+    <tr><td>False negatives on LAN</td><td>ARP replies lost</td><td>Use <code>--send-eth</code> to force Ethernet-level ARP</td></tr>
+    <tr><td>No MAC address shown</td><td>Running scan as non-root, or target is routed</td><td>Run as root; ARP only works on local segment</td></tr>
+    <tr><td>Reverse DNS wrong</td><td>PTR records stale</td><td>Use <code>--dns-servers</code> to specify authoritative server</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>List Scan (-sL) — Zero Packets</h2>
+<pre><code><span class="cm"># List targets without sending any packets</span>
+nmap -sL 192.168.1.0/24
+
+<span class="cm"># Output shows target list + DNS resolution (if available)</span>
+# Nmap scan report for 192.168.1.1
+# Nmap scan report for web01.corp.local (192.168.1.10)
+# Nmap scan report for 192.168.1.100
+
+<span class="cm"># Useful for:</span>
+<span class="cm"># - Verifying target list before scanning</span>
+<span class="cm"># - DNS reconnaissance without sending probe packets</span>
+<span class="cm"># - Counting targets in CIDR range</span>
+nmap -sL 10.0.0.0/8 | grep "Nmap scan report" | wc -l  <span class="cm"># 16777216</span></code></pre>
+</article>
+</template>
+
+<script src="js/app.js"></script>
+</body>
+</html>

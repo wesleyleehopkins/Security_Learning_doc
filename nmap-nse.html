@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nmap NSE Scripts — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Nmap</div>
+      <div class="sidebar-title">NSE Scripts</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">📜</div>
+          <h2>NSE Scripts</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+window.NOTEBOOK = {
+  title: 'NSE Scripts',
+  topics: [
+    { id: 'nse-overview',   badge: '01', label: 'NSE Overview & Categories' },
+    { id: 'default-scripts',badge: '02', label: 'Default Scripts (-sC)'     },
+    { id: 'vuln-scripts',   badge: '03', label: 'Vulnerability Scripts'     },
+    { id: 'auth-discovery', badge: '04', label: 'Auth & Discovery Scripts'  },
+    { id: 'brute-scripts',  badge: '05', label: 'Brute Force Scripts'       },
+    { id: 'script-args',    badge: '06', label: 'Script Args & Management'  },
+  ]
+};
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EMBEDDED CONTENT TEMPLATES — no server required
+     ═══════════════════════════════════════════════════════════════ -->
+
+<template id="tpl-nse-overview">
+<article class="topic">
+<h1>01 · NSE Overview &amp; Categories</h1>
+<hr class="divider">
+
+<p>The Nmap Scripting Engine (NSE) allows users to write and run Lua scripts against discovered hosts and services. Scripts extend Nmap's capabilities from simple port scanning into service enumeration, vulnerability detection, exploitation, and more. Scripts ship with Nmap in <code>/usr/share/nmap/scripts/</code>.</p>
+
+<h2>Script Categories</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Category</th><th>Description</th><th>Risk Level</th></tr></thead>
+  <tbody>
+    <tr><td><code>default</code></td><td>Run with -sC; considered safe and useful for most users</td><td>Low</td></tr>
+    <tr><td><code>safe</code></td><td>Safe to run — won't crash services or consume excessive resources</td><td>Low</td></tr>
+    <tr><td><code>discovery</code></td><td>Enumerate services, users, directories, and other network info</td><td>Low</td></tr>
+    <tr><td><code>auth</code></td><td>Check for default credentials or authentication bypass</td><td>Low-Medium</td></tr>
+    <tr><td><code>version</code></td><td>Used automatically by -sV for enhanced version detection</td><td>Low</td></tr>
+    <tr><td><code>vuln</code></td><td>Test for specific known vulnerabilities (non-exploiting)</td><td>Medium</td></tr>
+    <tr><td><code>exploit</code></td><td>Attempt to exploit vulnerabilities</td><td>High</td></tr>
+    <tr><td><code>brute</code></td><td>Brute force authentication on services</td><td>Medium-High</td></tr>
+    <tr><td><code>intrusive</code></td><td>May crash services, consume excessive resources, or trigger alarms</td><td>High</td></tr>
+    <tr><td><code>malware</code></td><td>Detect backdoors and malware activity</td><td>Low</td></tr>
+    <tr><td><code>external</code></td><td>Queries external databases (WHOIS, DNS blacklists, etc.)</td><td>Low (sends data out)</td></tr>
+    <tr><td><code>fuzzer</code></td><td>Send malformed/random data to find crashes</td><td>High</td></tr>
+    <tr><td><code>dos</code></td><td>Denial of service attacks</td><td>Very High</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Script Location &amp; Search</h2>
+<pre><code><span class="cm"># Default script directory</span>
+/usr/share/nmap/scripts/          <span class="cm"># Linux</span>
+C:\Program Files (x86)\Nmap\scripts\  <span class="cm"># Windows</span>
+
+<span class="cm"># List all scripts in a category</span>
+ls /usr/share/nmap/scripts/ | grep -i vuln
+
+<span class="cm"># Search script database (nmap --script-help)</span>
+nmap --script-help "http-*"       <span class="cm"># all HTTP scripts</span>
+nmap --script-help smb-vuln-ms17-010  <span class="cm"># specific script</span>
+
+<span class="cm"># Search by keyword in script descriptions</span>
+grep -r "categories.*vuln" /usr/share/nmap/scripts/*.nse | grep "http"
+
+<span class="cm"># Update script database after adding custom scripts</span>
+nmap --script-updatedb</code></pre>
+
+<h2>Running Scripts — Syntax</h2>
+<pre><code><span class="cm"># Run default category (same as -sC)</span>
+nmap --script=default 192.168.1.10
+
+<span class="cm"># Run specific script</span>
+nmap --script=smb-vuln-ms17-010 -p 445 192.168.1.10
+
+<span class="cm"># Run multiple scripts (comma-separated)</span>
+nmap --script=http-title,http-server-header,http-methods -p 80 192.168.1.10
+
+<span class="cm"># Run entire category</span>
+nmap --script=vuln 192.168.1.10
+
+<span class="cm"># Run multiple categories</span>
+nmap --script="default,safe,vuln" 192.168.1.10
+
+<span class="cm"># Wildcard — run all http scripts</span>
+nmap --script="http-*" -p 80,443,8080 192.168.1.10
+
+<span class="cm"># Logical expressions</span>
+nmap --script="not intrusive and not brute" 192.168.1.10
+nmap --script="vuln or exploit" 192.168.1.10</code></pre>
+</article>
+</template>
+
+<template id="tpl-default-scripts">
+<article class="topic">
+<h1>02 · Default Scripts (-sC)</h1>
+<hr class="divider">
+
+<div class="callout"><code>-sC</code> is equivalent to <code>--script=default</code>. Default scripts are judged safe, useful, and not excessively intrusive. They run automatically when their target port/service is open.</div>
+
+<h2>Command</h2>
+<pre><code><span class="cm"># Run default scripts + version detection (most common combo)</span>
+nmap -sV -sC 192.168.1.10
+
+<span class="cm"># Equivalent to -A (minus OS detection and traceroute)</span>
+nmap -sV -sC 192.168.1.10
+
+<span class="cm"># Specific ports</span>
+nmap -sC -p 22,80,443,3306 192.168.1.10</code></pre>
+
+<h2>Key Default Scripts by Service</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Script</th><th>Service</th><th>What It Does</th></tr></thead>
+  <tbody>
+    <tr><td><code>ssh-hostkey</code></td><td>SSH (22)</td><td>Displays SSH host key fingerprints (RSA, ECDSA, Ed25519)</td></tr>
+    <tr><td><code>ssh-auth-methods</code></td><td>SSH (22)</td><td>Lists accepted authentication methods (password, publickey, keyboard-interactive)</td></tr>
+    <tr><td><code>http-title</code></td><td>HTTP (80,443)</td><td>Retrieves and displays the HTML page title</td></tr>
+    <tr><td><code>http-server-header</code></td><td>HTTP</td><td>Shows Server: header from HTTP response</td></tr>
+    <tr><td><code>http-auth</code></td><td>HTTP</td><td>Reports HTTP authentication realm if 401 returned</td></tr>
+    <tr><td><code>ssl-cert</code></td><td>SSL/TLS</td><td>Displays SSL certificate details (CN, expiry, issuer, SANs)</td></tr>
+    <tr><td><code>ssl-enum-ciphers</code></td><td>SSL/TLS</td><td>Lists supported cipher suites and grades them (A-F)</td></tr>
+    <tr><td><code>ftp-anon</code></td><td>FTP (21)</td><td>Checks if anonymous FTP login is allowed</td></tr>
+    <tr><td><code>ftp-syst</code></td><td>FTP (21)</td><td>Retrieves FTP server system type via SYST command</td></tr>
+    <tr><td><code>smb-os-discovery</code></td><td>SMB (445)</td><td>OS, domain, computer name via SMB negotiation</td></tr>
+    <tr><td><code>smb-security-mode</code></td><td>SMB (445)</td><td>SMB signing status and authentication level</td></tr>
+    <tr><td><code>mysql-info</code></td><td>MySQL (3306)</td><td>Protocol version, error message, capabilities</td></tr>
+    <tr><td><code>dns-zone-transfer</code></td><td>DNS (53)</td><td>Attempts AXFR zone transfer — succeeds if misconfigured</td></tr>
+    <tr><td><code>snmp-info</code></td><td>SNMP (161)</td><td>Gets sysDescr and sysName via public community string</td></tr>
+    <tr><td><code>rdp-enum-encryption</code></td><td>RDP (3389)</td><td>RDP encryption level and NLA requirement</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Default Script Output Examples</h2>
+<pre><code>$ nmap -sV -sC -p 22,80,443,445 192.168.1.10
+
+PORT    STATE SERVICE  VERSION
+22/tcp  open  ssh      OpenSSH 8.9p1 Ubuntu
+| ssh-hostkey:
+|   3072 4e:c8:fa:23:54:... (RSA)
+|   256 7f:ab:42:cd:ef:... (ECDSA)
+|_  256 5e:cd:99:10:ab:... (ED25519)
+80/tcp  open  http     Apache httpd 2.4.52
+|_http-server-header: Apache/2.4.52 (Ubuntu)
+|_http-title: Login Portal
+| http-methods:
+|_  Supported Methods: GET HEAD POST OPTIONS
+443/tcp open  ssl/http Apache httpd 2.4.52
+| ssl-cert: Subject: commonName=corp.local
+| Issuer: commonName=corp.local CA
+| Not valid before: 2024-01-01
+|_Not valid after:  2025-01-01
+| ssl-enum-ciphers:
+|   TLSv1.2:
+|     ciphers:
+|       TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 (ecdh_x25519) - A
+|       TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 (ecdh_x25519) - A
+445/tcp open  smb      Samba smbd 4.x
+| smb-os-discovery:
+|   OS: Windows 7 (Samba)
+|   Computer name: CORP-FS01
+|   Domain: CORP
+|_  FQDN: CORP-FS01.corp.local
+| smb-security-mode:
+|   account_used: guest
+|   authentication_level: user
+|_  message_signing: disabled</code></pre>
+</article>
+</template>
+
+<template id="tpl-vuln-scripts">
+<article class="topic">
+<h1>03 · Vulnerability Scripts</h1>
+<hr class="divider">
+
+<div class="callout warn"><strong>Vuln scripts probe for specific vulnerabilities</strong> — they may send unusual payloads or trigger error responses, but generally do not exploit vulnerabilities. Always obtain authorization before running.</div>
+
+<h2>Running Vulnerability Scripts</h2>
+<pre><code><span class="cm"># Run all vuln-category scripts</span>
+nmap --script=vuln 192.168.1.10
+
+<span class="cm"># Run with version detection (recommended)</span>
+nmap -sV --script=vuln 192.168.1.10
+
+<span class="cm"># Combine with default scripts</span>
+nmap -sV -sC --script=vuln 192.168.1.10
+
+<span class="cm"># Target specific service vuln checks</span>
+nmap --script="smb-vuln-*" -p 445 192.168.1.10
+nmap --script="http-vuln-*" -p 80,443,8080 192.168.1.10</code></pre>
+
+<h2>High-Value Vulnerability Scripts</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Script</th><th>Port</th><th>Vulnerability</th><th>CVE</th></tr></thead>
+  <tbody>
+    <tr><td><code>smb-vuln-ms17-010</code></td><td>445</td><td>EternalBlue — SMBv1 RCE (WannaCry, NotPetya)</td><td>CVE-2017-0144</td></tr>
+    <tr><td><code>smb-vuln-ms08-067</code></td><td>445</td><td>Windows Server Service RCE (Conficker)</td><td>CVE-2008-4250</td></tr>
+    <tr><td><code>smb-vuln-ms06-025</code></td><td>445</td><td>Windows RPC RCE</td><td>CVE-2006-2370</td></tr>
+    <tr><td><code>smb-vuln-cve2009-3103</code></td><td>445</td><td>Windows SMB2 DoS</td><td>CVE-2009-3103</td></tr>
+    <tr><td><code>ssl-heartbleed</code></td><td>443</td><td>OpenSSL Heartbleed memory leak</td><td>CVE-2014-0160</td></tr>
+    <tr><td><code>ssl-poodle</code></td><td>443</td><td>SSLv3 POODLE padding oracle</td><td>CVE-2014-3566</td></tr>
+    <tr><td><code>ssl-dh-params</code></td><td>443</td><td>Logjam — weak DH parameters (&lt;1024 bit)</td><td>CVE-2015-4000</td></tr>
+    <tr><td><code>http-shellshock</code></td><td>80/443</td><td>Bash Shellshock via CGI</td><td>CVE-2014-6271</td></tr>
+    <tr><td><code>http-vuln-cve2017-5638</code></td><td>80/443</td><td>Apache Struts2 RCE (Equifax breach)</td><td>CVE-2017-5638</td></tr>
+    <tr><td><code>http-vuln-cve2014-2128</code></td><td>80</td><td>Cisco ASA ASDM authentication bypass</td><td>CVE-2014-2128</td></tr>
+    <tr><td><code>ftp-vsftpd-backdoor</code></td><td>21</td><td>vsftpd 2.3.4 backdoor — PASS :) triggers shell</td><td>CVE-2011-2523</td></tr>
+    <tr><td><code>ftp-proftpd-backdoor</code></td><td>21</td><td>ProFTPD 1.3.3c backdoor in compromised source</td><td>N/A</td></tr>
+    <tr><td><code>ms-sql-empty-password</code></td><td>1433</td><td>SQL Server sa account with empty password</td><td>N/A</td></tr>
+    <tr><td><code>mysql-empty-password</code></td><td>3306</td><td>MySQL root with no password</td><td>N/A</td></tr>
+    <tr><td><code>rdp-vuln-ms12-020</code></td><td>3389</td><td>RDP denial of service</td><td>CVE-2012-0002</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>EternalBlue Detection Example</h2>
+<pre><code>$ nmap --script=smb-vuln-ms17-010 -p 445 192.168.1.5
+
+PORT    STATE SERVICE
+445/tcp open  microsoft-ds
+
+Host script results:
+| smb-vuln-ms17-010:
+|   VULNERABLE:
+|   Remote Code Execution vulnerability in Microsoft SMBv1 servers (ms17-010)
+|     State: VULNERABLE
+|     IDs:  CVE:CVE-2017-0144
+|           BID:96704
+|     Risk factor: HIGH
+|     Description:
+|       A critical remote code execution vulnerability exists in Microsoft SMBv1
+|       servers (ms17-010).
+|     Disclosure date: 2017-03-14
+|     References:
+|       https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2017-0144
+|       https://technet.microsoft.com/en-us/library/security/ms17-010.aspx
+|_      https://github.com/adamcaudill/EtherealBlue</code></pre>
+
+<h2>Heartbleed Detection Example</h2>
+<pre><code>$ nmap -sV --script=ssl-heartbleed -p 443 192.168.1.10
+
+PORT    STATE SERVICE VERSION
+443/tcp open  https   OpenSSL 1.0.1e
+
+| ssl-heartbleed:
+|   VULNERABLE:
+|   The Heartbleed Bug is a serious vulnerability in the OpenSSL cryptographic
+|   software library.
+|     State: VULNERABLE
+|     Risk factor: HIGH
+|     Description:
+|       OpenSSL versions 1.0.1 and 1.0.2-beta releases (including 1.0.1f and
+|       1.0.1g) of OpenSSL are affected by the Heartbleed bug.
+|     References:
+|       https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2014-0160
+|_      http://www.openssl.org/news/secadv_20140407.txt</code></pre>
+
+<h2>HTTP Shellshock Detection</h2>
+<pre><code>$ nmap -sV --script=http-shellshock -p 80 \
+  --script-args uri=/cgi-bin/status.cgi 192.168.1.10
+
+PORT   STATE SERVICE VERSION
+80/tcp open  http    Apache httpd 2.4.52
+
+| http-shellshock:
+|   VULNERABLE:
+|   HTTP Shellshock vulnerability
+|     State: VULNERABLE (Exploitable)
+|     IDs:  CVE:CVE-2014-6271
+|       The name "Shellshock" also refers to CVE-2014-7169
+|     Disclosure date: 2014-09-24
+|     References:
+|_      https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2014-6271
+
+<span class="cm"># --script-args uri=  → specify CGI path to test</span>
+<span class="cm"># Common CGI paths: /cgi-bin/status.cgi, /cgi-bin/test-cgi</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-auth-discovery">
+<article class="topic">
+<h1>04 · Auth &amp; Discovery Scripts</h1>
+<hr class="divider">
+
+<h2>Authentication Scripts</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Script</th><th>Port</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>http-default-accounts</code></td><td>80/443</td><td>Tests common default credentials for web applications (routers, printers, cameras, CMS)</td></tr>
+    <tr><td><code>ftp-anon</code></td><td>21</td><td>Tests for anonymous FTP login; lists accessible files if successful</td></tr>
+    <tr><td><code>http-auth-finder</code></td><td>80/443</td><td>Finds HTTP authentication type (Basic, Digest, NTLM, Form-based)</td></tr>
+    <tr><td><code>smb-enum-shares</code></td><td>445</td><td>Lists SMB shares with access permissions (guest/authenticated)</td></tr>
+    <tr><td><code>smb-enum-users</code></td><td>445</td><td>Enumerates users via SMB (SAMR/LSA methods)</td></tr>
+    <tr><td><code>smb-enum-sessions</code></td><td>445</td><td>Lists active SMB sessions (requires elevated access)</td></tr>
+    <tr><td><code>snmp-brute</code></td><td>161</td><td>Brute force SNMP community strings</td></tr>
+    <tr><td><code>ms-sql-empty-password</code></td><td>1433</td><td>Check SQL Server sa account for empty password</td></tr>
+    <tr><td><code>mysql-empty-password</code></td><td>3306</td><td>Check MySQL root for empty password</td></tr>
+    <tr><td><code>vnc-info</code></td><td>5900</td><td>VNC security type and authentication requirements</td></tr>
+    <tr><td><code>ldap-search</code></td><td>389</td><td>LDAP anonymous bind and base DN discovery</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Discovery Scripts</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Script</th><th>Port</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>http-robots.txt</code></td><td>80/443</td><td>Retrieves and displays robots.txt (often reveals hidden paths)</td></tr>
+    <tr><td><code>http-enum</code></td><td>80/443</td><td>Enumerates common web application directories and files</td></tr>
+    <tr><td><code>http-headers</code></td><td>80/443</td><td>Retrieves all HTTP response headers</td></tr>
+    <tr><td><code>dns-zone-transfer</code></td><td>53</td><td>Attempts AXFR DNS zone transfer — reveals full DNS records</td></tr>
+    <tr><td><code>dns-recursion</code></td><td>53</td><td>Checks if DNS server allows recursive queries (open resolver)</td></tr>
+    <tr><td><code>snmp-sysdescr</code></td><td>161</td><td>Retrieves SNMP sysDescr — device type and OS</td></tr>
+    <tr><td><code>snmp-interfaces</code></td><td>161</td><td>Lists network interfaces via SNMP (requires public community)</td></tr>
+    <tr><td><code>nbstat</code></td><td>137</td><td>NetBIOS name table — hostname, domain, MAC address</td></tr>
+    <tr><td><code>smb-os-discovery</code></td><td>445</td><td>OS, domain, FQDN via SMB negotiation</td></tr>
+    <tr><td><code>ms-sql-info</code></td><td>1433</td><td>SQL Server instance name, version, named pipes</td></tr>
+    <tr><td><code>banner</code></td><td>any</td><td>Read and display service banner on connection</td></tr>
+    <tr><td><code>finger</code></td><td>79</td><td>Enumerate users via finger protocol (Unix systems)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Anonymous FTP Check</h2>
+<pre><code>$ nmap --script=ftp-anon,ftp-syst -p 21 192.168.1.10
+
+PORT   STATE SERVICE
+21/tcp open  ftp
+| ftp-anon: Anonymous FTP login allowed (FTP code 230)
+| -rw-r--r--  1 ftp ftp   1024 Jan 07  readme.txt
+| drwxr-xr-x  2 ftp ftp   4096 Jan 07  pub/
+|_-rw-r--r--  1 ftp ftp 204800 Jan 07  backup_20240107.tar.gz
+|_ftp-syst: 211 End (FTP server status):
+     ProFTPD 1.3.5 Server
+
+<span class="cm"># backup_20240107.tar.gz → high-value finding — retrieve and inspect</span></code></pre>
+
+<h2>SMB Enumeration</h2>
+<pre><code>$ nmap --script=smb-enum-shares,smb-enum-users -p 445 192.168.1.5
+
+PORT    STATE SERVICE
+445/tcp open  microsoft-ds
+
+Host script results:
+| smb-enum-shares:
+|   account_used: guest
+|   \\192.168.1.5\ADMIN$:  Access: &lt;none&gt;
+|   \\192.168.1.5\C$:      Access: &lt;none&gt;
+|   \\192.168.1.5\IPC$:    Access: READ
+|   \\192.168.1.5\Public:  Access: READ, WRITE   ← world-writeable share!
+| smb-enum-users:
+|   CORP\Administrator (RID: 500)
+|   CORP\jsmith (RID: 1001)
+|   CORP\svc_backup (RID: 1005)
+|   CORP\Domain Admins (RID: 512)
+
+<span class="cm"># READ,WRITE on Public share = data exfil risk</span>
+<span class="cm"># Enumerated users = potential targets for brute force / password spray</span></code></pre>
+
+<h2>DNS Zone Transfer</h2>
+<pre><code>$ nmap --script=dns-zone-transfer --script-args dns-zone-transfer.domain=corp.local \
+  -p 53 192.168.1.1
+
+PORT   STATE SERVICE
+53/tcp open  domain
+
+| dns-zone-transfer:
+| corp.local
+|   SOA ns1.corp.local
+|   A   corp.local     192.168.1.1
+|   A   www            192.168.1.10
+|   A   mail           192.168.1.20
+|   A   vpn            192.168.1.30
+|   A   intranet       192.168.1.40
+|   A   dev-server     192.168.1.99   ← dev host exposed
+|   MX  corp.local     mail.corp.local
+
+<span class="cm"># Zone transfer reveals full internal DNS map</span>
+<span class="cm"># Fix: restrict AXFR to authorized secondary DNS servers only</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-brute-scripts">
+<article class="topic">
+<h1>05 · Brute Force Scripts</h1>
+<hr class="divider">
+
+<div class="callout warn"><strong>Brute force scripts generate significant authentication log noise</strong> and may lock out accounts. Always check lockout policies before running. Only use with explicit authorization.</div>
+
+<h2>Common Brute Force Scripts</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Script</th><th>Service</th><th>Port</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>ssh-brute</code></td><td>SSH</td><td>22</td><td>Username + password brute force</td></tr>
+    <tr><td><code>ftp-brute</code></td><td>FTP</td><td>21</td><td>Username + password</td></tr>
+    <tr><td><code>http-brute</code></td><td>HTTP Basic/Digest</td><td>80/443</td><td>HTTP authentication brute force</td></tr>
+    <tr><td><code>http-form-brute</code></td><td>HTTP Form</td><td>80/443</td><td>HTML login form brute force</td></tr>
+    <tr><td><code>telnet-brute</code></td><td>Telnet</td><td>23</td><td>Telnet authentication</td></tr>
+    <tr><td><code>smb-brute</code></td><td>SMB</td><td>445</td><td>Windows SMB authentication</td></tr>
+    <tr><td><code>ms-sql-brute</code></td><td>SQL Server</td><td>1433</td><td>SQL Server login</td></tr>
+    <tr><td><code>mysql-brute</code></td><td>MySQL</td><td>3306</td><td>MySQL login</td></tr>
+    <tr><td><code>vnc-brute</code></td><td>VNC</td><td>5900</td><td>VNC password</td></tr>
+    <tr><td><code>rdp-brute</code></td><td>RDP</td><td>3389</td><td>Windows Remote Desktop</td></tr>
+    <tr><td><code>pop3-brute</code></td><td>POP3</td><td>110</td><td>POP3 email authentication</td></tr>
+    <tr><td><code>imap-brute</code></td><td>IMAP</td><td>143</td><td>IMAP email authentication</td></tr>
+    <tr><td><code>snmp-brute</code></td><td>SNMP</td><td>161</td><td>SNMP community string brute</td></tr>
+    <tr><td><code>ldap-brute</code></td><td>LDAP</td><td>389</td><td>LDAP bind authentication</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Basic Brute Force Commands</h2>
+<pre><code><span class="cm"># SSH brute force with default wordlists</span>
+nmap -p 22 --script=ssh-brute 192.168.1.10
+
+<span class="cm"># SSH brute force with custom wordlists</span>
+nmap -p 22 --script=ssh-brute \
+  --script-args userdb=/tmp/users.txt,passdb=/tmp/passwords.txt \
+  192.168.1.10
+
+<span class="cm"># FTP brute force</span>
+nmap -p 21 --script=ftp-brute \
+  --script-args userdb=users.txt,passdb=common_passwords.txt \
+  192.168.1.10
+
+<span class="cm"># HTTP form brute force (login page)</span>
+nmap -p 80 --script=http-form-brute \
+  --script-args http-form-brute.path=/login,http-form-brute.uservar=username,\
+http-form-brute.passvar=password \
+  192.168.1.10</code></pre>
+
+<h2>SSH Brute Force Output</h2>
+<pre><code>$ nmap -p 22 --script=ssh-brute \
+  --script-args userdb=users.txt,passdb=passwords.txt 192.168.1.10
+
+PORT   STATE SERVICE
+22/tcp open  ssh
+
+| ssh-brute:
+|   Accounts:
+|     admin:admin123 - Valid credentials   ← FOUND
+|     root:toor - Valid credentials        ← FOUND
+|   Statistics:
+|_    Performed 1240 guesses in 120 seconds, average tps: 10
+
+<span class="cm"># Found credentials can be used with --script-args credentials.txt</span></code></pre>
+
+<h2>Brute Force Script Arguments</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Argument</th><th>Description</th><th>Default</th></tr></thead>
+  <tbody>
+    <tr><td><code>brute.mode</code></td><td>Mode: user (per-user), pass (per-pass), or user_pass</td><td>user</td></tr>
+    <tr><td><code>brute.threads</code></td><td>Number of concurrent threads</td><td>5</td></tr>
+    <tr><td><code>brute.delay</code></td><td>Seconds between attempts per thread</td><td>0</td></tr>
+    <tr><td><code>brute.timeout</code></td><td>Connection timeout in seconds</td><td>5</td></tr>
+    <tr><td><code>userdb</code></td><td>Path to username wordlist file</td><td>nmap usernames.lst</td></tr>
+    <tr><td><code>passdb</code></td><td>Path to password wordlist file</td><td>nmap passwords.lst</td></tr>
+    <tr><td><code>brute.firstonly</code></td><td>Stop after first valid credential found</td><td>false</td></tr>
+  </tbody>
+</table>
+</div>
+
+<pre><code><span class="cm"># Limit threads to avoid lockout</span>
+nmap --script=ssh-brute --script-args brute.threads=2,brute.delay=3 -p 22 target
+
+<span class="cm"># Stop after first success</span>
+nmap --script=ssh-brute \
+  --script-args brute.firstonly=true,userdb=users.txt,passdb=pass.txt \
+  -p 22 target</code></pre>
+</article>
+</template>
+
+<template id="tpl-script-args">
+<article class="topic">
+<h1>06 · Script Args &amp; Management</h1>
+<hr class="divider">
+
+<h2>Passing Script Arguments</h2>
+<pre><code><span class="cm"># Single argument</span>
+nmap --script=http-shellshock \
+  --script-args uri=/cgi-bin/status.cgi 192.168.1.10
+
+<span class="cm"># Multiple arguments (comma-separated)</span>
+nmap --script=ssh-brute \
+  --script-args userdb=/tmp/u.txt,passdb=/tmp/p.txt,brute.threads=3 \
+  192.168.1.10
+
+<span class="cm"># Arguments from file (one key=value per line)</span>
+nmap --script=ssh-brute \
+  --script-args-file /tmp/args.txt 192.168.1.10
+
+<span class="cm"># args.txt contents:</span>
+# userdb=/tmp/users.txt
+# passdb=/tmp/passwords.txt
+# brute.threads=2
+
+<span class="cm"># Script-specific prefix (avoids conflicts)</span>
+nmap --script=http-form-brute \
+  --script-args "http-form-brute.path=/admin/login" 192.168.1.10</code></pre>
+
+<h2>Getting Script Help</h2>
+<pre><code><span class="cm"># Full documentation for a script</span>
+nmap --script-help=smb-vuln-ms17-010
+
+<span class="cm"># Help output includes:</span>
+# - Description
+# - Categories
+# - Script arguments
+# - Example usage
+# - Author and license
+
+<span class="cm"># Search for scripts by pattern</span>
+nmap --script-help "smb-*"
+nmap --script-help "http-vuln-*"
+
+<span class="cm"># List all scripts with category</span>
+ls /usr/share/nmap/scripts/*.nse | xargs grep -l "categories.*vuln"</code></pre>
+
+<h2>Script Trace — Debug NSE</h2>
+<pre><code><span class="cm"># See every packet and data exchange from NSE scripts</span>
+nmap --script=http-title --script-trace -p 80 192.168.1.10 2>&amp;1
+
+<span class="cm"># Sample trace:</span>
+NSOCK INFO TCP connect to 192.168.1.10:80 completed successfully.
+NSOCK INFO Write request for 72 bytes:
+  GET / HTTP/1.0\r\nHost: 192.168.1.10\r\nConnection: close\r\n\r\n
+NSOCK INFO Read response: HTTP/1.1 200 OK...&lt;title&gt;Login Portal&lt;/title&gt;</code></pre>
+
+<h2>Custom Script Location</h2>
+<pre><code><span class="cm"># Default script directory</span>
+/usr/share/nmap/scripts/
+
+<span class="cm"># Add custom scripts</span>
+cp my_custom.nse /usr/share/nmap/scripts/
+nmap --script-updatedb       <span class="cm"># update script index after adding</span>
+
+<span class="cm"># Run from custom path</span>
+nmap --script /path/to/my_custom.nse 192.168.1.10
+
+<span class="cm"># Use custom data directory</span>
+nmap --datadir /my/nmap/data 192.168.1.10</code></pre>
+
+<h2>Common Script Argument Patterns</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Use Case</th><th>Script + Args</th></tr></thead>
+  <tbody>
+    <tr><td>HTTP path enumeration</td><td><code>--script=http-enum --script-args http-enum.basepath=/admin/</code></td></tr>
+    <tr><td>Shellshock on specific CGI</td><td><code>--script=http-shellshock --script-args uri=/cgi-bin/test.cgi</code></td></tr>
+    <tr><td>DNS zone transfer</td><td><code>--script=dns-zone-transfer --script-args dns-zone-transfer.domain=corp.local</code></td></tr>
+    <tr><td>SNMP with community string</td><td><code>--script=snmp-interfaces --script-args snmp.community=public</code></td></tr>
+    <tr><td>HTTP brute login form</td><td><code>--script=http-form-brute --script-args http-form-brute.path=/login,http-form-brute.uservar=user,http-form-brute.passvar=pass</code></td></tr>
+    <tr><td>SMB with credentials</td><td><code>--script=smb-enum-shares --script-args smbuser=admin,smbpass=Password1</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Script Output Verbosity</h2>
+<pre><code><span class="cm"># Standard script output</span>
+nmap --script=smb-os-discovery -p 445 192.168.1.10
+
+<span class="cm"># Verbose — more detail in script output</span>
+nmap --script=smb-os-discovery -p 445 -v 192.168.1.10
+
+<span class="cm"># Debug + trace — maximum detail</span>
+nmap --script=smb-os-discovery -p 445 -d --script-trace 192.168.1.10 2>&amp;1
+
+<span class="cm"># Suppress script output for faster scanning</span>
+nmap --script=vuln --script-trace 0 192.168.1.10</code></pre>
+</article>
+</template>
+
+<script src="js/app.js"></script>
+</body>
+</html>

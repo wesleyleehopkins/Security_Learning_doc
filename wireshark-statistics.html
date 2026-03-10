@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Statistics — Wireshark — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" aria-label="Toggle sidebar">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 5h14M3 10h14M3 15h14"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html" class="active">Wireshark</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">Statistics</div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  </aside>
+  <main class="content" id="content-area"></main>
+</div>
+
+<!-- ════════════════════════ Protocol Hierarchy ═════════════════════════════ -->
+<template id="tpl-protocol-hierarchy">
+<article class="topic">
+  <h2>Protocol Hierarchy Statistics</h2>
+  <p>Protocol Hierarchy gives you an instant overview of every protocol present in the PCAP and what percentage of traffic each represents. Open via <strong>Statistics → Protocol Hierarchy</strong>.</p>
+
+  <h3>What It Shows</h3>
+  <pre><code><span class="cm"># Example Protocol Hierarchy output</span>
+Protocol            Packets   Bytes   Pct Pkts  Pct Bytes
+─────────────────────────────────────────────────────────
+Frame               12,847   18.2MB    100%      100%
+ Ethernet           12,847   18.2MB    100%      100%
+  Internet Protocol 12,841   18.1MB     99.9%     99.5%
+   TCP               9,234   15.8MB     71.9%     86.9%
+    HTTP                421    3.2MB      3.3%     17.6%
+    TLS               8,102   12.1MB     63.1%     66.5%
+     ssl.app_data     7,890   11.9MB     61.4%     65.4%
+   UDP               3,607    2.3MB     28.1%     12.6%
+    DNS               3,511    0.6MB     27.3%      3.3%
+    MDNS                 96    0.017MB    0.7%      0.1%
+  ARP                     6    0.0003MB   0.05%     0.002%</code></pre>
+
+  <h3>SOC Analysis with Protocol Hierarchy</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>What You See</th><th>Investigation Question</th><th>Possible Explanation</th></tr></thead>
+      <tbody>
+        <tr><td>DNS &gt;30% of traffic</td><td>What's generating all this DNS?</td><td>DNS tunneling, DGA malware, DNS amplification DDoS</td></tr>
+        <tr><td>Unexpected protocol (IRC, Tor)</td><td>Who is using this protocol?</td><td>C2 channel, unauthorized tool</td></tr>
+        <tr><td>HTTP instead of HTTPS</td><td>What's going over cleartext?</td><td>Legacy app, intentional downgrade, credential risk</td></tr>
+        <tr><td>SMB high percentage</td><td>Which hosts are involved?</td><td>Ransomware spreading, legitimate file server</td></tr>
+        <tr><td>ICMP unexpectedly high</td><td>Is this a flood or tunnel?</td><td>Ping flood, ICMP tunnel (e.g., ptunnel)</td></tr>
+        <tr><td>Unknown protocol</td><td>Is this a custom C2 channel?</td><td>Encrypted custom protocol, malware</td></tr>
+        <tr><td>No DNS but lots of TCP</td><td>Direct IP connections — why?</td><td>C2 to hardcoded IP, bypassing DNS monitoring</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Filtering from Protocol Hierarchy</h3>
+  <pre><code><span class="cm"># Right-click any protocol row → Apply as Filter</span>
+<span class="cm"># This applies the protocol as a display filter to the main packet list</span>
+
+<span class="cm"># tshark equivalent — protocol hierarchy statistics:</span>
+tshark -r capture.pcap -q -z io,phs
+
+<span class="cm"># Get protocol breakdown percentages</span>
+tshark -r capture.pcap -q -z io,phs | grep -E "Protocol|dns|http|smb|tls"</code></pre>
+
+  <div class="callout lab">
+    <strong>Triage workflow:</strong> Open Protocol Hierarchy first on every new PCAP. It takes 5 seconds and immediately flags unexpected protocols, unusual volume distributions, or cleartext protocols that should be encrypted.
+  </div>
+</article>
+</template>
+
+<!-- ════════════════════════ Conversations ══════════════════════════════════ -->
+<template id="tpl-conversations">
+<article class="topic">
+  <h2>Conversations</h2>
+  <p>The Conversations window shows all unique communication pairs (endpoint A ↔ endpoint B) with packet counts, bytes transferred, and duration. Open via <strong>Statistics → Conversations</strong>.</p>
+
+  <h3>Conversation Tabs</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Tab</th><th>Grouping</th><th>SOC Use</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Ethernet</strong></td><td>MAC address pairs</td><td>Identify layer-2 talkers, rogue devices</td></tr>
+        <tr><td><strong>IPv4</strong></td><td>IP address pairs</td><td>Find which hosts communicate most; C2 identification</td></tr>
+        <tr><td><strong>IPv6</strong></td><td>IPv6 address pairs</td><td>IPv6 C2, unusual v6 traffic</td></tr>
+        <tr><td><strong>TCP</strong></td><td>IP:port pairs (4-tuple)</td><td>Long-lived connections, port recon, data exfil</td></tr>
+        <tr><td><strong>UDP</strong></td><td>IP:port pairs (4-tuple)</td><td>DNS top talkers, tunneling, beaconing</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Key Columns and Sorting</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Column</th><th>Description</th><th>Sort For</th></tr></thead>
+      <tbody>
+        <tr><td>Address A / Address B</td><td>Endpoint pair</td><td>Find specific hosts</td></tr>
+        <tr><td>Packets A→B / Packets B→A</td><td>Directional packet counts</td><td>Asymmetric traffic (scans = many pkts from one side)</td></tr>
+        <tr><td>Bytes A→B / Bytes B→A</td><td>Directional byte totals</td><td>Data exfiltration (large outbound bytes)</td></tr>
+        <tr><td>Packets</td><td>Total packet count</td><td>Highest-volume conversations</td></tr>
+        <tr><td>Bytes</td><td>Total bytes</td><td>Largest data transfers</td></tr>
+        <tr><td>Duration</td><td>Conversation length</td><td>Long-lived C2 connections (hours/days)</td></tr>
+        <tr><td>Rel Start</td><td>Time since capture start</td><td>Timeline — when did this start?</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>SOC Investigation Patterns</h3>
+  <pre><code><span class="cm"># Scenario 1: Find data exfiltration</span>
+Statistics → Conversations → IPv4 tab
+Sort by "Bytes B→A" (internal → external direction)
+Look for unusually large outbound transfers to unknown IPs
+
+<span class="cm"># Scenario 2: Find C2 beaconing</span>
+Statistics → Conversations → TCP tab
+Sort by "Duration"
+Long-lived connections to external IPs on non-standard ports = C2 candidates
+
+<span class="cm"># Scenario 3: Port scan detection</span>
+Statistics → Conversations → TCP tab
+Sort by "Packets A→B"
+One IP with many connections (few packets each) = port scan
+
+<span class="cm"># After identifying suspicious conversation:</span>
+Right-click → Apply as Filter → Selected → A &lt;-&gt; B
+<span class="cm"># Applies: ip.addr==X.X.X.X and ip.addr==Y.Y.Y.Y</span>
+<span class="cm"># Then follow the relevant TCP stream</span></code></pre>
+
+  <h3>tshark Conversation Statistics</h3>
+  <pre><code><span class="cm"># TCP conversations (top talkers by bytes)</span>
+tshark -r capture.pcap -q -z conv,tcp \
+  | sort -rn -k9 | head -20
+
+<span class="cm"># IPv4 conversations</span>
+tshark -r capture.pcap -q -z conv,ip \
+  | sort -rn -k9 | head -20
+
+<span class="cm"># UDP conversations</span>
+tshark -r capture.pcap -q -z conv,udp \
+  | sort -rn -k9 | head -20
+
+<span class="cm"># Filter conversations involving a specific host</span>
+tshark -r capture.pcap -q -z conv,tcp,"ip.addr==10.0.0.99"</code></pre>
+</article>
+</template>
+
+<!-- ════════════════════════ Endpoints ══════════════════════════════════════ -->
+<template id="tpl-endpoints">
+<article class="topic">
+  <h2>Endpoints</h2>
+  <p>The Endpoints window lists every unique host observed in the PCAP with total bytes sent and received, plus packet counts. Unlike Conversations (which shows pairs), Endpoints shows individual host activity. Open via <strong>Statistics → Endpoints</strong>.</p>
+
+  <h3>Endpoints Window Columns</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Column</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>Address</td><td>IP or MAC address of endpoint</td></tr>
+        <tr><td>Packets</td><td>Total packets involving this endpoint</td></tr>
+        <tr><td>Bytes</td><td>Total bytes involving this endpoint</td></tr>
+        <tr><td>Tx Packets</td><td>Packets transmitted (sent) by this endpoint</td></tr>
+        <tr><td>Tx Bytes</td><td>Bytes transmitted (sent) by this endpoint</td></tr>
+        <tr><td>Rx Packets</td><td>Packets received by this endpoint</td></tr>
+        <tr><td>Rx Bytes</td><td>Bytes received by this endpoint</td></tr>
+        <tr><td>Latitude / Longitude</td><td>GeoIP location (requires MaxMind DB configured)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>SOC Use Cases</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Sort By</th><th>Goal</th><th>Red Flag</th></tr></thead>
+      <tbody>
+        <tr><td>Tx Bytes (desc)</td><td>Find top data senders</td><td>Workstation sending more than it receives (exfil)</td></tr>
+        <tr><td>Packets (desc)</td><td>Find noisiest hosts</td><td>Internal host with thousands of connections (scanner/beacon)</td></tr>
+        <tr><td>Rx Bytes (desc)</td><td>Find large data receivers</td><td>Unexpected external IP receiving large transfers</td></tr>
+        <tr><td>Address</td><td>Check specific IP</td><td>Unknown IPs not in asset inventory</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>GeoIP Integration</h3>
+  <pre><code><span class="cm"># Enable GeoIP in Wireshark for country/city data:</span>
+Edit → Preferences → Name Resolution
+  → MaxMind Database Directories → Add path to GeoLite2 .mmdb files
+<span class="cm"># Download from: maxmind.com (free GeoLite2 databases)</span>
+<span class="cm"># GeoLite2-City.mmdb and GeoLite2-ASN.mmdb</span>
+
+<span class="cm"># After enabling, Endpoints shows country flags and coordinates</span>
+<span class="cm"># Map button in Endpoints window plots hosts on world map (requires internet)</span>
+
+<span class="cm"># tshark with GeoIP:</span>
+tshark -r capture.pcap \
+  -T fields -e ip.dst -e ip.geoip.country_iso \
+  | sort | uniq -c | sort -rn | head -20</code></pre>
+
+  <h3>tshark Endpoint Statistics</h3>
+  <pre><code><span class="cm"># List all IPv4 endpoints with byte counts</span>
+tshark -r capture.pcap -q -z endpoints,ip
+
+<span class="cm"># List all TCP endpoints</span>
+tshark -r capture.pcap -q -z endpoints,tcp
+
+<span class="cm"># Extract unique external IPs for threat intel lookup</span>
+tshark -r capture.pcap \
+  -T fields -e ip.dst \
+  | grep -v "^10\.\|^192\.168\.\|^172\.\(1[6-9]\|2[0-9]\|3[01]\)\." \
+  | sort -u \
+  | head -50
+<span class="cm"># Then submit to VirusTotal, Shodan, or AbuseIPDB</span></code></pre>
+</article>
+</template>
+
+<!-- ════════════════════════ IO Graphs ══════════════════════════════════════ -->
+<template id="tpl-io-graphs">
+<article class="topic">
+  <h2>IO Graphs</h2>
+  <p>IO Graphs plot packet rate or byte rate over time — essential for identifying traffic spikes, periodic beaconing, DDoS patterns, and data exfiltration bursts. Open via <strong>Statistics → IO Graphs</strong>.</p>
+
+  <h3>Graph Configuration</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Control</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Interval</strong></td><td>Time bucket width (1ms, 10ms, 100ms, 1s, 10s, 1min). Smaller = more granular, noisier. 1s good for beaconing detection.</td></tr>
+        <tr><td><strong>Y-axis unit</strong></td><td>Packets/s, Bytes/s, Bits/s, Advanced (custom calculation)</td></tr>
+        <tr><td><strong>Filter</strong></td><td>Apply a display filter to each graph line — plot multiple protocols simultaneously</td></tr>
+        <tr><td><strong>Name</strong></td><td>Label for each line in the legend</td></tr>
+        <tr><td><strong>Color</strong></td><td>Line color (click to change)</td></tr>
+        <tr><td><strong>+/-</strong></td><td>Add or remove graph lines</td></tr>
+        <tr><td><strong>Copy</strong></td><td>Export graph data as CSV for external charting</td></tr>
+        <tr><td><strong>Save</strong></td><td>Save graph as PNG image</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Multi-Layer Graph Setup</h3>
+  <pre><code><span class="cm"># Recommended IO Graph configuration for SOC triage:</span>
+
+Line 1: Filter = (none)         Label = "All Traffic"      Color = gray
+Line 2: Filter = http           Label = "HTTP"             Color = blue
+Line 3: Filter = dns            Label = "DNS"              Color = green
+Line 4: Filter = tls            Label = "TLS"              Color = yellow
+Line 5: Filter = smb or smb2   Label = "SMB"              Color = red
+
+<span class="cm"># This shows how each protocol contributes to total traffic over time</span>
+<span class="cm"># Anomalous spikes in a single protocol are immediately visible</span></code></pre>
+
+  <h3>SOC Detection Patterns</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Pattern</th><th>IO Graph Signature</th><th>Likely Cause</th></tr></thead>
+      <tbody>
+        <tr><td>C2 Beaconing</td><td>Regular small spikes at fixed intervals (every 30s, 60s, 300s)</td><td>Malware check-in timer</td></tr>
+        <tr><td>DDoS</td><td>Sudden massive spike then sustained high rate</td><td>DDoS attack in progress</td></tr>
+        <tr><td>Data Exfiltration</td><td>Large sustained spike in outbound bytes, then drops</td><td>Bulk file transfer, staging</td></tr>
+        <tr><td>Port Scan</td><td>Sharp spike in packet rate, very low byte rate</td><td>SYN scan (tiny packets, many connections)</td></tr>
+        <tr><td>Ransomware</td><td>SMB spike followed by sustained write activity</td><td>Lateral movement then encryption</td></tr>
+        <tr><td>DNS Tunneling</td><td>Unusually high DNS rate sustained over long period</td><td>Data encoded in DNS queries</td></tr>
+        <tr><td>Burst C2</td><td>Irregular medium bursts (not precise intervals)</td><td>Jitter added to beacon to evade detection</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Beaconing Analysis</h3>
+  <pre><code><span class="cm"># In IO Graphs, set:</span>
+<span class="cm"># Interval = 10 seconds, Y-axis = Packets/s</span>
+<span class="cm"># Filter = ip.addr == [suspect C2 IP]</span>
+<span class="cm"># Look for regular repeating spikes</span>
+
+<span class="cm"># Confirm in tshark — print timestamps for each packet to suspect IP</span>
+tshark -r capture.pcap \
+  -Y "ip.addr == 203.0.113.50" \
+  -T fields -e frame.time_epoch \
+  | awk 'NR&gt;1{print $1-prev; prev=$1} NR==1{prev=$1}' \
+  | sort -n | uniq -c | sort -rn | head -10
+<span class="cm"># Output: count of each inter-packet interval</span>
+<span class="cm"># Regular intervals (e.g., 60.00, 60.01, 60.02) confirm beaconing</span></code></pre>
+
+  <h3>tshark IO Statistics</h3>
+  <pre><code><span class="cm"># IO statistics: packet count per second</span>
+tshark -r capture.pcap -q -z io,stat,1
+
+<span class="cm"># IO statistics: bytes per second, HTTP only</span>
+tshark -r capture.pcap -q -z "io,stat,1,http"
+
+<span class="cm"># Multiple filters — compare protocols over time</span>
+tshark -r capture.pcap -q -z "io,stat,10,tcp,udp,dns,http"
+
+<span class="cm"># Output format:</span>
+<span class="cm"># Duration  |    tcp    |    udp    |    dns    |    http   |</span>
+<span class="cm"># 0 &lt;&gt; 10   | Frames:xx | Frames:xx | Frames:xx | Frames:xx |</span></code></pre>
+</article>
+</template>
+
+<!-- ════════════════════════ Expert Information ═════════════════════════════ -->
+<template id="tpl-expert-info">
+<article class="topic">
+  <h2>Expert Information</h2>
+  <p>Wireshark's Expert Information panel automatically flags protocol anomalies, retransmissions, malformed packets, and connection issues. Open via <strong>Analyze → Expert Information</strong> or click the circle indicator in the status bar.</p>
+
+  <h3>Severity Levels</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Icon</th><th>Severity</th><th>Meaning</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td style="color:var(--red)">● Error</td><td>Red</td><td>Definite problem — malformed packet, protocol violation</td><td>Malformed TLS record, packet reassembly error</td></tr>
+        <tr><td style="color:var(--yellow)">● Warning</td><td>Yellow</td><td>Possible problem — unusual but not definitively wrong</td><td>TCP retransmission, duplicate ACK</td></tr>
+        <tr><td style="color:var(--accent)">● Note</td><td>Cyan</td><td>Notable event worth examining</td><td>Window full, zero window, connection reset</td></tr>
+        <tr><td style="color:var(--text2)">● Chat</td><td>Gray</td><td>Normal but noteworthy protocol event</td><td>TCP connection established/closed</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Common Expert Info Messages</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Message</th><th>Severity</th><th>SOC Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>TCP Retransmission</td><td>Warning</td><td>Packet loss — degraded link or network congestion</td></tr>
+        <tr><td>Duplicate ACK</td><td>Note</td><td>Out-of-order packets — precedes retransmission</td></tr>
+        <tr><td>TCP Window Full</td><td>Warning</td><td>Receiver buffer full — sender must wait</td></tr>
+        <tr><td>TCP Zero Window</td><td>Warning</td><td>Receiver buffer completely full — communication stalled</td></tr>
+        <tr><td>TCP RST</td><td>Note/Warning</td><td>Abrupt connection termination — port refused, firewall, attack</td></tr>
+        <tr><td>TCP SYN without prior ACK</td><td>Note</td><td>New connection — normal, but watch volume</td></tr>
+        <tr><td>Malformed Packet</td><td>Error</td><td>Truncated PCAP, fuzzing attempt, protocol violation</td></tr>
+        <tr><td>Connection reset (RST)</td><td>Note</td><td>Connection forcibly closed — may indicate scan or refusal</td></tr>
+        <tr><td>HTTP status 401</td><td>Warning</td><td>Authentication failure — possible brute force</td></tr>
+        <tr><td>TLS Alert</td><td>Warning</td><td>TLS handshake failure — certificate issue, version mismatch</td></tr>
+        <tr><td>Out-of-order</td><td>Warning</td><td>Packet arrived late — normal in high-traffic but watch patterns</td></tr>
+        <tr><td>Fast Retransmission</td><td>Warning</td><td>Three duplicate ACKs — receiver detected loss before timeout</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Using Expert Info for SOC Triage</h3>
+  <pre><code><span class="cm"># Check for unusual RST storms (scan detection, firewall rejects)</span>
+tcp.flags.reset == 1
+<span class="cm"># High RST count = port scan in progress or refused connections</span>
+
+<span class="cm"># Check for retransmission storms (DDoS impact on victims)</span>
+tcp.analysis.retransmission
+
+<span class="cm"># Zero window — potential DoS or resource exhaustion</span>
+tcp.analysis.zero_window
+
+<span class="cm"># TLS alert messages (certificate errors, version failures)</span>
+tls.alert_message
+
+<span class="cm"># tshark: count expert info messages by type</span>
+tshark -r capture.pcap -q -z expert \
+  | sort | uniq -c | sort -rn</code></pre>
+
+  <h3>tshark Expert Information</h3>
+  <pre><code><span class="cm"># Display expert info summary</span>
+tshark -r capture.pcap -q -z expert
+
+<span class="cm"># Show only errors and warnings (suppress chat/notes)</span>
+tshark -r capture.pcap \
+  -Y "expert.severity &gt;= 2000000"
+<span class="cm"># Severity values: Chat=200000, Note=500000, Warn=800000, Error=1200000</span>
+
+<span class="cm"># Count retransmissions</span>
+tshark -r capture.pcap -Y "tcp.analysis.retransmission" \
+  | wc -l
+
+<span class="cm"># List all RST packets with timestamps and IPs</span>
+tshark -r capture.pcap \
+  -Y "tcp.flags.reset == 1" \
+  -T fields -e frame.time -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport</code></pre>
+
+  <h3>Statistics Summary — All Tools</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Tool</th><th>Menu Path</th><th>tshark Flag</th><th>Primary Use</th></tr></thead>
+      <tbody>
+        <tr><td>Protocol Hierarchy</td><td>Statistics → Protocol Hierarchy</td><td><code>-z io,phs</code></td><td>Protocol mix overview</td></tr>
+        <tr><td>Conversations</td><td>Statistics → Conversations</td><td><code>-z conv,tcp</code></td><td>Host pair analysis</td></tr>
+        <tr><td>Endpoints</td><td>Statistics → Endpoints</td><td><code>-z endpoints,ip</code></td><td>Per-host activity</td></tr>
+        <tr><td>IO Graphs</td><td>Statistics → IO Graphs</td><td><code>-z io,stat,N</code></td><td>Traffic over time</td></tr>
+        <tr><td>Expert Information</td><td>Analyze → Expert Information</td><td><code>-z expert</code></td><td>Protocol anomaly detection</td></tr>
+        <tr><td>DNS Stats</td><td>Statistics → DNS</td><td><code>-z dns,tree</code></td><td>DNS query type breakdown</td></tr>
+        <tr><td>HTTP Stats</td><td>Statistics → HTTP</td><td><code>-z http,tree</code></td><td>HTTP method/code breakdown</td></tr>
+        <tr><td>Packet Lengths</td><td>Statistics → Packet Lengths</td><td><code>-z plen,tree</code></td><td>Packet size distribution</td></tr>
+        <tr><td>Capture File Properties</td><td>Statistics → Capture File Properties</td><td><code>capinfos file.pcap</code></td><td>PCAP metadata</td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: "Wireshark — Statistics",
+  topics: [
+    { id: "protocol-hierarchy", badge: "01", label: "Protocol Hierarchy" },
+    { id: "conversations",      badge: "02", label: "Conversations" },
+    { id: "endpoints",          badge: "03", label: "Endpoints" },
+    { id: "io-graphs",          badge: "04", label: "IO Graphs" },
+    { id: "expert-info",        badge: "05", label: "Expert Information" },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

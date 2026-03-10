@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nmap Scan Types — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Nmap</div>
+      <div class="sidebar-title">Scan Types</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">📡</div>
+          <h2>Scan Types</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Scan Types',
+  topics: [
+    { id: 'syn-stealth',   badge: '01', label: 'SYN Scan (-sS)'            },
+    { id: 'tcp-connect',   badge: '02', label: 'TCP Connect (-sT)'          },
+    { id: 'udp-scan',      badge: '03', label: 'UDP Scan (-sU)'             },
+    { id: 'null-fin-xmas', badge: '04', label: 'NULL / FIN / Xmas'         },
+    { id: 'ack-window',    badge: '05', label: 'ACK & Window Scans'        },
+    { id: 'specialty',     badge: '06', label: 'Idle, IP Proto & Evasion'  },
+  ]
+};
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EMBEDDED CONTENT TEMPLATES — no server required
+     ═══════════════════════════════════════════════════════════════ -->
+
+<template id="tpl-syn-stealth">
+<article class="topic">
+<h1>01 · SYN Scan (-sS) — Stealth / Half-Open</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-note">SYN scan operates at L3 (raw IP packet construction) and L4 (TCP SYN/RST flag manipulation) — never completes the full L4 TCP handshake.</span>
+</div>
+<hr class="divider">
+
+<div class="callout"><strong>Default scan type</strong> when Nmap is run as root/Administrator. Fastest and most popular TCP scan — sends a SYN but never completes the 3-way handshake.</div>
+
+<h2>Command</h2>
+<pre><code>nmap -sS 192.168.1.10          <span class="cm"># SYN scan, top 1000 ports</span>
+nmap -sS -p- 192.168.1.10     <span class="cm"># SYN scan, all 65535 ports</span>
+nmap -sS -p 22,80,443,3389 192.168.1.10</code></pre>
+
+<h2>Packet-Level Behavior</h2>
+<pre><code><span class="cm">── Port OPEN ──────────────────────────────────────────────────</span>
+Nmap  →  [SYN]                      →  Target
+Nmap  ←  [SYN, ACK]                 ←  Target
+Nmap  →  [RST]                      →  Target   ← never completes handshake
+Result: open
+
+<span class="cm">── Port CLOSED ────────────────────────────────────────────────</span>
+Nmap  →  [SYN]                      →  Target
+Nmap  ←  [RST, ACK]                 ←  Target
+Result: closed
+
+<span class="cm">── Port FILTERED (firewall dropping packets) ───────────────────</span>
+Nmap  →  [SYN]                      →  [firewall drops]
+Nmap  ←  (no response — timeout)
+  OR
+Nmap  ←  [ICMP type 3 unreachable]  ←  Target/firewall
+Result: filtered</code></pre>
+
+<h2>Why "Stealth"?</h2>
+<p>The RST prevents the OS from completing the connection. Because no full TCP connection is established, many application-layer logs (Apache, sshd, Windows Event 4656) never record the connection. However, network-level IDS/IPS and firewall logs will still see the SYN packets — the "stealth" is relative to application logging only.</p>
+
+<h2>Advantages</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Property</th><th>Detail</th></tr></thead>
+  <tbody>
+    <tr><td>Speed</td><td>Fastest TCP scan — Nmap doesn't wait for application handshake</td></tr>
+    <tr><td>Application stealth</td><td>Most application-layer logs won't record incomplete connections</td></tr>
+    <tr><td>Clear port states</td><td>Returns open, closed, or filtered — no ambiguity</td></tr>
+    <tr><td>Root required</td><td>Needs raw socket access (root/Administrator)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Example Output</h2>
+<pre><code>$ sudo nmap -sS -p 22,80,443,3306,3389 192.168.1.10 --reason
+
+PORT     STATE    SERVICE  REASON
+22/tcp   open     ssh      syn-ack ttl 64
+80/tcp   open     http     syn-ack ttl 64
+443/tcp  open     https    syn-ack ttl 64
+3306/tcp filtered mysql    no-response
+3389/tcp closed   ms-wbt   reset ttl 64
+
+<span class="cm"># --reason shows WHY Nmap assigned each state</span>
+<span class="cm"># syn-ack = received SYN/ACK → open</span>
+<span class="cm"># no-response = timeout → filtered</span>
+<span class="cm"># reset = received RST → closed</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Why SYN scan is the default choice</h4>
+    <ul>
+      <li>Sends a single L4 SYN packet; receives SYN/ACK (open) or RST (closed) — no full TCP handshake completes</li>
+      <li>Faster than TCP connect because Nmap immediately sends RST after SYN/ACK — no OS connection overhead</li>
+      <li>Requires root/Administrator for raw socket access to craft L3/L4 packets directly</li>
+      <li>"Stealth" means application logs won't see it — but network-level IDS and firewalls still see the SYN packets</li>
+    </ul>
+    <pre><code>sudo nmap -sS 192.168.56.30  <span class="cm"># SYN scan top 1000 ports against Windows victim</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Combining SYN with other flags for practical recon</h4>
+    <ul>
+      <li>Add <code>--reason</code> to show the exact L4 packet response that caused each state decision</li>
+      <li>Combine with <code>-sV</code> to follow SYN port discovery with L7 service probing on open ports</li>
+      <li>Use <code>--open</code> to suppress closed ports — critical when scanning large subnets</li>
+    </ul>
+    <pre><code>sudo nmap -sS -sV -p 1-1000 --open --reason -oA syn_scan 192.168.56.30
+<span class="cm"># SYN scan + version detection + show only open ports with state reasons</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>SYN scan in evasion and comprehensive coverage</h4>
+    <ul>
+      <li>Pair <code>-sS</code> with <code>-sA</code> (ACK scan) to differentiate stateful firewalls from stateless ACLs at L4</li>
+      <li>Use <code>-f</code> to fragment L3 IP headers — SYN packets split across fragments may bypass simple packet filters</li>
+      <li>Combine full-port SYN with OS detection and vuln scripts for complete recon in one authorized pass</li>
+    </ul>
+    <pre><code>sudo nmap -sS -sV -O --script=vuln -p- -T4 --open -oA full_syn 192.168.56.30
+<span class="cm"># All 65535 ports: SYN + version + OS fingerprint + vuln scripts</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-tcp-connect">
+<article class="topic">
+<h1>02 · TCP Connect Scan (-sT) — Full Handshake</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">TCP Connect uses the OS connect() system call to complete the full L4 three-way handshake, which causes L7 application servers to log the connection as a real event.</span>
+</div>
+<hr class="divider">
+
+<div class="callout note"><strong>Default without root</strong> — when Nmap cannot use raw sockets, it falls back to the OS <code>connect()</code> system call for a full TCP handshake.</div>
+
+<h2>Command</h2>
+<pre><code>nmap -sT 192.168.1.10            <span class="cm"># TCP connect, top 1000 ports</span>
+nmap -sT -p- 192.168.1.10        <span class="cm"># all ports</span>
+
+<span class="cm"># Typical usage — non-root user on Linux or standard Windows user</span>
+nmap -sT -sV -p 80,443,8080 target</code></pre>
+
+<h2>Packet-Level Behavior</h2>
+<pre><code><span class="cm">── Port OPEN ──────────────────────────────────────────────────</span>
+Nmap  →  [SYN]           →  Target
+Nmap  ←  [SYN, ACK]      ←  Target
+Nmap  →  [ACK]           →  Target    ← full handshake completes
+Nmap  →  [RST, ACK]      →  Target    ← Nmap closes immediately
+Result: open
+
+<span class="cm">── Port CLOSED ────────────────────────────────────────────────</span>
+Nmap  →  [SYN]           →  Target
+Nmap  ←  [RST, ACK]      ←  Target
+Result: closed
+
+<span class="cm">── Port FILTERED ──────────────────────────────────────────────</span>
+Nmap  →  [SYN]           →  [firewall drops]
+Nmap  ←  (timeout)  OR  ICMP type 3
+Result: filtered</code></pre>
+
+<h2>Key Differences from -sS</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Property</th><th>-sS (SYN)</th><th>-sT (Connect)</th></tr></thead>
+  <tbody>
+    <tr><td>Root/Admin required</td><td>Yes (raw sockets)</td><td>No (uses OS connect())</td></tr>
+    <tr><td>Handshake completed</td><td>No (RST after SYN/ACK)</td><td>Yes (full 3-way + RST)</td></tr>
+    <tr><td>Application logging</td><td>Usually not logged</td><td>Logged as a real connection</td></tr>
+    <tr><td>Speed</td><td>Faster</td><td>Slower (OS overhead)</td></tr>
+    <tr><td>IDS visibility</td><td>Both visible at network level</td><td>Both visible at network level</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>When to Use -sT</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Scenario</th><th>Reason</th></tr></thead>
+  <tbody>
+    <tr><td>Running without root/admin</td><td>Only TCP option without raw socket access</td></tr>
+    <tr><td>Scanning through SOCKS proxy</td><td>Proxies relay full connect() calls; raw packets don't work</td></tr>
+    <tr><td>IPv6 scanning (some environments)</td><td>Raw IPv6 support varies by platform</td></tr>
+    <tr><td>Verifying actual connectivity</td><td>Full handshake confirms NAT/firewall allows return traffic too</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Example Output</h2>
+<pre><code>$ nmap -sT -p 22,80,443 192.168.1.10
+
+PORT    STATE  SERVICE
+22/tcp  open   ssh
+80/tcp  open   http
+443/tcp open   https
+
+<span class="cm"># Windows Security Event Log (target) will show EventID 4656</span>
+<span class="cm"># Apache access.log may show connection from scanner IP</span>
+<span class="cm"># sshd auth.log may record connection attempt</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>When to use TCP Connect instead of SYN</h4>
+    <ul>
+      <li>Use <code>-sT</code> when you don't have root/Administrator — it uses the OS <code>connect()</code> syscall instead of raw L3/L4 sockets</li>
+      <li>The full L4 handshake completes, so L7 application logs (Apache, sshd, Windows Event Log) will record connections</li>
+      <li>Slower than <code>-sS</code> because OS connection overhead is added to each L4 probe</li>
+    </ul>
+    <pre><code>nmap -sT 192.168.56.30  <span class="cm"># TCP connect scan — no root needed</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Scenarios where -sT is the correct choice</h4>
+    <ul>
+      <li>Scanning through a SOCKS proxy — full L4 connect() calls relay correctly; raw L3 packets cannot be proxied</li>
+      <li>Combine with <code>-sV</code> to also retrieve L7 version banners on discovered open ports</li>
+      <li>Compare <code>-sT</code> results with <code>-sS</code> — differences may indicate asymmetric NAT/firewall behavior</li>
+    </ul>
+    <pre><code>nmap -sT -sV -p 80,443,8080,8443 192.168.56.30
+<span class="cm"># Full connect + version detection on web ports — logs L7 application access</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Using -sT logging behavior for forensic analysis</h4>
+    <ul>
+      <li>Run <code>-sT</code> intentionally to generate L7 application log entries — useful in blue team exercises to test SIEM detection rules</li>
+      <li>Use <code>--proxies socks4://127.0.0.1:9050</code> with <code>-sT</code> to route scans through Tor — only works with connect() scans</li>
+      <li>Capture concurrent pcap during <code>-sT</code> to correlate L4 connect events with L7 log timestamps for timeline reconstruction</li>
+    </ul>
+    <pre><code>nmap -sT -sV -O -p 1-1000 --open -oA tcp_connect_scan 192.168.56.30
+<span class="cm"># Full connect + version + OS on top 1000 ports — generates full L7 application logs</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-udp-scan">
+<article class="topic">
+<h1>03 · UDP Scan (-sU)</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-note">UDP scan uses L3 ICMP "port unreachable" responses to infer closed ports — open ports are identified by L4 UDP responses or ambiguous silence from the service.</span>
+</div>
+<hr class="divider">
+
+<div class="callout warn"><strong>UDP scanning is slow</strong> — Linux kernels limit ICMP port unreachable messages to ~1/sec by default. Scanning all 65535 UDP ports can take 18+ hours. Focus on top ports and combine with TCP.</div>
+
+<h2>Command</h2>
+<pre><code><span class="cm"># Scan top 100 UDP ports (most practical)</span>
+nmap -sU --top-ports 100 192.168.1.10
+
+<span class="cm"># Common UDP services</span>
+nmap -sU -p 53,67,68,69,111,123,161,162,500,514,631 192.168.1.10
+
+<span class="cm"># Combine with TCP SYN scan</span>
+sudo nmap -sS -sU -p T:22,80,443,U:53,161,500 192.168.1.10
+
+<span class="cm"># Rate-limited UDP scan for large subnets</span>
+nmap -sU --top-ports 50 --max-rate 100 192.168.1.0/24</code></pre>
+
+<h2>Packet-Level Behavior</h2>
+<pre><code><span class="cm">── Port OPEN ──────────────────────────────────────────────────</span>
+Nmap  →  [UDP payload]             →  Target
+Nmap  ←  [UDP response]            ←  Target
+Result: open
+
+<span class="cm">── Port OPEN|FILTERED (most common — ambiguous) ───────────────</span>
+Nmap  →  [UDP payload]             →  Target
+Nmap  ←  (no response — timeout)
+Result: open|filtered  ← can't tell if service ignores probe or firewall drops it
+        Nmap retransmits before assigning this state
+
+<span class="cm">── Port CLOSED ────────────────────────────────────────────────</span>
+Nmap  →  [UDP payload]             →  Target
+Nmap  ←  [ICMP type 3, code 3]    ←  Target  (port unreachable)
+Result: closed
+
+<span class="cm">── Port FILTERED (firewall blocking) ──────────────────────────</span>
+Nmap  →  [UDP payload]             →  Target
+Nmap  ←  [ICMP type 3, code 1/2/9/10/13]  ←  Target/firewall
+Result: filtered</code></pre>
+
+<h2>ICMP Unreachable Codes</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>ICMP Type 3 Code</th><th>Meaning</th><th>Port State</th></tr></thead>
+  <tbody>
+    <tr><td>Code 3</td><td>Port unreachable</td><td>closed</td></tr>
+    <tr><td>Code 1</td><td>Host unreachable</td><td>filtered</td></tr>
+    <tr><td>Code 2</td><td>Protocol unreachable</td><td>filtered</td></tr>
+    <tr><td>Code 9</td><td>Network admin prohibited</td><td>filtered</td></tr>
+    <tr><td>Code 10</td><td>Host admin prohibited</td><td>filtered</td></tr>
+    <tr><td>Code 13</td><td>Communication admin prohibited</td><td>filtered</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Key UDP Services to Check in SOC</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Port</th><th>Service</th><th>Security Concern</th></tr></thead>
+  <tbody>
+    <tr><td>53</td><td>DNS</td><td>Zone transfer, DNS tunneling, open resolver</td></tr>
+    <tr><td>67/68</td><td>DHCP</td><td>Rogue DHCP, starvation attacks</td></tr>
+    <tr><td>69</td><td>TFTP</td><td>Unauthenticated file transfer</td></tr>
+    <tr><td>111</td><td>RPCbind</td><td>RPC enumeration, NFS exposure</td></tr>
+    <tr><td>123</td><td>NTP</td><td>Amplification attacks, time manipulation</td></tr>
+    <tr><td>161/162</td><td>SNMP</td><td>Community string exposure (public/private)</td></tr>
+    <tr><td>500</td><td>IKE/IPsec</td><td>VPN enumeration</td></tr>
+    <tr><td>514</td><td>Syslog</td><td>Unencrypted log forwarding</td></tr>
+    <tr><td>1194</td><td>OpenVPN</td><td>VPN detection</td></tr>
+    <tr><td>1900</td><td>SSDP/UPnP</td><td>Amplification, device enumeration</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Example Output</h2>
+<pre><code>$ sudo nmap -sU --top-ports 20 192.168.1.1
+
+PORT     STATE         SERVICE
+53/udp   open          domain
+67/udp   open|filtered dhcps
+68/udp   open|filtered dhcpc
+123/udp  open          ntp
+161/udp  open          snmp
+500/udp  open|filtered isakmp
+514/udp  open|filtered syslog
+
+<span class="cm"># open|filtered is very common for UDP — service running but not responding</span>
+<span class="cm"># to Nmap's generic probe; use --script=banner,snmp-info to confirm</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Why UDP scanning is different and slow</h4>
+    <ul>
+      <li>UDP (L4) has no handshake — Nmap infers closed ports from L3 ICMP type 3 "port unreachable" replies</li>
+      <li>No ICMP response means <code>open|filtered</code> — you cannot distinguish an open service from a firewall dropping the probe</li>
+      <li>Linux rate-limits ICMP unreachable to ~1/sec — all-port UDP scans can take 18+ hours; always use <code>--top-ports</code></li>
+    </ul>
+    <pre><code>sudo nmap -sU --top-ports 20 192.168.56.30  <span class="cm"># UDP top 20 ports — practical starting point</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Combining UDP and TCP for full service coverage</h4>
+    <ul>
+      <li>Always combine <code>-sS -sU</code> — TCP-only scans miss critical UDP services: DNS (53), SNMP (161), NTP (123), DHCP (67)</li>
+      <li>Use <code>--max-rate 100</code> to cap UDP probe rate — prevents overwhelming rate-limited ICMP responses</li>
+      <li>Follow up <code>open|filtered</code> results with service-specific NSE scripts to confirm open state</li>
+    </ul>
+    <pre><code>sudo nmap -sS -sU -sV -p T:22,80,445,U:53,161,500 --open 192.168.56.30
+<span class="cm"># Combined TCP + UDP scan on high-value ports with version detection</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Targeted UDP enumeration of critical SOC services</h4>
+    <ul>
+      <li>SNMP (UDP 161) with community string "public" can leak full device config — always check with <code>--script=snmp-info,snmp-interfaces</code></li>
+      <li>DNS (UDP 53) open resolver check: <code>--script=dns-recursion</code> — open resolvers are amplification attack vectors</li>
+      <li>NTP (UDP 123) monlist amplification: query returns all recent clients — blocks of 100+ IPs per request enable DDoS</li>
+    </ul>
+    <pre><code>sudo nmap -sU -sV --script=snmp-info,dns-recursion -p 53,123,161,500 -T4 --open 192.168.56.30
+<span class="cm"># Targeted UDP service enumeration with L7 NSE script validation</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-null-fin-xmas">
+<article class="topic">
+<h1>04 · NULL, FIN &amp; Xmas Scans</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-note">These scans exploit L4 TCP flag behavior defined in RFC 793 — they send unusual flag combinations at L4 to infer port state without completing any connection.</span>
+</div>
+<hr class="divider">
+
+<div class="callout note"><strong>RFC 793 exploitation</strong> — these scans rely on the TCP specification stating that a port with no associated connection must send RST in response to segments with unexpected flags set. Works against UNIX/Linux; <strong>fails against Windows</strong> (Windows sends RST for both open and closed ports).</div>
+
+<h2>Commands</h2>
+<pre><code><span class="cm"># NULL scan — no TCP flags set (tcp.flags == 0x000)</span>
+nmap -sN 192.168.1.10
+
+<span class="cm"># FIN scan — only FIN flag (tcp.flags == 0x001)</span>
+nmap -sF 192.168.1.10
+
+<span class="cm"># Xmas scan — FIN + PSH + URG (tcp.flags == 0x029)</span>
+nmap -sX 192.168.1.10
+
+<span class="cm"># All three require root; often used with -p and -T2</span>
+nmap -sN -p 22,80,443 -T2 192.168.1.10</code></pre>
+
+<h2>TCP Flag Patterns</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Scan</th><th>Flags Set</th><th>Hex Value</th><th>Visual</th></tr></thead>
+  <tbody>
+    <tr><td>NULL</td><td>None</td><td>0x000</td><td>[ . . . . . . ]</td></tr>
+    <tr><td>FIN</td><td>FIN</td><td>0x001</td><td>[ F . . . . . ]</td></tr>
+    <tr><td>Xmas</td><td>FIN + PSH + URG</td><td>0x029</td><td>[ F . P . U . ]</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Packet-Level Behavior (RFC 793)</h2>
+<pre><code><span class="cm">── Port CLOSED (RFC 793 compliant OS) ─────────────────────────</span>
+Nmap  →  [NULL/FIN/Xmas probe]    →  Target
+Nmap  ←  [RST, ACK]              ←  Target
+Result: closed
+
+<span class="cm">── Port OPEN (RFC 793 compliant OS) ───────────────────────────</span>
+Nmap  →  [NULL/FIN/Xmas probe]    →  Target
+Nmap  ←  (silence — packet dropped)
+Result: open|filtered  ← ambiguous, Nmap retransmits before deciding
+
+<span class="cm">── FILTERED (firewall blocks probe) ───────────────────────────</span>
+Nmap  →  [NULL/FIN/Xmas probe]    →  [firewall drops]
+Nmap  ←  (silence)  OR  ICMP type 3
+Result: open|filtered  OR  filtered
+
+<span class="cm">── Windows / non-RFC target ───────────────────────────────────</span>
+Nmap  →  [NULL/FIN/Xmas probe]    →  Windows target
+Nmap  ←  [RST, ACK]              ←  Windows (both open and closed)
+Result: ALL ports appear closed — scan results are USELESS</code></pre>
+
+<h2>OS Behavior Comparison</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>OS / Device</th><th>Open Port Response</th><th>Closed Port Response</th><th>Useful?</th></tr></thead>
+  <tbody>
+    <tr><td>Linux / macOS / BSD</td><td>Silence (drop)</td><td>RST</td><td>Yes — can infer open from no response</td></tr>
+    <tr><td>Windows (all versions)</td><td>RST</td><td>RST</td><td>No — all ports appear closed</td></tr>
+    <tr><td>Cisco IOS</td><td>Silence</td><td>RST</td><td>Yes (IOS follows RFC)</td></tr>
+    <tr><td>Some network printers</td><td>RST</td><td>RST</td><td>No</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Why Use These Scans?</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Advantage</th><th>Limitation</th></tr></thead>
+  <tbody>
+    <tr><td>May bypass stateless firewalls (allow established traffic)</td><td>Results are open|filtered — can't confirm open</td></tr>
+    <tr><td>Application logs rarely record these probes</td><td>Fails completely against Windows targets</td></tr>
+    <tr><td>IDS rules tuned for SYN scans may miss these</td><td>Modern stateful firewalls detect and block regardless</td></tr>
+    <tr><td>Useful to confirm firewall type (compare with -sS results)</td><td>Slower than -sS due to retransmits</td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Understanding RFC 793 flag exploit logic</h4>
+    <ul>
+      <li>RFC 793 states: a closed port must respond to unexpected L4 TCP flags with RST; an open port silently drops them</li>
+      <li>NULL (<code>-sN</code>) sends no flags; FIN (<code>-sF</code>) sends only FIN; Xmas (<code>-sX</code>) sends FIN+PSH+URG</li>
+      <li>Results are <code>open|filtered</code> (silence) or <code>closed</code> (RST) — open cannot be confirmed, only inferred</li>
+      <li>These scans are completely useless against Windows — Windows sends RST for both open and closed ports</li>
+    </ul>
+    <pre><code>sudo nmap -sN 192.168.56.20  <span class="cm"># NULL scan against Security Onion (Linux — RFC compliant)</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Combining with -sS to identify firewall type</h4>
+    <ul>
+      <li>Run both <code>-sS</code> and <code>-sN</code>/<code>-sF</code> on the same ports — compare results to detect stateful vs stateless firewalls</li>
+      <li>If <code>-sS</code> shows filtered but <code>-sN</code> shows open|filtered, the firewall is stateless (only filters SYN, not all TCP)</li>
+      <li>Use slow timing <code>-T2</code> with these scans — retransmit delays mean faster templates increase false open|filtered results</li>
+    </ul>
+    <pre><code>sudo nmap -sN -sV -p 22,80,443 -T2 192.168.56.20
+<span class="cm"># NULL scan with slow timing on Linux Security Onion target</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>IDS evasion and firewall fingerprinting use cases</h4>
+    <ul>
+      <li>IDS rules tuned for SYN-flood detection won't trigger on NULL/FIN/Xmas — use to test blind spots in detection rules</li>
+      <li>Cross-reference NULL/FIN results with <code>-sA</code> ACK scan to build a complete firewall rule map</li>
+      <li>Xmas scan (FIN+PSH+URG) at L4 is the most distinctive pattern — some modern IDS explicitly alert on it; use NULL instead for lower visibility</li>
+    </ul>
+    <pre><code>sudo nmap -sN -sV -O -p- -T2 --open -oA null_scan 192.168.56.20
+<span class="cm"># NULL scan all ports on Linux target — lower IDS profile than SYN scan</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-ack-window">
+<article class="topic">
+<h1>05 · ACK &amp; Window Scans (-sA, -sW)</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-note">ACK and Window scans probe at L4 using TCP ACK packets — they map firewall state table behavior rather than service availability, revealing stateful vs stateless defenses.</span>
+</div>
+<hr class="divider">
+
+<div class="callout warn"><strong>These scans do NOT determine open/closed</strong> — they map firewall rules. An "unfiltered" port means the ACK packet got through, but could be either open or closed.</div>
+
+<h2>ACK Scan (-sA)</h2>
+<pre><code><span class="cm"># Map which ports are filtered vs unfiltered</span>
+nmap -sA 192.168.1.10
+
+<span class="cm"># Compare with SYN scan to find firewall rules</span>
+nmap -sA -p 22,80,443,3389,8080 192.168.1.10</code></pre>
+
+<h3>Packet-Level Behavior</h3>
+<pre><code><span class="cm">── UNFILTERED (no stateful firewall) ──────────────────────────</span>
+Nmap  →  [ACK]          →  Target
+Nmap  ←  [RST]          ←  Target    ← RST because no matching connection
+Result: unfiltered  (open or closed — can't tell which)
+
+<span class="cm">── FILTERED (stateful firewall drops unexpected ACK) ──────────</span>
+Nmap  →  [ACK]          →  [firewall drops — not in state table]
+Nmap  ←  (no response)  OR  ICMP type 3
+Result: filtered
+
+<span class="cm"># Key insight: stateful firewalls only allow ACKs that match</span>
+<span class="cm"># existing connections. A bare ACK probe will be dropped.</span>
+<span class="cm"># Stateless firewalls/ACLs may allow it through → RST from target.</span></code></pre>
+
+<h3>Use Cases</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Use Case</th><th>Detail</th></tr></thead>
+  <tbody>
+    <tr><td>Determine firewall type</td><td>Stateful firewall → all filtered; stateless/ACL → some unfiltered</td></tr>
+    <tr><td>Find unfiltered ports</td><td>Unfiltered = ACK reached target; combine with -sS to confirm open</td></tr>
+    <tr><td>Map egress filtering</td><td>Run from inside network to DMZ or internet to check what gets through</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Window Scan (-sW)</h2>
+<pre><code><span class="cm"># Window scan — same ACK probe, but examines TCP window field in RST</span>
+nmap -sW 192.168.1.10</code></pre>
+
+<h3>Behavior</h3>
+<p>Like -sA, sends ACK packets. However, instead of just checking if RST is received, it examines the <strong>TCP window size</strong> field in the RST response. On some operating systems (older BSD, some commercial Unix variants):</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>RST Window Value</th><th>State Inferred</th></tr></thead>
+  <tbody>
+    <tr><td>Non-zero window</td><td>open</td></tr>
+    <tr><td>Zero window</td><td>closed</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="callout note"><strong>Reliability:</strong> Window scan results vary by OS and version. Linux, Windows, and most modern systems do not exhibit the non-zero window behavior. Use -sW as supplemental information only.</div>
+
+<h2>Comparing -sS, -sA, and -sW</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Scan</th><th>Probe Sent</th><th>Determines</th><th>Main Use</th></tr></thead>
+  <tbody>
+    <tr><td>-sS</td><td>SYN</td><td>open / closed / filtered</td><td>Standard port discovery</td></tr>
+    <tr><td>-sA</td><td>ACK</td><td>filtered / unfiltered</td><td>Firewall rule mapping</td></tr>
+    <tr><td>-sW</td><td>ACK</td><td>open / closed (on some OS)</td><td>OS-specific differentiation</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Practical ACK Scan Workflow</h2>
+<pre><code><span class="cm"># Step 1: Run SYN scan to find open ports</span>
+sudo nmap -sS -p 1-1024 192.168.1.10
+
+<span class="cm"># Step 2: Run ACK scan on same ports</span>
+sudo nmap -sA -p 1-1024 192.168.1.10
+
+<span class="cm"># Interpret:</span>
+<span class="cm"># Port open in -sS AND unfiltered in -sA = open, not firewalled</span>
+<span class="cm"># Port filtered in -sS AND filtered in -sA = stateful firewall blocking</span>
+<span class="cm"># Port open in -sS AND filtered in -sA = unusual — check for asymmetric rules</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Understanding what ACK scan actually tells you</h4>
+    <ul>
+      <li>ACK scan does NOT find open ports — it determines whether L4 TCP ACK packets are being filtered</li>
+      <li><code>unfiltered</code> means the ACK got through (stateless firewall/ACL); <code>filtered</code> means a stateful firewall blocked it</li>
+      <li>Stateful firewalls drop ACKs that don't match an existing connection in their state table</li>
+    </ul>
+    <pre><code>sudo nmap -sA -p 22,80,443,3389 192.168.56.30  <span class="cm"># map which ports are firewall-filtered</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Using -sA alongside -sS for firewall rule mapping</h4>
+    <ul>
+      <li>Run <code>-sS</code> then <code>-sA</code> on the same port set — the comparison reveals firewall architecture</li>
+      <li>Port filtered in <code>-sS</code> AND filtered in <code>-sA</code>: stateful firewall blocking all access</li>
+      <li>Port filtered in <code>-sS</code> but unfiltered in <code>-sA</code>: stateless ACL blocks SYN but passes ACK — bypass possible</li>
+    </ul>
+    <pre><code>sudo nmap -sS -p 1-1000 192.168.56.30 -oG syn_results.gnmap
+sudo nmap -sA -p 1-1000 192.168.56.30 -oG ack_results.gnmap
+<span class="cm"># Compare: differences reveal stateless ACL rules vs stateful firewall behavior</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Egress filtering and asymmetric rule detection</h4>
+    <ul>
+      <li>Run <code>-sA</code> from inside a network toward internet hosts to map egress filtering rules — what do outbound ACKs tell you gets blocked?</li>
+      <li>Window scan (<code>-sW</code>) examines the TCP window field in RST responses — on some BSD-derived systems can distinguish open vs closed where <code>-sA</code> cannot</li>
+      <li>Combine ACK scan with <code>--reason</code> to see exact ICMP responses that caused filtered state — type 3 code 9/10/13 = admin prohibited</li>
+    </ul>
+    <pre><code>sudo nmap -sA -sW -sV -p 1-1000 --reason --open -oA ack_window 192.168.56.30
+<span class="cm"># ACK + Window scan with reasons — full firewall rule map</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-specialty">
+<article class="topic">
+<h1>06 · Idle, IP Protocol &amp; Evasion Scans</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-note">Idle/zombie scanning exploits the L3 IP ID field to infer port state without revealing the attacker's address; IP protocol scan (<code>-sO</code>) enumerates supported L3 protocols on the target.</span>
+</div>
+<hr class="divider">
+
+<h2>Idle Scan (-sI) — Zombie Scan</h2>
+<div class="callout warn"><strong>Advanced technique</strong> — uses a third-party "zombie" host with predictable IP ID sequence to scan the target without revealing the attacker's real IP address.</div>
+
+<pre><code><span class="cm"># Requires a zombie host with incremental IP ID sequence</span>
+nmap -sI zombie.host.com target.host.com
+
+<span class="cm"># Specify zombie port (default is 80)</span>
+nmap -sI zombie.host.com:8080 target.host.com
+
+<span class="cm"># Verify a host is suitable as zombie</span>
+nmap --script=ipidseq zombie.host.com -p 80</code></pre>
+
+<h3>How It Works (Packet Level)</h3>
+<pre><code><span class="cm">── Step 1: Probe zombie to get baseline IP ID ──────────────────</span>
+Attacker  →  [SYN/ACK]  →  Zombie
+Attacker  ←  [RST]      ←  Zombie  (IP ID = 12345)
+
+<span class="cm">── Step 2: Spoof zombie IP, send SYN to target ─────────────────</span>
+Attacker  →  [SYN, src=zombie_IP]  →  Target
+
+<span class="cm">   If target port OPEN:</span>
+   Target  →  [SYN/ACK]  →  Zombie (unexpected — zombie sends RST)
+   Zombie IP ID increments by 1 (e.g., 12345 → 12346)
+
+<span class="cm">   If target port CLOSED:</span>
+   Target  →  [RST]  →  Zombie (zombie ignores RST)
+   Zombie IP ID does NOT increment (stays at 12345)
+
+<span class="cm">── Step 3: Probe zombie again to check IP ID ───────────────────</span>
+Attacker  →  [SYN/ACK]  →  Zombie
+Attacker  ←  [RST]      ←  Zombie  (check IP ID)
+
+IP ID = 12347 (increased by 2) → target port was OPEN
+IP ID = 12346 (increased by 1) → target port was CLOSED or FILTERED</code></pre>
+
+<h3>Zombie Requirements</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Requirement</th><th>Detail</th></tr></thead>
+  <tbody>
+    <tr><td>Predictable IP ID</td><td>Must increment by 1 for each packet sent — not random (Linux default)</td></tr>
+    <tr><td>Low traffic</td><td>Zombie must be nearly idle — own traffic distorts IP ID readings</td></tr>
+    <tr><td>Reachable by both</td><td>Attacker must reach zombie; target must be able to reach zombie</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>IP Protocol Scan (-sO)</h2>
+<pre><code><span class="cm"># Determine which IP protocols target supports</span>
+sudo nmap -sO 192.168.1.10</code></pre>
+<p>Iterates through IP protocol numbers (1=ICMP, 6=TCP, 17=UDP, 50=ESP, 89=OSPF, etc.) and sends raw IP packets. Response = protocol supported; ICMP protocol unreachable = not supported; no response = open|filtered.</p>
+
+<h2>FTP Bounce Scan (-b)</h2>
+<pre><code><span class="cm"># Use FTP server as proxy to scan other hosts</span>
+nmap -b ftp.relay.com target.com</code></pre>
+<p>Exploits the FTP PORT command to make an FTP server connect to arbitrary hosts. The scan source appears as the FTP server. Largely patched on modern FTP servers — rarely useful today.</p>
+
+<h2>Maimon Scan (-sM)</h2>
+<pre><code>nmap -sM 192.168.1.10</code></pre>
+<p>Sends FIN+ACK probe. Named after Uriel Maimon who discovered that BSD-derived systems drop the packet if the port is open, but respond with RST if closed. Same limitations as FIN scan — fails on Windows and many modern Linux systems.</p>
+
+<h2>Packet Evasion Options</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Flag</th><th>Effect</th><th>Use</th></tr></thead>
+  <tbody>
+    <tr><td><code>-f</code></td><td>Fragment TCP header across 8-byte fragments</td><td>Confuse simple reassembly-free filters</td></tr>
+    <tr><td><code>--mtu &lt;n&gt;</code></td><td>Custom MTU for fragmentation (must be multiple of 8)</td><td><code>--mtu 16</code> for smaller fragments</td></tr>
+    <tr><td><code>-D RND:10,ME</code></td><td>10 random decoy IPs mixed with real IP</td><td>Obscure scanner's true IP in logs</td></tr>
+    <tr><td><code>-S &lt;IP&gt;</code></td><td>Spoof source IP</td><td>Blind spoofing — responses go to spoofed host</td></tr>
+    <tr><td><code>--data-length &lt;n&gt;</code></td><td>Append n random bytes to packets</td><td>Change packet fingerprint to evade signatures</td></tr>
+    <tr><td><code>--ip-options &lt;opts&gt;</code></td><td>Set IP options field</td><td>Record route, strict source routing, etc.</td></tr>
+    <tr><td><code>--badsum</code></td><td>Send packets with intentionally bad checksums</td><td>Detect IDS implementations (real OS drops; IDS may inspect)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Understanding why these advanced scan types exist</h4>
+    <ul>
+      <li>Idle/zombie scan hides your real L3 IP — the target only sees the zombie host's IP address in packet headers</li>
+      <li>IP protocol scan (<code>-sO</code>) enumerates which L3 protocols a host supports (TCP=6, UDP=17, ICMP=1, OSPF=89, etc.)</li>
+      <li>Packet fragmentation (<code>-f</code>) splits L3 headers so simple packet inspection filters see only partial headers</li>
+    </ul>
+    <pre><code>sudo nmap -sO 192.168.56.30  <span class="cm"># discover which L3 protocols Windows target supports</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Finding a usable zombie host for idle scan</h4>
+    <ul>
+      <li>Zombie must have a predictable L3 IP ID sequence (increments by 1) — most modern Linux systems use random IP IDs</li>
+      <li>Verify zombie suitability with <code>--script=ipidseq</code> before using it in a scan</li>
+      <li>Combine decoys (<code>-D RND:5,ME</code>) with fragmentation (<code>-f</code>) for multi-layer evasion that obscures both identity and packet structure</li>
+    </ul>
+    <pre><code>sudo nmap --script=ipidseq 192.168.56.1 -p 80  <span class="cm"># test host machine as potential zombie</span>
+sudo nmap -sI 192.168.56.1:80 192.168.56.30  <span class="cm"># idle scan using host as zombie</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Advanced evasion combining multiple techniques</h4>
+    <ul>
+      <li>Stack <code>-D RND:10,ME</code> + <code>-f</code> + <code>--data-length 25</code> + <code>--ttl 64</code> to modify L3 packet signature at every layer</li>
+      <li>Use <code>--badsum</code> to detect whether an IDS is inspecting packets — real OS stacks drop bad checksums; IDS systems may still parse them</li>
+      <li>Combine <code>-sI</code> idle scan with a zombie in a different network segment to completely hide the scanning subnet from target logs</li>
+    </ul>
+    <pre><code>sudo nmap -sS -sV -O -f --data-length 25 -D RND:5,ME -p- -T2 --open -oA evasive 192.168.56.30
+<span class="cm"># Fragmented + padded + decoy: L3 packet signature altered at multiple levels</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<script src="js/app.js"></script>
+</body>
+</html>

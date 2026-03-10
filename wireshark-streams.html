@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Streams — Wireshark — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" aria-label="Toggle sidebar">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 5h14M3 10h14M3 15h14"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html" class="active">Wireshark</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">Streams</div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  </aside>
+  <main class="content" id="content-area"></main>
+</div>
+
+<!-- ══════════════════════════ Follow TCP Stream ════════════════════════════ -->
+<template id="tpl-tcp-stream">
+<article class="topic">
+  <h2>Follow TCP Stream</h2>
+  <p>Wireshark's <strong>Follow TCP Stream</strong> feature reassembles all TCP segments belonging to the same connection and displays the full conversation as human-readable text. This is one of the most powerful analysis techniques for cleartext protocols like HTTP, FTP, SMTP, and C2 shells.</p>
+
+  <h3>How to Follow a Stream</h3>
+  <pre><code><span class="cm"># Method 1: Right-click a packet → Follow → TCP Stream</span>
+<span class="cm"># Method 2: Analyze → Follow → TCP Stream</span>
+<span class="cm"># Method 3: Keyboard — select packet, then Ctrl+Alt+Shift+T</span>
+
+<span class="cm"># Wireshark automatically:</span>
+<span class="cm">#  1. Identifies all packets with same tcp.stream value</span>
+<span class="cm">#  2. Reassembles segments in sequence order</span>
+<span class="cm">#  3. Opens the stream dialog with color-coded traffic</span></code></pre>
+
+  <h3>Stream Dialog Color Coding</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Color</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td style="color:var(--red)"><strong>Red text</strong></td><td>Data sent from the client (source IP — initiating side)</td></tr>
+        <tr><td style="color:var(--accent-h)"><strong>Blue text</strong></td><td>Data sent from the server (destination IP — responding side)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout note">
+    <strong>Color note:</strong> The colors are relative to who initiated the connection. The "red" side is always whichever endpoint sent the first SYN packet — typically the client making the request.
+  </div>
+
+  <h3>Stream Dialog Options</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Option</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Show data as: ASCII</strong></td><td>Human-readable text — best for HTTP, SMTP, FTP, shell sessions</td></tr>
+        <tr><td><strong>Show data as: Hex Dump</strong></td><td>Hex + ASCII columns — use for binary protocols or finding embedded data</td></tr>
+        <tr><td><strong>Show data as: C Arrays</strong></td><td>C byte array format — useful for exploit development</td></tr>
+        <tr><td><strong>Show data as: Raw</strong></td><td>Binary — use when saving to file for further analysis</td></tr>
+        <tr><td><strong>Entire conversation</strong></td><td>Both directions combined (default)</td></tr>
+        <tr><td><strong>→ direction only</strong></td><td>Client to server traffic only</td></tr>
+        <tr><td><strong>← direction only</strong></td><td>Server to client traffic only</td></tr>
+        <tr><td><strong>Stream selector</strong></td><td>Navigate between streams (Stream 0, Stream 1, etc.) without closing dialog</td></tr>
+        <tr><td><strong>Find</strong></td><td>Text search within the reassembled stream content</td></tr>
+        <tr><td><strong>Save As</strong></td><td>Save reassembled stream content to a file</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Example: HTTP GET Stream</h3>
+  <pre><code><span class="cm">--- Client → Server (red) ---</span>
+GET /admin/login.php HTTP/1.1
+Host: 192.168.1.50
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)
+Cookie: PHPSESSID=abc123def456
+
+<span class="cm">--- Server → Client (blue) ---</span>
+HTTP/1.1 200 OK
+Content-Type: text/html; charset=UTF-8
+Content-Length: 4821
+Set-Cookie: PHPSESSID=abc123def456; Path=/; HttpOnly
+
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+...admin panel content...
+&lt;/html&gt;</code></pre>
+
+  <h3>Example: Cleartext Shell Session</h3>
+  <pre><code><span class="cm">--- C2 reverse shell over TCP (red = attacker commands, blue = victim output) ---</span>
+<span class="cm"># Client (attacker) sends commands:</span>
+whoami
+hostname
+ipconfig /all
+net user /domain
+dir C:\Users
+
+<span class="cm"># Server (victim) returns output:</span>
+nt authority\system
+VICTIM-PC
+Windows IP Configuration...
+User accounts for \\DOMAIN...
+ Volume in drive C has no label
+ Directory of C:\Users
+ 10/15/2024  admin
+ 10/15/2024  Public</code></pre>
+
+  <h3>tcp.stream Field — Manual Navigation</h3>
+  <pre><code><span class="cm"># Each TCP connection gets a unique tcp.stream index (0, 1, 2...)</span>
+<span class="cm"># After following a stream, Wireshark auto-applies this filter:</span>
+tcp.stream eq 7     <span class="cm"># Show only stream number 7</span>
+
+<span class="cm"># Navigate between streams manually:</span>
+tcp.stream eq 0     <span class="cm"># First TCP connection</span>
+tcp.stream eq 1     <span class="cm"># Second TCP connection</span>
+
+<span class="cm"># Find streams to/from a specific host:</span>
+ip.addr == 10.0.0.99 and tcp
+
+<span class="cm"># Then right-click any packet → Follow → TCP Stream</span>
+<span class="cm"># Use the stream number spinner in the dialog to navigate</span></code></pre>
+</article>
+</template>
+
+<!-- ══════════════════════════ Follow HTTP Stream ═══════════════════════════ -->
+<template id="tpl-http-stream">
+<article class="topic">
+  <h2>Follow HTTP Stream</h2>
+  <p>Follow HTTP Stream is similar to Follow TCP Stream but specifically designed for HTTP — it handles HTTP/1.1 connection reuse, chunked transfer encoding, and gzip decompression automatically.</p>
+
+  <h3>HTTP vs. TCP Stream — Key Differences</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Feature</th><th>Follow TCP Stream</th><th>Follow HTTP Stream</th></tr></thead>
+      <tbody>
+        <tr><td>Connection reuse</td><td>Shows all HTTP requests in one keep-alive connection mixed together</td><td>Shows each HTTP request/response pair separately</td></tr>
+        <tr><td>Chunked encoding</td><td>Shows raw chunk headers</td><td>Reassembles chunks transparently</td></tr>
+        <tr><td>Gzip decompression</td><td>Shows compressed binary</td><td>Automatically decompresses and shows text</td></tr>
+        <tr><td>Best for</td><td>Seeing raw wire data, binary protocols</td><td>Reading HTTP content cleanly</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>How to Use</h3>
+  <pre><code><span class="cm"># Right-click an HTTP packet → Follow → HTTP Stream</span>
+<span class="cm"># Analyze → Follow → HTTP Stream</span>
+
+<span class="cm"># The stream shows one request + response pair</span>
+<span class="cm"># Use the stream number field to move between HTTP exchanges</span></code></pre>
+
+  <h3>File Carving from HTTP</h3>
+  <p>To extract a file transferred over HTTP from the raw stream:</p>
+  <pre><code><span class="cm"># Method 1: Export Objects (easiest)</span>
+File → Export Objects → HTTP
+<span class="cm"># Lists all objects — select and Save individually or all</span>
+
+<span class="cm"># Method 2: Follow TCP Stream → Save As Raw</span>
+<span class="cm"># 1. Follow TCP stream of the file download</span>
+<span class="cm"># 2. Change display: "Show data as: Raw"</span>
+<span class="cm"># 3. Select "→" direction (server → client only)</span>
+<span class="cm"># 4. Save As → file.raw</span>
+<span class="cm"># 5. Strip HTTP headers: open in hex editor, delete until binary file magic bytes</span>
+<span class="cm">#    e.g., MZ (0x4D5A) for PE, PK (0x504B) for ZIP</span>
+
+<span class="cm"># Method 3: tshark extract</span>
+tshark -r capture.pcap --export-objects http,/tmp/extracted/</code></pre>
+
+  <h3>POST Body Inspection — Credential Extraction</h3>
+  <pre><code><span class="cm"># Filter login POSTs</span>
+http.request.method == "POST"
+
+<span class="cm"># Follow HTTP Stream on a POST packet</span>
+<span class="cm"># Stream will show:</span>
+
+POST /login HTTP/1.1
+Host: internal-app.corp.local
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 38
+
+username=jdoe&amp;password=P@ssw0rd1234!
+<span class="cm"># ^^^ Cleartext credentials visible</span>
+
+<span class="cm"># For JSON POST bodies:</span>
+POST /api/auth HTTP/1.1
+Content-Type: application/json
+
+{"username":"admin","password":"Secret123"}</code></pre>
+
+  <h3>Gzip-Compressed Responses</h3>
+  <pre><code><span class="cm"># If server sends gzip-encoded response:</span>
+HTTP/1.1 200 OK
+Content-Encoding: gzip
+...
+
+<span class="cm"># Follow HTTP Stream auto-decompresses</span>
+<span class="cm"># Follow TCP Stream shows binary garbage</span>
+
+<span class="cm"># Manual decompression (from TCP stream raw save):</span>
+<span class="cm"># Strip HTTP headers, then:</span>
+zcat response.raw &gt; response.html
+<span class="cm"># or:</span>
+python3 -c "
+import gzip, sys
+with open('response.raw','rb') as f:
+    data = f.read()
+# Find gzip magic bytes 1f 8b
+start = data.index(b'\x1f\x8b')
+print(gzip.decompress(data[start:]).decode())
+"</code></pre>
+</article>
+</template>
+
+<!-- ══════════════════════════ Follow UDP Stream ════════════════════════════ -->
+<template id="tpl-udp-stream">
+<article class="topic">
+  <h2>Follow UDP Stream</h2>
+  <p>UDP is connectionless — there are no stream numbers like TCP. Wireshark groups UDP packets into "streams" by matching on the same 4-tuple (src IP, src port, dst IP, dst port). Follow UDP Stream is most useful for DNS, TFTP, and custom UDP-based protocols.</p>
+
+  <h3>How to Follow</h3>
+  <pre><code><span class="cm"># Right-click a UDP packet → Follow → UDP Stream</span>
+<span class="cm"># Analyze → Follow → UDP Stream</span>
+
+<span class="cm"># Same dialog as TCP — color coding applies:</span>
+<span class="cm"># Red = initiating side, Blue = responding side</span>
+<span class="cm"># udp.stream field used for navigation: udp.stream eq N</span></code></pre>
+
+  <h3>DNS Stream Reconstruction</h3>
+  <pre><code><span class="cm"># Follow UDP Stream on a DNS packet shows query + response pair</span>
+<span class="cm"># Example — DNS TXT tunnel:</span>
+
+<span class="cm">--- Query (red) ---</span>
+...binary DNS query...
+Name: aGVsbG8gd29ybGQ.attacker.com  (base64 encoded data)
+Type: TXT
+
+<span class="cm">--- Response (blue) ---</span>
+Name: aGVsbG8gd29ybGQ.attacker.com
+Type: TXT
+TXT: "Y29tbWFuZF9yZXNwb25zZQ=="  (base64 C2 response)
+
+<span class="cm"># Better DNS analysis: use Wireshark's built-in DNS dissector</span>
+<span class="cm"># in the packet details pane rather than Follow UDP Stream</span></code></pre>
+
+  <h3>UDP Stream Index Field</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>udp.stream</code></td><td>UDP pseudo-stream number (same 4-tuple)</td></tr>
+        <tr><td><code>tcp.stream</code></td><td>TCP stream number (tracked via SYN)</td></tr>
+        <tr><td><code>http.stream</code></td><td>HTTP stream (request/response pair)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>TFTP Example</h3>
+  <pre><code><span class="cm"># TFTP used in some C2 / pivot scenarios</span>
+<span class="cm"># Filter TFTP traffic</span>
+tftp or udp port 69
+
+<span class="cm"># Follow UDP Stream on TFTP packet reveals filename being transferred</span>
+<span class="cm"># Export Objects → TFTP to extract transferred files</span>
+File → Export Objects → TFTP</code></pre>
+</article>
+</template>
+
+<!-- ══════════════════════════ Stream Filtering ═════════════════════════════ -->
+<template id="tpl-stream-navigate">
+<article class="topic">
+  <h2>Stream Navigation &amp; Filtering</h2>
+  <p>Each TCP connection, UDP pseudo-connection, and HTTP exchange gets its own stream index. Using these fields you can isolate and step through conversations without using the Follow dialog.</p>
+
+  <h3>Stream Filter Syntax</h3>
+  <pre><code><span class="cm"># TCP streams — numbered sequentially from 0</span>
+tcp.stream eq 0       <span class="cm"># First TCP connection in the PCAP</span>
+tcp.stream eq 42      <span class="cm"># Stream #42</span>
+
+<span class="cm"># UDP pseudo-streams</span>
+udp.stream eq 3
+
+<span class="cm"># HTTP streams (request/response pairs within a TCP connection)</span>
+http.stream eq 1
+
+<span class="cm"># Combine with other filters</span>
+tcp.stream eq 5 and http.request        <span class="cm"># HTTP requests in stream 5</span>
+tcp.stream eq 5 and http.response.code  <span class="cm"># HTTP responses in stream 5</span></code></pre>
+
+  <h3>Identifying Streams of Interest</h3>
+  <pre><code><span class="cm"># Find the stream containing traffic to a suspect IP</span>
+ip.addr == 203.0.113.50
+<span class="cm"># Note the tcp.stream value in the packet details pane</span>
+<span class="cm"># Then filter: tcp.stream eq [that number]</span>
+
+<span class="cm"># Find all streams with large data transfers (&gt;1MB)</span>
+<span class="cm"># Use Statistics → Conversations, sort by bytes</span>
+<span class="cm"># Then apply: tcp.stream eq [stream of interest]</span>
+
+<span class="cm"># tshark: list unique TCP streams and their byte counts</span>
+tshark -r capture.pcap \
+  -T fields -e tcp.stream -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport \
+  | sort -u</code></pre>
+
+  <h3>After-Follow Filter Behavior</h3>
+  <pre><code><span class="cm"># When you click "Follow TCP Stream," Wireshark auto-applies:</span>
+tcp.stream eq N
+
+<span class="cm"># To return to full capture view:</span>
+<span class="cm"># Clear the filter bar (click X or press Ctrl+E then clear)</span>
+<span class="cm"># or type: (nothing) and press Enter</span>
+
+<span class="cm"># To keep stream context but add additional filter:</span>
+tcp.stream eq 7 and tcp.flags.push == 1  <span class="cm"># Only data packets in stream 7</span></code></pre>
+
+  <h3>Stream-Based C2 Detection Workflow</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Step</th><th>Action</th><th>Goal</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Apply <code>tcp</code> filter, sort by duration via Statistics → Conversations</td><td>Find long-lived connections</td></tr>
+        <tr><td>2</td><td>Note stream numbers of suspicious conversations</td><td>Identify C2 candidates</td></tr>
+        <tr><td>3</td><td>Apply <code>tcp.stream eq N</code> for each suspect</td><td>Isolate conversation</td></tr>
+        <tr><td>4</td><td>Right-click → Follow → TCP Stream</td><td>Read full conversation</td></tr>
+        <tr><td>5</td><td>Look for commands, base64 blobs, regular intervals</td><td>Confirm C2 behavior</td></tr>
+        <tr><td>6</td><td>Use Find (Ctrl+F) in stream dialog to search for keywords</td><td>cmd.exe, powershell, whoami</td></tr>
+        <tr><td>7</td><td>Note src/dst IPs and ports, export stream content</td><td>Build IOCs</td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+</template>
+
+<!-- ══════════════════════════ tshark Follow ════════════════════════════════ -->
+<template id="tpl-tshark-follow">
+<article class="topic">
+  <h2>tshark Stream Commands</h2>
+  <p>tshark can follow and extract streams from the command line without opening the Wireshark GUI — critical for scripted analysis, headless servers, or large PCAP files.</p>
+
+  <h3>Follow Stream Syntax</h3>
+  <pre><code><span class="cm"># Follow TCP stream N (outputs ASCII like the Follow dialog)</span>
+tshark -r capture.pcap -q -z "follow,tcp,ascii,N"
+<span class="cm"># N = stream index (0, 1, 2...)</span>
+
+<span class="cm"># Follow UDP stream N</span>
+tshark -r capture.pcap -q -z "follow,udp,ascii,N"
+
+<span class="cm"># Follow HTTP stream N</span>
+tshark -r capture.pcap -q -z "follow,http,ascii,N"
+
+<span class="cm"># Output as hex dump instead of ASCII</span>
+tshark -r capture.pcap -q -z "follow,tcp,hex,0"
+
+<span class="cm"># Save raw binary stream to file</span>
+tshark -r capture.pcap -q -z "follow,tcp,raw,5" | xxd -r -p &gt; stream5.bin</code></pre>
+
+  <h3>Finding the Right Stream Number</h3>
+  <pre><code><span class="cm"># Step 1: Find stream numbers matching a filter</span>
+tshark -r capture.pcap \
+  -Y "ip.addr == 203.0.113.50 and tcp" \
+  -T fields -e tcp.stream \
+  | sort -u
+<span class="cm"># Example output: 3 7 12 15</span>
+
+<span class="cm"># Step 2: Follow each stream</span>
+tshark -r capture.pcap -q -z "follow,tcp,ascii,3"
+tshark -r capture.pcap -q -z "follow,tcp,ascii,7"</code></pre>
+
+  <h3>Batch Stream Extraction</h3>
+  <pre><code><span class="cm"># Follow all TCP streams to suspect IP, output to files</span>
+tshark -r capture.pcap \
+  -Y "ip.addr == 10.0.0.99 and tcp" \
+  -T fields -e tcp.stream \
+  | sort -un | while read stream; do
+    tshark -r capture.pcap -q -z "follow,tcp,ascii,$stream" \
+      &gt; /tmp/streams/stream_${stream}.txt 2&gt;/dev/null
+  done
+
+<span class="cm"># Search all streams for keywords</span>
+grep -l "cmd.exe\|powershell\|whoami\|base64" /tmp/streams/*.txt
+
+<span class="cm"># Extract HTTP objects (files) without GUI</span>
+tshark -r capture.pcap --export-objects http,/tmp/http_export/
+
+<span class="cm"># Follow HTTP stream and grep for credentials</span>
+tshark -r capture.pcap -q -z "follow,http,ascii,0" \
+  | grep -i "password\|passwd\|secret\|token\|api_key"</code></pre>
+
+  <h3>Stream Analysis One-Liners</h3>
+  <pre><code><span class="cm"># Count total number of TCP streams</span>
+tshark -r capture.pcap -T fields -e tcp.stream | sort -un | wc -l
+
+<span class="cm"># Identify large streams (possible data exfil)</span>
+tshark -r capture.pcap -q -z conv,tcp \
+  | awk 'NR&gt;5{print $1,$8}' | sort -rn -k2 | head -20
+
+<span class="cm"># Extract all HTTP POST bodies</span>
+tshark -r capture.pcap \
+  -Y "http.request.method == \"POST\"" \
+  -T fields -e http.host -e http.request.uri -e http.file_data
+
+<span class="cm"># Show reassembled TCP payload (printable chars only)</span>
+tshark -r capture.pcap -Y "tcp.stream eq 5" \
+  -T fields -e tcp.payload \
+  | tr -d '\n' | xxd -r -p | strings</code></pre>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: "Wireshark — Streams",
+  topics: [
+    { id: "tcp-stream",      badge: "01", label: "Follow TCP Stream" },
+    { id: "http-stream",     badge: "02", label: "Follow HTTP Stream" },
+    { id: "udp-stream",      badge: "03", label: "Follow UDP Stream" },
+    { id: "stream-navigate", badge: "04", label: "Stream Filtering" },
+    { id: "tshark-follow",   badge: "05", label: "tshark Commands" },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

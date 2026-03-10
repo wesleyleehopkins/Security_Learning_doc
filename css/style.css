@@ -466,6 +466,141 @@ body {
 
 
 /* ════════════════════════════════════════
+   OSI LAYER INDICATOR
+   ════════════════════════════════════════ */
+.osi-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.5rem 0.875rem;
+  background: rgba(59,130,246,0.06);
+  border: 1px solid rgba(59,130,246,0.18);
+  border-radius: 6px;
+  margin: 0 0 1.5rem;
+  font-size: 0.78rem;
+}
+.osi-bar .osi-label {
+  font-weight: 700;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  margin-right: 0.2rem;
+}
+.osi-chip {
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: default;
+}
+.osi-chip.l2 { background: rgba(219,109,40,0.15); color: var(--orange);   border: 1px solid rgba(219,109,40,0.3); }
+.osi-chip.l3 { background: rgba(248,81,73,0.12);  color: var(--red);      border: 1px solid rgba(248,81,73,0.3);  }
+.osi-chip.l4 { background: rgba(210,153,34,0.15); color: var(--yellow);   border: 1px solid rgba(210,153,34,0.3); }
+.osi-chip.l5 { background: rgba(63,185,80,0.1);   color: #6ee7b7;         border: 1px solid rgba(63,185,80,0.3);  }
+.osi-chip.l6 { background: rgba(139,92,246,0.12); color: #c4b5fd;         border: 1px solid rgba(139,92,246,0.3); }
+.osi-chip.l7 { background: rgba(59,130,246,0.12); color: var(--accent-h); border: 1px solid rgba(59,130,246,0.3); }
+.osi-bar .osi-note {
+  color: var(--text3);
+  font-size: 0.75rem;
+  margin-left: 0.25rem;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+
+/* ════════════════════════════════════════
+   SKILL TIERS — Beginner / Intermediate / Advanced
+   ════════════════════════════════════════ */
+details.tier {
+  border-radius: 6px;
+  margin: 0.6rem 0;
+  overflow: hidden;
+}
+details.tier + details.tier { margin-top: 0.45rem; }
+
+details.tier > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.875rem;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+  list-style: none;
+  user-select: none;
+  transition: background var(--ease);
+}
+details.tier > summary::-webkit-details-marker { display: none; }
+details.tier > summary::before {
+  content: '▶';
+  font-size: 0.58rem;
+  transition: transform 0.18s ease;
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+details[open].tier > summary::before { transform: rotate(90deg); }
+
+.tier-body {
+  padding: 0.75rem 1rem 0.6rem 1.1rem;
+}
+.tier-body p,
+.tier-body li { font-size: 0.855rem; color: var(--text2); }
+.tier-body pre { margin: 0.5rem 0 0.875rem; }
+.tier-body h4 {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin: 0.75rem 0 0.35rem;
+}
+.tier-body ul { padding-left: 1.2rem; margin-bottom: 0.5rem; }
+
+/* Beginner — green */
+details.tier.beginner {
+  border: 1px solid rgba(63,185,80,0.3);
+  background: rgba(63,185,80,0.04);
+}
+details.tier.beginner > summary { color: var(--green); background: rgba(63,185,80,0.07); }
+details.tier.beginner > summary:hover { background: rgba(63,185,80,0.13); }
+
+/* Intermediate — yellow */
+details.tier.intermediate {
+  border: 1px solid rgba(210,153,34,0.3);
+  background: rgba(210,153,34,0.04);
+}
+details.tier.intermediate > summary { color: var(--yellow); background: rgba(210,153,34,0.07); }
+details.tier.intermediate > summary:hover { background: rgba(210,153,34,0.14); }
+
+/* Advanced — red */
+details.tier.advanced {
+  border: 1px solid rgba(248,81,73,0.28);
+  background: rgba(248,81,73,0.04);
+}
+details.tier.advanced > summary { color: var(--red); background: rgba(248,81,73,0.07); }
+details.tier.advanced > summary:hover { background: rgba(248,81,73,0.13); }
+
+.tier-divider {
+  border: none;
+  border-top: 1px dashed var(--border);
+  margin: 1.5rem 0 0.75rem;
+  opacity: 0.6;
+}
+.tier-heading {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text3);
+  margin-bottom: 0.6rem;
+}
+
+
+/* ════════════════════════════════════════
    RESPONSIVE
    ════════════════════════════════════════ */
 @media (max-width: 720px) {

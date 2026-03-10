@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Protocol Analysis — Wireshark — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" aria-label="Toggle sidebar">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 5h14M3 10h14M3 15h14"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html" class="active">Wireshark</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">Protocol Analysis</div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  </aside>
+  <main class="content" id="content-area"></main>
+</div>
+
+<!-- ══════════════════════════ HTTP Analysis ════════════════════════════════ -->
+<template id="tpl-http-analysis">
+<article class="topic">
+  <h2>HTTP Analysis</h2>
+  <p>HTTP is cleartext — every header, credential, and file transfer is visible in the PCAP. HTTP analysis in Wireshark focuses on credential exposure, file extraction, and suspicious request patterns.</p>
+
+  <h3>Key HTTP Display Filter Fields</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>Description</th><th>Example Filter</th></tr></thead>
+      <tbody>
+        <tr><td><code>http.request.method</code></td><td>GET, POST, PUT, DELETE, etc.</td><td><code>http.request.method == "POST"</code></td></tr>
+        <tr><td><code>http.request.uri</code></td><td>URL path + query string</td><td><code>http.request.uri contains "/admin"</code></td></tr>
+        <tr><td><code>http.host</code></td><td>Host header (target domain)</td><td><code>http.host == "evil.com"</code></td></tr>
+        <tr><td><code>http.response.code</code></td><td>HTTP status code</td><td><code>http.response.code == 200</code></td></tr>
+        <tr><td><code>http.user_agent</code></td><td>Client user-agent string</td><td><code>http.user_agent contains "curl"</code></td></tr>
+        <tr><td><code>http.authorization</code></td><td>Authorization header (may contain creds)</td><td><code>http.authorization</code></td></tr>
+        <tr><td><code>http.cookie</code></td><td>Cookie header value</td><td><code>http.cookie contains "session"</code></td></tr>
+        <tr><td><code>http.content_type</code></td><td>MIME type of response</td><td><code>http.content_type contains "application/json"</code></td></tr>
+        <tr><td><code>http.transfer_encoding</code></td><td>chunked, gzip, etc.</td><td><code>http.transfer_encoding</code></td></tr>
+        <tr><td><code>http.file_data</code></td><td>HTTP payload bytes</td><td><code>http.file_data</code></td></tr>
+        <tr><td><code>http.referer</code></td><td>Referring page</td><td><code>http.referer contains "login"</code></td></tr>
+        <tr><td><code>http.server</code></td><td>Server software header</td><td><code>http.server contains "Apache"</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Credential Exposure — Cleartext Auth</h3>
+  <p>HTTP Basic Authentication encodes credentials in Base64 (not encryption). Any proxy or network tap can decode them immediately.</p>
+  <pre><code><span class="cm"># Filter for Basic Auth headers</span>
+http.authorization
+
+<span class="cm"># Example packet — Authorization header visible in packet details:</span>
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+<span class="cm"># Decode: echo "dXNlcjpwYXNzd29yZA==" | base64 -d</span>
+<span class="cm"># Output: user:password</span>
+
+<span class="cm"># Filter login form POSTs (credentials in body)</span>
+http.request.method == "POST" and http.request.uri contains "login"
+
+<span class="cm"># Show all POSTs — look for username= password= fields in packet bytes</span>
+http.request.method == "POST"</code></pre>
+
+  <div class="callout warn">
+    <strong>Form POST credentials:</strong> Login form submissions send credentials in the HTTP body (e.g., <code>username=admin&amp;password=secret</code>). These appear in the packet bytes pane. Use <strong>Follow TCP Stream</strong> to read the full cleartext exchange.
+  </div>
+
+  <h3>File Extraction via Export Objects</h3>
+  <pre><code><span class="cm"># Filter to HTTP responses with file content</span>
+http.response.code == 200 and http.content_type contains "application/"
+
+<span class="cm"># Filter specific file types</span>
+http.request.uri matches "\.(exe|dll|ps1|bat|vbs|zip)$"
+
+<span class="cm"># To extract files in Wireshark GUI:</span>
+File → Export Objects → HTTP
+<span class="cm"># Lists all transferred files — select and save individually or all at once</span>
+
+<span class="cm"># tshark: extract HTTP objects to directory</span>
+tshark -r capture.pcap --export-objects http,/tmp/http_objects/
+
+<span class="cm"># tshark: extract only executables</span>
+tshark -r capture.pcap -Y "http.content_type contains \"application/octet-stream\""</code></pre>
+
+  <h3>Suspicious HTTP Patterns</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Pattern</th><th>Display Filter</th><th>Indicator</th></tr></thead>
+      <tbody>
+        <tr><td>Unusual User-Agent</td><td><code>http.user_agent contains "python" or http.user_agent contains "curl"</code></td><td>Scripted requests, malware C2</td></tr>
+        <tr><td>Executable download</td><td><code>http.request.uri matches "\.(exe|dll|ps1|bat)$"</code></td><td>Malware delivery</td></tr>
+        <tr><td>Base64 in URI</td><td><code>http.request.uri matches "[A-Za-z0-9+/]{20,}={0,2}"</code></td><td>Encoded C2 command</td></tr>
+        <tr><td>Long URI</td><td><code>http.request.uri matches ".{200,}"</code></td><td>Data exfiltration in URL</td></tr>
+        <tr><td>No Referer on POST</td><td><code>http.request.method=="POST" and !http.referer</code></td><td>Direct scripted post</td></tr>
+        <tr><td>404 storm</td><td><code>http.response.code == 404</code></td><td>Directory brute force</td></tr>
+        <tr><td>401 storms</td><td><code>http.response.code == 401</code></td><td>Auth brute force</td></tr>
+        <tr><td>Cleartext auth</td><td><code>http.authorization</code></td><td>Base64 creds visible</td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+</template>
+
+<!-- ══════════════════════════ DNS Analysis ═════════════════════════════════ -->
+<template id="tpl-dns-analysis">
+<article class="topic">
+  <h2>DNS Analysis</h2>
+  <p>DNS is the primary protocol used for C2 communication and data exfiltration in environments that restrict direct outbound connections. Understanding normal vs. abnormal DNS is essential for SOC work.</p>
+
+  <h3>Key DNS Display Filter Fields</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>Description</th><th>Example Filter</th></tr></thead>
+      <tbody>
+        <tr><td><code>dns.qry.name</code></td><td>Queried domain name</td><td><code>dns.qry.name contains "evil.com"</code></td></tr>
+        <tr><td><code>dns.qry.type</code></td><td>Record type (A=1, MX=15, TXT=16, AAAA=28)</td><td><code>dns.qry.type == 16</code></td></tr>
+        <tr><td><code>dns.flags.response</code></td><td>0 = query, 1 = response</td><td><code>dns.flags.response == 0</code></td></tr>
+        <tr><td><code>dns.flags.rcode</code></td><td>Response code (0=OK, 3=NXDOMAIN)</td><td><code>dns.flags.rcode == 3</code></td></tr>
+        <tr><td><code>dns.resp.ttl</code></td><td>TTL in response</td><td><code>dns.resp.ttl &lt; 60</code></td></tr>
+        <tr><td><code>dns.a</code></td><td>A record IP address in response</td><td><code>dns.a == 203.0.113.5</code></td></tr>
+        <tr><td><code>dns.txt</code></td><td>TXT record value</td><td><code>dns.txt</code></td></tr>
+        <tr><td><code>dns.count.answers</code></td><td>Number of answers in response</td><td><code>dns.count.answers == 0</code></td></tr>
+        <tr><td><code>dns.id</code></td><td>DNS transaction ID</td><td><code>dns.id == 0x1234</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Common DNS Query Types</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Type</th><th>Value</th><th>Purpose</th><th>Abuse Potential</th></tr></thead>
+      <tbody>
+        <tr><td>A</td><td>1</td><td>IPv4 address lookup</td><td>C2 beacon resolution</td></tr>
+        <tr><td>AAAA</td><td>28</td><td>IPv6 address lookup</td><td>C2 over IPv6 to evade controls</td></tr>
+        <tr><td>MX</td><td>15</td><td>Mail server lookup</td><td>Spam relay infrastructure recon</td></tr>
+        <tr><td>TXT</td><td>16</td><td>Text records (SPF, DKIM)</td><td>DNS tunneling — data in TXT responses</td></tr>
+        <tr><td>CNAME</td><td>5</td><td>Canonical name redirect</td><td>Domain fronting, CDN C2</td></tr>
+        <tr><td>NS</td><td>2</td><td>Name server lookup</td><td>Zone transfer recon</td></tr>
+        <tr><td>SOA</td><td>6</td><td>Start of authority</td><td>Zone enumeration</td></tr>
+        <tr><td>ANY</td><td>255</td><td>All record types</td><td>DDoS amplification, info gathering</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>DNS Tunneling Detection</h3>
+  <p>DNS tunneling encodes data in subdomains of queries. The exfiltrated data becomes the subdomain, sent to an attacker-controlled authoritative DNS server.</p>
+  <pre><code><span class="cm"># Suspicious DNS patterns to filter:</span>
+
+<span class="cm"># Long domain names (data encoded in subdomain)</span>
+<span class="cm"># Normal: api.example.com (14 chars)</span>
+<span class="cm"># Tunneling: aGVsbG8gd29ybGQ.attacker.com (31+ chars)</span>
+
+<span class="cm"># High volume of unique subdomains to the same domain</span>
+<span class="cm"># Legitimate: same A record queried repeatedly</span>
+<span class="cm"># Tunneling: thousands of unique subdomain queries</span>
+
+<span class="cm"># Unusual record types (TXT, NULL, CNAME for data)</span>
+dns.qry.type == 16     <span class="cm"># TXT queries — common tunnel channel</span>
+dns.qry.type == 28     <span class="cm"># AAAA — sometimes used for tunneling</span>
+
+<span class="cm"># High response sizes for A record queries</span>
+<span class="cm"># Normal A response: ~50-100 bytes</span>
+<span class="cm"># Tunnel A response may return multiple oddly spaced IPs</span>
+
+<span class="cm"># NXDOMAIN storms (DGA-generated domains)</span>
+dns.flags.rcode == 3   <span class="cm"># Non-existent domain</span>
+
+<span class="cm"># Short TTLs (fast-flux C2 infrastructure)</span>
+dns.resp.ttl &lt; 60
+
+<span class="cm"># Filter queries exceeding 50 chars (base-64 encoded data)</span>
+dns.qry.name matches "^[A-Za-z0-9+/=]{50,}\."</code></pre>
+
+  <h3>DNS Beaconing — Timing Pattern</h3>
+  <pre><code><span class="cm"># To see DNS beacon intervals in tshark:</span>
+tshark -r capture.pcap \
+  -Y "dns.flags.response == 0 and dns.qry.name contains \"attacker.com\"" \
+  -T fields -e frame.time_epoch -e dns.qry.name \
+  | sort -n | awk 'NR&gt;1{print $1-prev, $2; prev=$1} NR==1{prev=$1}'
+<span class="cm"># Regular intervals (e.g., every 60s ± few seconds) = beaconing</span>
+
+<span class="cm"># Count queries per domain (top talkers):</span>
+tshark -r capture.pcap \
+  -Y "dns.flags.response == 0" \
+  -T fields -e dns.qry.name \
+  | sort | uniq -c | sort -rn | head -20</code></pre>
+</article>
+</template>
+
+<!-- ══════════════════════════ TLS Analysis ═════════════════════════════════ -->
+<template id="tpl-tls-analysis">
+<article class="topic">
+  <h2>TLS Analysis</h2>
+  <p>TLS encrypts payload data, but the handshake metadata remains visible. The Server Name Indication (SNI) extension reveals the target hostname even in encrypted traffic. With a pre-master secret log file, Wireshark can fully decrypt TLS sessions.</p>
+
+  <h3>TLS Handshake Message Types</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Type Value</th><th>Message Name</th><th>Direction</th><th>Key Content</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Client Hello</td><td>Client → Server</td><td>TLS version, cipher suites, SNI extension, session ID</td></tr>
+        <tr><td>2</td><td>Server Hello</td><td>Server → Client</td><td>Selected cipher, session ID, TLS version</td></tr>
+        <tr><td>11</td><td>Certificate</td><td>Server → Client</td><td>Server's X.509 certificate chain</td></tr>
+        <tr><td>12</td><td>Server Key Exchange</td><td>Server → Client</td><td>Ephemeral key params (DHE/ECDHE)</td></tr>
+        <tr><td>14</td><td>Server Hello Done</td><td>Server → Client</td><td>Signals end of server handshake messages</td></tr>
+        <tr><td>16</td><td>Client Key Exchange</td><td>Client → Server</td><td>Encrypted pre-master secret</td></tr>
+        <tr><td>20</td><td>Finished</td><td>Both</td><td>Handshake verification hash</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Key TLS Display Filter Fields</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>Description</th><th>Example Filter</th></tr></thead>
+      <tbody>
+        <tr><td><code>tls.handshake.type</code></td><td>Handshake message type (1=ClientHello)</td><td><code>tls.handshake.type == 1</code></td></tr>
+        <tr><td><code>tls.handshake.extensions_server_name</code></td><td>SNI — target hostname</td><td><code>tls.handshake.extensions_server_name contains "evil"</code></td></tr>
+        <tr><td><code>tls.handshake.version</code></td><td>TLS version in handshake</td><td><code>tls.handshake.version == 0x0301</code></td></tr>
+        <tr><td><code>tls.record.version</code></td><td>TLS record layer version</td><td><code>tls.record.version == 0x0303</code></td></tr>
+        <tr><td><code>tls.handshake.ciphersuite</code></td><td>Cipher suite selected/offered</td><td><code>tls.handshake.ciphersuite == 0x002f</code></td></tr>
+        <tr><td><code>tls.handshake.cert</code></td><td>Certificate data present</td><td><code>tls.handshake.type == 11</code></td></tr>
+        <tr><td><code>ssl.app_data</code></td><td>Encrypted application data</td><td><code>ssl.app_data</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>TLS Version Constants</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Version</th><th>Hex Value</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>SSL 3.0</td><td>0x0300</td><td style="color:var(--red)">Deprecated — POODLE</td></tr>
+        <tr><td>TLS 1.0</td><td>0x0301</td><td style="color:var(--red)">Deprecated — BEAST</td></tr>
+        <tr><td>TLS 1.1</td><td>0x0302</td><td style="color:var(--yellow)">Deprecated — 2021</td></tr>
+        <tr><td>TLS 1.2</td><td>0x0303</td><td style="color:var(--green)">Current standard</td></tr>
+        <tr><td>TLS 1.3</td><td>0x0304</td><td style="color:var(--green)">Preferred — 2018+</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>SNI Analysis — Hunting C2</h3>
+  <pre><code><span class="cm"># Show all SNI values (target domains) in TLS Client Hello packets</span>
+tshark -r capture.pcap \
+  -Y "tls.handshake.type == 1" \
+  -T fields -e ip.src -e ip.dst -e tls.handshake.extensions_server_name
+
+<span class="cm"># Filter for suspicious SNI patterns</span>
+tls.handshake.extensions_server_name matches "[0-9a-f]{20,}"   <span class="cm"># Hex/random string</span>
+tls.handshake.extensions_server_name matches "^[0-9]{1,3}\."   <span class="cm"># IP as SNI (unusual)</span>
+!tls.handshake.extensions_server_name and tls.handshake.type==1 <span class="cm"># Missing SNI</span>
+
+<span class="cm"># Check certificate subject for mismatch</span>
+tls.handshake.type == 11  <span class="cm"># Certificate message — inspect x509 fields in packet details</span></code></pre>
+
+  <h3>Decrypting TLS with SSLKEYLOGFILE</h3>
+  <p>Modern TLS (1.3) uses ephemeral keys — you cannot decrypt with just the server private key. Use the NSS Key Log file instead, which records session keys at the application layer.</p>
+  <pre><code><span class="cm"># Step 1: Set SSLKEYLOGFILE environment variable before launching browser</span>
+export SSLKEYLOGFILE=/tmp/ssl_keys.log
+google-chrome &amp;
+<span class="cm"># or</span>
+set SSLKEYLOGFILE=C:\ssl_keys.log  <span class="cm"># Windows CMD</span>
+$env:SSLKEYLOGFILE = "C:\ssl_keys.log"  <span class="cm"># PowerShell</span>
+
+<span class="cm"># Step 2: Capture traffic (capture filter or tshark)</span>
+tshark -i eth0 -f "tcp port 443" -w /tmp/tls_session.pcap
+
+<span class="cm"># Step 3: Load key log in Wireshark</span>
+Edit → Preferences → Protocols → TLS
+  → "(Pre)-Master-Secret log filename" → Browse → select ssl_keys.log
+  → OK → packets now decrypted automatically
+
+<span class="cm"># Step 4: Verify decryption worked</span>
+<span class="cm"># You should see http2 or http dissectors in the protocol column</span>
+<span class="cm"># Filter: http or http2 (after decryption)</span>
+
+<span class="cm"># tshark with key log file:</span>
+tshark -r tls_session.pcap \
+  -o "tls.keylog_file:/tmp/ssl_keys.log" \
+  -Y "http.request" \
+  -T fields -e http.host -e http.request.uri</code></pre>
+
+  <div class="callout note">
+    <strong>SSLKEYLOGFILE support:</strong> Works with Firefox, Chrome, Chromium-based browsers, and applications using NSS or OpenSSL with the SSLKEYLOGFILE hook. Does NOT work with applications that use system TLS stores (e.g., many Windows apps) without additional tools.
+  </div>
+</article>
+</template>
+
+<!-- ══════════════════════════ SMB Analysis ═════════════════════════════════ -->
+<template id="tpl-smb-analysis">
+<article class="topic">
+  <h2>SMB Analysis</h2>
+  <p>SMB (Server Message Block) is the primary Windows file-sharing protocol and a key lateral movement vector. Wireshark can decode SMB2/3 traffic in detail, revealing file access, authentication attempts, and command execution paths.</p>
+
+  <h3>SMB Protocol Versions</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Version</th><th>Protocol</th><th>OS</th><th>Security Notes</th></tr></thead>
+      <tbody>
+        <tr><td>SMB 1.0</td><td><code>smb</code></td><td>XP/2003 and older</td><td style="color:var(--red)">Deprecated — EternalBlue (MS17-010), WannaCry</td></tr>
+        <tr><td>SMB 2.0</td><td><code>smb2</code></td><td>Vista/Server 2008</td><td style="color:var(--yellow)">Reduced attack surface, still old</td></tr>
+        <tr><td>SMB 2.1</td><td><code>smb2</code></td><td>Windows 7/Server 2008 R2</td><td style="color:var(--yellow)">Client-side caching improvements</td></tr>
+        <tr><td>SMB 3.0</td><td><code>smb2</code></td><td>Windows 8/Server 2012</td><td style="color:var(--green)">Encryption support added</td></tr>
+        <tr><td>SMB 3.1.1</td><td><code>smb2</code></td><td>Windows 10/Server 2016+</td><td style="color:var(--green)">Pre-auth integrity, AES-128-GCM</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Key SMB Display Filter Fields</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>Description</th><th>Example Filter</th></tr></thead>
+      <tbody>
+        <tr><td><code>smb2.cmd</code></td><td>SMB2 command number</td><td><code>smb2.cmd == 5</code> (Create)</td></tr>
+        <tr><td><code>smb2.filename</code></td><td>File path being accessed</td><td><code>smb2.filename contains ".ps1"</code></td></tr>
+        <tr><td><code>smb2.tree</code></td><td>Share name accessed</td><td><code>smb2.tree contains "C$"</code></td></tr>
+        <tr><td><code>smb2.nt_status</code></td><td>NT status code (0=success)</td><td><code>smb2.nt_status != 0</code></td></tr>
+        <tr><td><code>smb2.session_id</code></td><td>SMB session identifier</td><td><code>smb2.session_id</code></td></tr>
+        <tr><td><code>ntlmssp</code></td><td>NTLM authentication protocol</td><td><code>ntlmssp</code></td></tr>
+        <tr><td><code>ntlmssp.identifier</code></td><td>NTLM message type</td><td><code>ntlmssp.identifier</code></td></tr>
+        <tr><td><code>ntlmssp.auth.username</code></td><td>Username in NTLM Auth</td><td><code>ntlmssp.auth.username contains "admin"</code></td></tr>
+        <tr><td><code>ntlmssp.auth.domain</code></td><td>Domain in NTLM Auth</td><td><code>ntlmssp.auth.domain</code></td></tr>
+        <tr><td><code>kerberos</code></td><td>Kerberos auth (port 88)</td><td><code>kerberos</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>SMB2 Command Codes</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>smb2.cmd</th><th>Command</th><th>Lateral Movement Relevance</th></tr></thead>
+      <tbody>
+        <tr><td>0</td><td>Negotiate</td><td>Protocol version negotiation</td></tr>
+        <tr><td>1</td><td>Session Setup</td><td>Authentication — look for NTLM here</td></tr>
+        <tr><td>2</td><td>Logoff</td><td>Session termination</td></tr>
+        <tr><td>3</td><td>Tree Connect</td><td>Share mounting (C$, IPC$, ADMIN$)</td></tr>
+        <tr><td>4</td><td>Tree Disconnect</td><td>Share unmounting</td></tr>
+        <tr><td>5</td><td>Create</td><td>File/directory creation or open — key for file staging</td></tr>
+        <tr><td>6</td><td>Close</td><td>File handle close</td></tr>
+        <tr><td>8</td><td>Read</td><td>File read — data exfiltration</td></tr>
+        <tr><td>9</td><td>Write</td><td>File write — malware staging</td></tr>
+        <tr><td>14</td><td>Ioctl</td><td>Device control — DCE/RPC over SMB (PsExec)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Lateral Movement Patterns</h3>
+  <pre><code><span class="cm"># Access to admin shares (C$, ADMIN$, IPC$)</span>
+smb2.tree contains "C$" or smb2.tree contains "ADMIN$" or smb2.tree contains "IPC$"
+
+<span class="cm"># File writes to Windows directories (malware staging)</span>
+smb2.cmd == 9 and smb2.filename contains "Windows"
+
+<span class="cm"># Executable/script file access</span>
+smb2.filename matches "\.(exe|dll|ps1|bat|vbs|cmd)$"
+
+<span class="cm"># NTLM authentication in SMB (credential capture opportunity)</span>
+ntlmssp
+
+<span class="cm"># Failed authentication attempts (brute force)</span>
+smb2.nt_status == 0xc000006d    <span class="cm"># STATUS_LOGON_FAILURE</span>
+smb2.nt_status == 0xc0000064    <span class="cm"># STATUS_NO_SUCH_USER</span>
+
+<span class="cm"># PsExec pattern: IPC$ connect → service creation via svcctl</span>
+smb2.tree contains "IPC$" and smb2.filename contains "svcctl"
+
+<span class="cm"># DCE/RPC over SMB (remote command execution)</span>
+dcerpc</code></pre>
+
+  <h3>NTLM Authentication Capture</h3>
+  <pre><code><span class="cm"># Full NTLM challenge-response visible in SMB session setup</span>
+<span class="cm"># Message types:</span>
+<span class="cm"># Type 1 = Negotiate (client → server)</span>
+<span class="cm"># Type 2 = Challenge (server → client, contains 8-byte challenge)</span>
+<span class="cm"># Type 3 = Authenticate (client → server, contains NT hash response)</span>
+
+<span class="cm"># Filter NTLM authentication messages</span>
+ntlmssp
+
+<span class="cm"># Extract username from NTLM Type 3</span>
+tshark -r capture.pcap \
+  -Y "ntlmssp.auth.username" \
+  -T fields -e ip.src -e ip.dst -e ntlmssp.auth.domain -e ntlmssp.auth.username
+
+<span class="cm"># Note: The NTLMv2 hash can be cracked offline</span>
+<span class="cm"># Format: user::domain:challenge:ntproof:rest_of_blob</span>
+<span class="cm"># Extract with: tool like responder captures automatically</span></code></pre>
+</article>
+</template>
+
+<!-- ══════════════════════════ Protocol Field Reference ═════════════════════ -->
+<template id="tpl-field-reference">
+<article class="topic">
+  <h2>Protocol Field Reference</h2>
+  <p>Quick-reference for common Wireshark display filter field names across all major protocols analyzed in SOC work.</p>
+
+  <h3>HTTP Fields</h3>
+  <pre><code>http.request.method          <span class="cm"># GET POST PUT DELETE etc.</span>
+http.request.uri             <span class="cm"># Path + query string</span>
+http.request.uri.path        <span class="cm"># Path component only</span>
+http.request.uri.query       <span class="cm"># Query string only</span>
+http.host                    <span class="cm"># Host header</span>
+http.user_agent              <span class="cm"># User-Agent header</span>
+http.authorization           <span class="cm"># Authorization header (Basic creds)</span>
+http.cookie                  <span class="cm"># Cookie header</span>
+http.referer                 <span class="cm"># Referer header</span>
+http.response.code           <span class="cm"># Status code (200, 404, etc.)</span>
+http.content_type            <span class="cm"># Content-Type header</span>
+http.content_length          <span class="cm"># Content-Length header</span>
+http.server                  <span class="cm"># Server header</span>
+http.file_data               <span class="cm"># HTTP body payload</span></code></pre>
+
+  <h3>DNS Fields</h3>
+  <pre><code>dns.qry.name                 <span class="cm"># Queried domain name</span>
+dns.qry.type                 <span class="cm"># Record type (1=A, 16=TXT, 28=AAAA)</span>
+dns.flags.response           <span class="cm"># 0=query, 1=response</span>
+dns.flags.rcode              <span class="cm"># Response code (0=OK, 3=NXDOMAIN)</span>
+dns.resp.ttl                 <span class="cm"># TTL of response record</span>
+dns.a                        <span class="cm"># A record IP</span>
+dns.aaaa                     <span class="cm"># AAAA record IPv6</span>
+dns.txt                      <span class="cm"># TXT record value</span>
+dns.cname                    <span class="cm"># CNAME target</span>
+dns.count.queries            <span class="cm"># Number of questions</span>
+dns.count.answers            <span class="cm"># Number of answers</span>
+dns.id                       <span class="cm"># Transaction ID</span></code></pre>
+
+  <h3>TLS Fields</h3>
+  <pre><code>tls.handshake.type           <span class="cm"># 1=ClientHello, 2=ServerHello, 11=Cert</span>
+tls.handshake.extensions_server_name  <span class="cm"># SNI hostname</span>
+tls.handshake.version        <span class="cm"># TLS version in handshake</span>
+tls.record.version           <span class="cm"># TLS record layer version</span>
+tls.handshake.ciphersuite    <span class="cm"># Selected/offered cipher suite</span>
+tls.handshake.cert           <span class="cm"># Certificate present</span>
+ssl.app_data                 <span class="cm"># Encrypted application data record</span>
+tls.alert_message.desc       <span class="cm"># Alert description (e.g., 42=bad_cert)</span></code></pre>
+
+  <h3>SMB Fields</h3>
+  <pre><code>smb2.cmd                     <span class="cm"># Command (5=Create, 8=Read, 9=Write)</span>
+smb2.filename                <span class="cm"># File path being accessed</span>
+smb2.tree                    <span class="cm"># Share name (C$, IPC$, ADMIN$)</span>
+smb2.nt_status               <span class="cm"># Status code (0=success)</span>
+smb2.session_id              <span class="cm"># Session identifier</span>
+ntlmssp                      <span class="cm"># NTLM authentication present</span>
+ntlmssp.auth.username        <span class="cm"># Username in NTLM Type 3</span>
+ntlmssp.auth.domain          <span class="cm"># Domain in NTLM Type 3</span>
+ntlmssp.ntlmv2_response      <span class="cm"># NTLMv2 hash response</span>
+dcerpc                       <span class="cm"># DCE/RPC over SMB (remote exec)</span></code></pre>
+
+  <h3>FTP / SMTP Fields</h3>
+  <pre><code><span class="cm"># FTP</span>
+ftp.request.command          <span class="cm"># USER PASS RETR STOR etc.</span>
+ftp.request.arg              <span class="cm"># Argument (username, filename)</span>
+ftp.response.code            <span class="cm"># 230=login ok, 530=login failed</span>
+ftp-data                     <span class="cm"># FTP data channel (files)</span>
+
+<span class="cm"># SMTP</span>
+smtp.req.command             <span class="cm"># EHLO MAIL RCPT DATA AUTH etc.</span>
+smtp.req.parameter           <span class="cm"># Command parameter</span>
+smtp.response.code           <span class="cm"># 250=OK, 535=auth failed</span>
+smtp.data.fragment           <span class="cm"># Email body fragment</span></code></pre>
+
+  <h3>SOC Protocol Analysis Summary</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Protocol</th><th>Port</th><th>Key SOC Indicators</th><th>Primary Risk</th></tr></thead>
+      <tbody>
+        <tr><td>HTTP</td><td>80, 8080</td><td>Cleartext creds, file downloads, suspicious UA</td><td>Credential theft, malware delivery</td></tr>
+        <tr><td>DNS</td><td>53 UDP/TCP</td><td>Long subdomains, TXT queries, NXDOMAIN storms, low TTL</td><td>C2 tunneling, DGA, exfiltration</td></tr>
+        <tr><td>TLS</td><td>443, 8443</td><td>Missing SNI, old TLS versions, self-signed certs</td><td>Encrypted C2, MITM</td></tr>
+        <tr><td>SMB</td><td>445, 139</td><td>Admin shares, NTLM auth, executable writes, IPC$</td><td>Lateral movement, ransomware</td></tr>
+        <tr><td>FTP</td><td>21</td><td>Cleartext USER/PASS, STOR commands</td><td>Credential theft, exfiltration</td></tr>
+        <tr><td>SMTP</td><td>25, 587</td><td>AUTH commands, mass RCPT, unusual sender</td><td>Phishing, spam relay</td></tr>
+        <tr><td>Kerberos</td><td>88</td><td>AS-REQ without pre-auth (AS-REPRoasting)</td><td>Credential attack</td></tr>
+        <tr><td>RDP</td><td>3389</td><td>External source IPs, failed auth bursts</td><td>Brute force, lateral movement</td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: "Wireshark — Protocol Analysis",
+  topics: [
+    { id: "http-analysis",   badge: "01", label: "HTTP Analysis" },
+    { id: "dns-analysis",    badge: "02", label: "DNS Analysis" },
+    { id: "tls-analysis",    badge: "03", label: "TLS Analysis" },
+    { id: "smb-analysis",    badge: "04", label: "SMB Analysis" },
+    { id: "field-reference", badge: "05", label: "Field Reference" },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

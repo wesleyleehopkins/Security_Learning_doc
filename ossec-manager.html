@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manager &amp; Agents — OSSEC — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" aria-label="Toggle sidebar">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 5h14M3 10h14M3 15h14"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html" class="active">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">Manager &amp; Agents</div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  </aside>
+  <main class="content" id="content-area"></main>
+</div>
+
+<!-- ══════════════════════════ ossec-control ═════════════════════════════════ -->
+<template id="tpl-ossec-control">
+<article class="topic">
+  <h2>ossec-control</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">OSSEC daemons operate at L7 (log analysis, rule matching) and use L4 TCP/UDP for agent-manager communication (port 1514) and auto-enrollment (port 1515).</span>
+  </div>
+  <p><code>ossec-control</code> is the primary management script for starting, stopping, and monitoring all OSSEC daemons. It lives at <code>/var/ossec/bin/ossec-control</code>.</p>
+
+  <h3>Common Commands</h3>
+  <pre><code><span class="cm"># Start all OSSEC daemons</span>
+sudo /var/ossec/bin/ossec-control start
+
+<span class="cm"># Stop all daemons</span>
+sudo /var/ossec/bin/ossec-control stop
+
+<span class="cm"># Restart (stop + start)</span>
+sudo /var/ossec/bin/ossec-control restart
+
+<span class="cm"># Show status of all daemons</span>
+sudo /var/ossec/bin/ossec-control status
+
+<span class="cm"># Example status output:</span>
+ossec-monitord is running...
+ossec-logcollector is running...
+ossec-remoted is running...
+ossec-syscheckd is running...
+ossec-analysisd is running...
+ossec-maild not running...
+ossec-execd is running...
+ossec-authd not running...
+
+<span class="cm"># Reload config without full restart (rules/decoders only)</span>
+sudo /var/ossec/bin/ossec-control reload
+
+<span class="cm"># Enable/disable a specific daemon</span>
+sudo /var/ossec/bin/ossec-control enable authd
+sudo /var/ossec/bin/ossec-control disable maild</code></pre>
+
+  <h3>Individual Daemon Control</h3>
+  <pre><code><span class="cm"># Start only the analysis daemon</span>
+sudo /var/ossec/bin/ossec-analysisd
+
+<span class="cm"># Start only the remote daemon (agent listener)</span>
+sudo /var/ossec/bin/ossec-remoted
+
+<span class="cm"># Start authd (agent enrollment) manually</span>
+sudo /var/ossec/bin/ossec-authd -p 1515 &amp;
+
+<span class="cm"># Wazuh: use systemctl</span>
+sudo systemctl start wazuh-manager
+sudo systemctl stop wazuh-manager
+sudo systemctl restart wazuh-manager
+sudo systemctl status wazuh-manager</code></pre>
+
+  <h3>OSSEC Daemon Reference</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Daemon</th><th>Role</th><th>Key Config</th></tr></thead>
+      <tbody>
+        <tr><td><code>ossec-analysisd</code></td><td>Core engine: decode + rule matching + alert generation</td><td>Rules, decoders, alert levels</td></tr>
+        <tr><td><code>ossec-remoted</code></td><td>Agent communication (receives logs, sends AR commands)</td><td>Port 1514, encryption key</td></tr>
+        <tr><td><code>ossec-logcollector</code></td><td>Reads local log files on the manager</td><td>&lt;localfile&gt; blocks</td></tr>
+        <tr><td><code>ossec-syscheckd</code></td><td>FIM scanning on the manager</td><td>&lt;syscheck&gt; block</td></tr>
+        <tr><td><code>ossec-rootcheck</code></td><td>Rootkit detection (runs inside analysisd in newer versions)</td><td>&lt;rootcheck&gt; block</td></tr>
+        <tr><td><code>ossec-monitord</code></td><td>Monitors agent keepalives, rotates logs</td><td>Agent timeout settings</td></tr>
+        <tr><td><code>ossec-execd</code></td><td>Executes active response scripts</td><td>&lt;active-response&gt; blocks</td></tr>
+        <tr><td><code>ossec-authd</code></td><td>Agent auto-enrollment on port 1515 (optional, disabled by default)</td><td>TLS cert for auth</td></tr>
+        <tr><td><code>ossec-maild</code></td><td>Sends email alerts</td><td>&lt;email_notification&gt; in ossec.conf</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Check Status and Restart</summary>
+    <div class="tier-body">
+      <h4>Day-to-Day Manager Operations</h4>
+      <ul>
+        <li>Run <code>ossec-control status</code> to verify all daemons are running — if any show "not running", investigate <code>ossec.log</code></li>
+        <li>Run <code>ossec-control restart</code> after any config changes — required for rules, decoders, syscheck, and AR changes</li>
+        <li>For Wazuh, use <code>systemctl restart wazuh-manager</code> and check <code>systemctl status wazuh-manager</code></li>
+        <li>Key daemons: <code>analysisd</code> (rule engine), <code>remoted</code> (agent comms), <code>execd</code> (active response)</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Control Individual Daemons</summary>
+    <div class="tier-body">
+      <h4>Start, Stop, and Enable Specific Services</h4>
+      <ul>
+        <li>Enable <code>authd</code> to allow agent auto-enrollment: <code>ossec-control enable authd</code></li>
+        <li>Disable <code>maild</code> if no email is configured to prevent error loops: <code>ossec-control disable maild</code></li>
+        <li>Use <code>ossec-control reload</code> to reload rules without a full restart — faster but not always reliable for major changes</li>
+        <li>Check <code>/var/ossec/logs/ossec.log</code> for daemon startup errors after any restart</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Daemon Troubleshooting</summary>
+    <div class="tier-body">
+      <h4>Diagnose Daemon Failures</h4>
+      <ul>
+        <li>If <code>analysisd</code> won't start: run <code>ossec-analysisd -t</code> to validate rules/decoders XML syntax</li>
+        <li>If <code>remoted</code> fails: check port 1514 is open and not bound by another process (<code>ss -tulpn | grep 1514</code>)</li>
+        <li>If <code>authd</code> fails: check TLS cert validity at <code>/var/ossec/etc/sslmanager.cert</code></li>
+        <li>Enable debug logging: add <code>&lt;logging&gt;&lt;log_level&gt;2&lt;/log_level&gt;&lt;/logging&gt;</code> to ossec.conf temporarily</li>
+      </ul>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ Agent Management ═══════════════════════════════ -->
+<template id="tpl-agent-management">
+<article class="topic">
+  <h2>Agent Management</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Agent management operates over L4 TCP (port 1514 for log forwarding, 1515 for enrollment). Agent keys and log data are application-layer (L7) content transmitted over these TCP connections.</span>
+  </div>
+
+  <h3>Add an Agent Manually (manage_agents)</h3>
+  <pre><code><span class="cm"># Run on the MANAGER</span>
+sudo /var/ossec/bin/manage_agents
+
+<span class="cm">## Available options:
+   (A)dd an agent (A).
+   (E)xtract key for an agent (E).
+   (L)ist already added agents (L).
+   (R)emove an agent (R).
+   (Q)uit.
+
+## Example flow:
+## Choose A → enter agent name (webserver01) and IP (10.0.1.50)
+## OSSEC auto-assigns an agent ID (e.g., 003)
+## Choose E → enter ID 003 → copy the key string
+## On the AGENT, run manage_agents → choose I (import key) → paste key
+## Restart OSSEC on both manager and agent</span></code></pre>
+
+  <h3>Auto-enrollment with ossec-authd</h3>
+  <pre><code><span class="cm"># On the MANAGER: start authd</span>
+sudo /var/ossec/bin/ossec-authd -p 1515 &amp;
+
+<span class="cm"># On the AGENT: register automatically</span>
+sudo /var/ossec/bin/agent-auth -m &lt;manager-ip&gt; -p 1515
+<span class="cm"># Agent receives its key automatically and writes it to client.keys</span>
+
+<span class="cm"># Restart the agent</span>
+sudo /var/ossec/bin/ossec-control restart</code></pre>
+
+  <h3>List, Remove, and Check Agents</h3>
+  <pre><code><span class="cm"># List all registered agents</span>
+sudo /var/ossec/bin/manage_agents -l
+
+<span class="cm"># Example output:</span>
+<span class="cm"># ID: 001, Name: webserver01, IP: 10.0.1.50, Active</span>
+<span class="cm"># ID: 002, Name: dbserver01,  IP: 10.0.1.51, Active</span>
+<span class="cm"># ID: 003, Name: winserver01, IP: 10.0.1.100, Disconnected</span>
+
+<span class="cm"># Remove an agent by ID</span>
+sudo /var/ossec/bin/manage_agents -r 003
+
+<span class="cm"># Show agent connection status (checks keepalive)</span>
+sudo /var/ossec/bin/ossec-control status
+<span class="cm"># or check the agent_info file</span>
+cat /var/ossec/queue/agent-info/*</code></pre>
+
+  <h3>Wazuh Agent Management via CLI</h3>
+  <pre><code><span class="cm"># List agents</span>
+sudo /var/ossec/bin/agent_control -l
+
+<span class="cm"># Check agent status (active/disconnected/never connected)</span>
+sudo /var/ossec/bin/agent_control -ls
+
+<span class="cm"># Restart a specific agent (sends restart command via remoted)</span>
+sudo /var/ossec/bin/agent_control -R 003
+
+<span class="cm"># Send active response to a specific agent</span>
+sudo /var/ossec/bin/agent_control -b 10.0.0.99 -f firewall-drop.sh -u 003</code></pre>
+
+  <h3>Wazuh Agent Management via API</h3>
+  <pre><code><span class="cm"># Authenticate and get token</span>
+TOKEN=$(curl -s -k -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"SecretPassword"}' \
+  "https://&lt;manager&gt;:55000/security/user/authenticate" | \
+  python3 -c "import sys,json; print(json.load(sys.stdin)['data']['token'])")
+
+<span class="cm"># List all agents</span>
+curl -s -k -H "Authorization: Bearer $TOKEN" \
+  "https://&lt;manager&gt;:55000/agents" | python3 -m json.tool
+
+<span class="cm"># Get specific agent info</span>
+curl -s -k -H "Authorization: Bearer $TOKEN" \
+  "https://&lt;manager&gt;:55000/agents/003"
+
+<span class="cm"># Get agent summary (connected / disconnected counts)</span>
+curl -s -k -H "Authorization: Bearer $TOKEN" \
+  "https://&lt;manager&gt;:55000/agents/summary/status"
+
+<span class="cm"># Force FIM scan on agent 003</span>
+curl -s -k -X PUT -H "Authorization: Bearer $TOKEN" \
+  "https://&lt;manager&gt;:55000/syscheck?agents_list=003"
+
+<span class="cm"># Get alerts for a specific agent</span>
+curl -s -k -H "Authorization: Bearer $TOKEN" \
+  "https://&lt;manager&gt;:55000/alerts?agents_list=003&amp;limit=20"</code></pre>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Add and Verify an Agent</summary>
+    <div class="tier-body">
+      <h4>Register a New Agent</h4>
+      <ul>
+        <li>Run <code>manage_agents</code> on the manager → choose <strong>A</strong> to add → enter name and IP</li>
+        <li>Extract the key (choose <strong>E</strong>), copy it, then import it on the agent (choose <strong>I</strong>)</li>
+        <li>Restart OSSEC on both sides — verify with <code>manage_agents -l</code> showing agent as <em>Active</em></li>
+        <li>For Wazuh: auto-enrollment is easier — enable <code>authd</code> on manager, run <code>agent-auth</code> on agent</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Manage Agent Lifecycle via API</summary>
+    <div class="tier-body">
+      <h4>Use the Wazuh REST API for Agent Operations</h4>
+      <ul>
+        <li>Authenticate to get a JWT token, then use it in all subsequent API calls with <code>Authorization: Bearer $TOKEN</code></li>
+        <li>List agents: <code>GET /agents</code>; filter disconnected: <code>GET /agents?status=disconnected</code></li>
+        <li>Force FIM scan: <code>PUT /syscheck?agents_list=003</code>; force restart: <code>PUT /agents/003/restart</code></li>
+        <li>Get alerts for an agent: <code>GET /alerts?agents_list=003&amp;limit=50</code></li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Monitor Agent Health at Scale</summary>
+    <div class="tier-body">
+      <h4>Detect Disconnected or Stale Agents</h4>
+      <ul>
+        <li>Query <code>GET /agents/summary/status</code> to get active/disconnected/never-connected counts — alert if disconnected spikes</li>
+        <li>Use <code>agent_control -ls</code> to list agents with last keepalive timestamps — identify agents silent for &gt;10 minutes</li>
+        <li>Script daily checks: query API for disconnected agents, create tickets for unresponsive hosts</li>
+      </ul>
+      <pre><code><span class="cm"># Check for disconnected agents via API</span>
+curl -s -k -H "Authorization: Bearer $TOKEN" \
+  "https://&lt;mgr&gt;:55000/agents?status=disconnected" | \
+  python3 -c "import sys,json; [print(a['name'],a['lastKeepAlive'])
+              for a in json.load(sys.stdin)['data']['affected_items']]"</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ ossec.conf Structure ══════════════════════════ -->
+<template id="tpl-config-structure">
+<article class="topic">
+  <h2>ossec.conf Structure</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">ossec.conf configures all application-layer behavior: log collection, rule loading, FIM paths, email alerts, and active response triggers. Network ports (L4) for agent communication are also defined here.</span>
+  </div>
+  <p>The main config file controls all OSSEC behavior. It uses XML with a root <code>&lt;ossec_config&gt;</code> element. Multiple <code>&lt;ossec_config&gt;</code> blocks are allowed and are merged.</p>
+
+  <h3>Complete ossec.conf Skeleton</h3>
+  <pre><code>&lt;ossec_config&gt;
+
+  <span class="cm">&lt;!── GLOBAL SETTINGS ─────────────────────────────────────────────────────</span>
+  &lt;global&gt;
+    &lt;email_notification&gt;yes&lt;/email_notification&gt;
+    &lt;email_to&gt;soc@company.com&lt;/email_to&gt;
+    &lt;smtp_server&gt;mail.company.com&lt;/smtp_server&gt;
+    &lt;email_from&gt;ossec@ids.company.com&lt;/email_from&gt;
+    &lt;email_alert_level&gt;7&lt;/email_alert_level&gt;
+    &lt;email_maxperhour&gt;12&lt;/email_maxperhour&gt;
+    &lt;white_list&gt;127.0.0.1&lt;/white_list&gt;
+    &lt;white_list&gt;192.168.1.0/24&lt;/white_list&gt;
+  &lt;/global&gt;
+
+  <span class="cm">&lt;!── RULES ───────────────────────────────────────────────────────────────</span>
+  &lt;rules&gt;
+    &lt;include&gt;rules_config.xml&lt;/include&gt;
+    &lt;include&gt;sshd_rules.xml&lt;/include&gt;
+    &lt;include&gt;apache_rules.xml&lt;/include&gt;
+    &lt;include&gt;local_rules.xml&lt;/include&gt;
+  &lt;/rules&gt;
+
+  <span class="cm">&lt;!── SYSCHECK (FIM) ───────────────────────────────────────────────────────</span>
+  &lt;syscheck&gt;
+    &lt;frequency&gt;21600&lt;/frequency&gt;
+    &lt;scan_on_start&gt;yes&lt;/scan_on_start&gt;
+    &lt;alert_new_files&gt;yes&lt;/alert_new_files&gt;
+    &lt;directories check_all="yes"&gt;/etc,/usr/bin,/usr/sbin&lt;/directories&gt;
+    &lt;directories check_all="yes" realtime="yes"&gt;/var/www/html&lt;/directories&gt;
+    &lt;ignore&gt;/etc/mtab&lt;/ignore&gt;
+  &lt;/syscheck&gt;
+
+  <span class="cm">&lt;!── ROOTCHECK ────────────────────────────────────────────────────────────</span>
+  &lt;rootcheck&gt;
+    &lt;rootkit_files&gt;/var/ossec/etc/shared/rootkit_files.txt&lt;/rootkit_files&gt;
+    &lt;rootkit_trojans&gt;/var/ossec/etc/shared/rootkit_trojans.txt&lt;/rootkit_trojans&gt;
+    &lt;system_audit&gt;/var/ossec/etc/shared/system_audit_rcl.txt&lt;/system_audit&gt;
+    &lt;frequency&gt;36000&lt;/frequency&gt;
+  &lt;/rootcheck&gt;
+
+  <span class="cm">&lt;!── LOG COLLECTION ───────────────────────────────────────────────────────</span>
+  &lt;localfile&gt;
+    &lt;log_format&gt;syslog&lt;/log_format&gt;
+    &lt;location&gt;/var/log/auth.log&lt;/location&gt;
+  &lt;/localfile&gt;
+
+  &lt;localfile&gt;
+    &lt;log_format&gt;syslog&lt;/log_format&gt;
+    &lt;location&gt;/var/log/syslog&lt;/location&gt;
+  &lt;/localfile&gt;
+
+  &lt;localfile&gt;
+    &lt;log_format&gt;apache&lt;/log_format&gt;
+    &lt;location&gt;/var/log/apache2/error.log&lt;/location&gt;
+  &lt;/localfile&gt;
+
+  &lt;localfile&gt;
+    &lt;log_format&gt;full_command&lt;/log_format&gt;
+    &lt;command&gt;netstat -tulpn | sort&lt;/command&gt;
+    &lt;frequency&gt;360&lt;/frequency&gt;
+  &lt;/localfile&gt;
+
+  <span class="cm">&lt;!── ACTIVE RESPONSE ──────────────────────────────────────────────────────</span>
+  &lt;command&gt;
+    &lt;name&gt;firewall-drop&lt;/name&gt;
+    &lt;executable&gt;firewall-drop&lt;/executable&gt;
+    &lt;timeout_allowed&gt;yes&lt;/timeout_allowed&gt;
+  &lt;/command&gt;
+
+  &lt;active-response&gt;
+    &lt;command&gt;firewall-drop&lt;/command&gt;
+    &lt;location&gt;local&lt;/location&gt;
+    &lt;rules_id&gt;5712&lt;/rules_id&gt;
+    &lt;timeout&gt;600&lt;/timeout&gt;
+  &lt;/active-response&gt;
+
+  <span class="cm">&lt;!── ALERTS ───────────────────────────────────────────────────────────────</span>
+  &lt;alerts&gt;
+    &lt;log_alert_level&gt;1&lt;/log_alert_level&gt;   <span class="cm">&lt;!-- min level to write to alerts.log --&gt;</span>
+    &lt;email_alert_level&gt;7&lt;/email_alert_level&gt; <span class="cm">&lt;!-- min level to send email --&gt;</span>
+  &lt;/alerts&gt;
+
+&lt;/ossec_config&gt;</code></pre>
+
+  <h3>Log Format Options</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>log_format</th><th>Use For</th></tr></thead>
+      <tbody>
+        <tr><td><code>syslog</code></td><td>Standard syslog format (auth.log, syslog, messages)</td></tr>
+        <tr><td><code>apache</code></td><td>Apache access log (combined / common)</td></tr>
+        <tr><td><code>iis</code></td><td>Microsoft IIS W3C access log</td></tr>
+        <tr><td><code>squid</code></td><td>Squid proxy access log</td></tr>
+        <tr><td><code>eventlog</code></td><td>Windows Event Log (classic — pre-Vista)</td></tr>
+        <tr><td><code>eventchannel</code></td><td>Windows Event Channel (Vista+ — Security, System, Application)</td></tr>
+        <tr><td><code>json</code></td><td>JSON-formatted log (e.g., Docker, application logs)</td></tr>
+        <tr><td><code>full_command</code></td><td>Run a shell command and analyze its output as a log</td></tr>
+        <tr><td><code>command</code></td><td>Run a shell command; each line is a separate event</td></tr>
+        <tr><td><code>multi-line</code></td><td>Multi-line log events (e.g., Java stack traces)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Key ossec.conf Sections</summary>
+    <div class="tier-body">
+      <h4>Understand the Main Config Blocks</h4>
+      <ul>
+        <li><code>&lt;global&gt;</code>: email settings, IP whitelisting, alert thresholds</li>
+        <li><code>&lt;rules&gt;</code>: list of rule files to load (always keep <code>local_rules.xml</code> last)</li>
+        <li><code>&lt;syscheck&gt;</code>: FIM directories, frequency, realtime/whodata settings</li>
+        <li><code>&lt;localfile&gt;</code>: log sources to monitor — add one block per log file</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Add Custom Log Sources</summary>
+    <div class="tier-body">
+      <h4>Configure &lt;localfile&gt; for New Log Types</h4>
+      <ul>
+        <li>Use <code>&lt;log_format&gt;syslog&lt;/log_format&gt;</code> for standard /var/log/* files</li>
+        <li>Use <code>&lt;log_format&gt;json&lt;/log_format&gt;</code> for Docker, application, or cloud logs in JSON format</li>
+        <li>Use <code>&lt;log_format&gt;full_command&lt;/log_format&gt;</code> to run a shell command and analyze its output (e.g., <code>netstat -tulpn | sort</code>)</li>
+        <li>Use <code>&lt;log_format&gt;eventchannel&lt;/log_format&gt;</code> on Windows agents for Security/System/Application event channels</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Centralized Config via Wazuh Shared Agent Settings</summary>
+    <div class="tier-body">
+      <h4>Push ossec.conf Changes to All Agents</h4>
+      <ul>
+        <li>In Wazuh, place shared agent config in <code>/var/ossec/etc/shared/default/agent.conf</code> — this gets pushed to all agents in the default group</li>
+        <li>Create agent groups to apply different configs to different agent types (Linux vs Windows vs containers)</li>
+        <li>Use the Wazuh API to assign agents to groups: <code>PUT /agents/group?group_id=linux-servers&amp;agents_list=001,002,003</code></li>
+      </ul>
+      <pre><code><span class="cm"># Push shared config to all agents in a group</span>
+<span class="cm"># /var/ossec/etc/shared/linux-servers/agent.conf</span>
+&lt;agent_config&gt;
+  &lt;localfile&gt;
+    &lt;log_format&gt;syslog&lt;/log_format&gt;
+    &lt;location&gt;/var/log/nginx/access.log&lt;/location&gt;
+  &lt;/localfile&gt;
+&lt;/agent_config&gt;</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ Wazuh Cluster ════════════════════════════════ -->
+<template id="tpl-wazuh-cluster">
+<article class="topic">
+  <h2>Wazuh Cluster &amp; Scaling</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Wazuh cluster nodes communicate over TCP port 1516 (L4). The cluster distributes L7 application-layer workloads: decoded events, rule matching, and synchronized FIM databases across master and worker nodes.</span>
+  </div>
+
+  <h3>Single-Node vs Cluster</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Deployment</th><th>When to Use</th><th>Agent Capacity</th></tr></thead>
+      <tbody>
+        <tr><td>Single-node (all-in-one)</td><td>Lab, small org (&lt;200 agents)</td><td>Up to ~200 agents</td></tr>
+        <tr><td>Distributed (separate indexer)</td><td>Medium org (200–1000 agents)</td><td>Scales with indexer nodes</td></tr>
+        <tr><td>Wazuh cluster (multi-manager)</td><td>Large org (1000+ agents)</td><td>Near-horizontal scale</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Wazuh Cluster Configuration</h3>
+  <pre><code><span class="cm">&lt;!-- ossec.conf on MASTER node --&gt;</span>
+&lt;cluster&gt;
+  &lt;name&gt;wazuh-cluster&lt;/name&gt;
+  &lt;node_name&gt;master-node&lt;/node_name&gt;
+  &lt;node_type&gt;master&lt;/node_type&gt;
+  &lt;key&gt;c98b62a9293d42aed25e5d6a0-your-secret-key-here&lt;/key&gt;
+  &lt;port&gt;1516&lt;/port&gt;
+  &lt;bind_addr&gt;0.0.0.0&lt;/bind_addr&gt;
+  &lt;nodes&gt;
+    &lt;node&gt;10.0.0.10&lt;/node&gt;   <span class="cm">&lt;!-- master IP --&gt;</span>
+  &lt;/nodes&gt;
+  &lt;hidden&gt;no&lt;/hidden&gt;
+  &lt;disabled&gt;no&lt;/disabled&gt;
+&lt;/cluster&gt;
+
+<span class="cm">&lt;!-- ossec.conf on WORKER node --&gt;</span>
+&lt;cluster&gt;
+  &lt;name&gt;wazuh-cluster&lt;/name&gt;
+  &lt;node_name&gt;worker-node-01&lt;/node_name&gt;
+  &lt;node_type&gt;worker&lt;/node_type&gt;
+  &lt;key&gt;c98b62a9293d42aed25e5d6a0-your-secret-key-here&lt;/key&gt;
+  &lt;port&gt;1516&lt;/port&gt;
+  &lt;bind_addr&gt;0.0.0.0&lt;/bind_addr&gt;
+  &lt;nodes&gt;
+    &lt;node&gt;10.0.0.10&lt;/node&gt;   <span class="cm">&lt;!-- master IP --&gt;</span>
+  &lt;/nodes&gt;
+  &lt;hidden&gt;no&lt;/hidden&gt;
+  &lt;disabled&gt;no&lt;/disabled&gt;
+&lt;/cluster&gt;</code></pre>
+
+  <h3>Cluster Status Commands</h3>
+  <pre><code><span class="cm"># Check cluster node status</span>
+sudo /var/ossec/bin/cluster_control --list
+
+<span class="cm"># Check sync status between nodes</span>
+sudo /var/ossec/bin/cluster_control --health
+
+<span class="cm"># Via API</span>
+curl -s -k -H "Authorization: Bearer $TOKEN" \
+  "https://&lt;master&gt;:55000/cluster/nodes" | python3 -m json.tool</code></pre>
+
+  <h3>Reading Alerts from the Manager</h3>
+  <pre><code><span class="cm"># Real-time alert watching</span>
+sudo tail -f /var/ossec/logs/alerts/alerts.log
+
+<span class="cm"># JSON alerts (for SIEM ingestion)</span>
+sudo tail -f /var/ossec/logs/alerts/alerts.json
+
+<span class="cm"># Filter for high-level alerts (level 10+)</span>
+sudo grep "level.*1[0-9]" /var/ossec/logs/alerts/alerts.log | tail -20
+
+<span class="cm"># Count alerts by rule in last hour</span>
+sudo grep "Rule: " /var/ossec/logs/alerts/alerts.log | \
+  grep "$(date '+%b %d %H')" | \
+  awk '{print $2}' | sort | uniq -c | sort -rn | head -20
+
+<span class="cm"># Search for alerts from a specific agent</span>
+sudo grep "webserver01" /var/ossec/logs/alerts/alerts.log | tail -20</code></pre>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Read Alerts From the Manager</summary>
+    <div class="tier-body">
+      <h4>Watch and Filter Alerts.log</h4>
+      <ul>
+        <li>Use <code>tail -f /var/ossec/logs/alerts/alerts.log</code> to watch alerts in real time</li>
+        <li>Filter by agent name: <code>grep "webserver01" alerts.log</code></li>
+        <li>For production SIEM ingestion, use <code>alerts.json</code> — it has structured fields for easy parsing</li>
+        <li>Single-node Wazuh handles up to ~200 agents comfortably — fine for labs and small organizations</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Cluster Health Monitoring</summary>
+    <div class="tier-body">
+      <h4>Verify Cluster Sync and Node Status</h4>
+      <ul>
+        <li>Use <code>cluster_control --list</code> to see all nodes and their connected/disconnected status</li>
+        <li>Use <code>cluster_control --health</code> to check synchronization state between master and workers</li>
+        <li>All nodes must share the same <code>&lt;key&gt;</code> in their cluster config block — mismatch = worker won't connect</li>
+        <li>Workers accept agent connections; master handles rule matching and pushes synchronized config to workers</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Design for High Availability</summary>
+    <div class="tier-body">
+      <h4>Build a Fault-tolerant Wazuh Deployment</h4>
+      <ul>
+        <li>Place a load balancer (HAProxy/Nginx) in front of worker nodes on port 1514 — agents connect to LB, not directly to workers</li>
+        <li>Run 2+ indexer nodes (OpenSearch cluster) for alert data redundancy — configure with minimum_master_nodes=2</li>
+        <li>Monitor master node — it's a single point of failure in current Wazuh architecture; use Pacemaker/Corosync or plan for fast failover</li>
+        <li>Keep cluster key in a secrets manager (Vault, AWS Secrets Manager) — never hard-code in config files</li>
+      </ul>
+    </div>
+  </details>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: "Manager &amp; Agents",
+  topics: [
+    { id: "ossec-control",     badge: "01", label: "ossec-control" },
+    { id: "agent-management",  badge: "02", label: "Agent Management" },
+    { id: "config-structure",  badge: "03", label: "ossec.conf" },
+    { id: "wazuh-cluster",     badge: "04", label: "Cluster & Scaling" },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

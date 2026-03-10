@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireshark — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Notebook</div>
+      <div class="sidebar-title">Wireshark</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">🦈</div>
+          <h2>Wireshark</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Wireshark',
+  topics: [
+    { id: 'overview',   badge: '01', label: 'Overview & Key Concepts'  },
+    { id: 'interface',  badge: '02', label: 'Interface & Panels'        },
+    { id: 'workflow',   badge: '03', label: 'SOC Triage Workflow'       },
+    { id: 'coloring',   badge: '04', label: 'Coloring Rules'            },
+    { id: 'sub-pages',  badge: '→',  label: 'Sub-Notebooks'             },
+  ]
+};
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EMBEDDED CONTENT TEMPLATES — no server required
+     ═══════════════════════════════════════════════════════════════ -->
+
+<template id="tpl-overview">
+<article class="topic">
+<h1>01 · Wireshark — Overview &amp; Key Concepts</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l2">L2 Data Link</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Wireshark operates across all OSI layers — it captures raw frames from L2 (Ethernet/MAC) up through L7 (HTTP, DNS, TLS), decoding each header in the protocol stack.</span>
+</div>
+<hr class="divider">
+
+<h2>What is Wireshark?</h2>
+<p>Wireshark is the world's most widely-used network protocol analyzer. It captures packets from a live network interface or reads from a saved PCAP file, decodes hundreds of protocols, and presents data in human-readable format. In a SOC context it is the primary tool for deep packet inspection, malware traffic analysis, credential exposure investigation, and network forensics.</p>
+
+<div class="callout warn"><strong>Legal Notice</strong> — Capturing network traffic without authorization is illegal in most jurisdictions. Only capture on networks you own or have explicit written permission to monitor.</div>
+
+<h2>Key Concepts</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+  <tbody>
+    <tr><td><strong>PCAP</strong></td><td>Packet Capture file — saves raw network packets for offline analysis. Extensions: .pcap, .pcapng (next-gen), .cap</td></tr>
+    <tr><td><strong>Display Filter</strong></td><td>Wireshark-specific filter applied <em>after</em> capture to narrow the view. Does not drop packets. Syntax: <code>ip.addr == 1.2.3.4</code></td></tr>
+    <tr><td><strong>Capture Filter</strong></td><td>BPF (Berkeley Packet Filter) applied <em>during</em> capture — only matching packets are saved. Cannot be changed post-capture.</td></tr>
+    <tr><td><strong>Dissector</strong></td><td>Protocol decoder — Wireshark uses dissectors to parse protocol fields from raw bytes. Hundreds built-in.</td></tr>
+    <tr><td><strong>Stream</strong></td><td>A reconstructed conversation between two endpoints. Follow → TCP Stream reassembles payloads in order.</td></tr>
+    <tr><td><strong>Frame</strong></td><td>A single captured packet. Frame number is assigned sequentially in the capture file.</td></tr>
+    <tr><td><strong>tshark</strong></td><td>Terminal/CLI version of Wireshark — scriptable, pipeline-friendly, essential for automation.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>File Formats</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Format</th><th>Extension</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>pcap</td><td>.pcap</td><td>Classic libpcap format — widest compatibility</td></tr>
+    <tr><td>pcapng</td><td>.pcapng</td><td>Next-gen — supports multiple interfaces, comments, metadata per packet</td></tr>
+    <tr><td>ERF</td><td>.erf</td><td>Endace format — includes timestamps with nanosecond precision</td></tr>
+    <tr><td>NetMon</td><td>.cap</td><td>Microsoft Network Monitor format</td></tr>
+    <tr><td>Snoop</td><td>.snoop</td><td>Solaris snoop utility format</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Common Wireshark Shortcuts</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td><code>Ctrl+E</code></td><td>Start/stop capture</td></tr>
+    <tr><td><code>Ctrl+W</code></td><td>Close capture file</td></tr>
+    <tr><td><code>Ctrl+S</code></td><td>Save capture file</td></tr>
+    <tr><td><code>Ctrl+F</code></td><td>Find packet (by string, hex, or display filter)</td></tr>
+    <tr><td><code>Ctrl+G</code></td><td>Go to specific packet number</td></tr>
+    <tr><td><code>Ctrl+T</code></td><td>Set/unset time reference on packet</td></tr>
+    <tr><td><code>Ctrl+Shift+I</code></td><td>Open Protocol Hierarchy statistics</td></tr>
+    <tr><td><code>Ctrl+Alt+Shift+T</code></td><td>Follow TCP stream</td></tr>
+    <tr><td><code>Ctrl+D</code></td><td>Mark/unmark packet</td></tr>
+    <tr><td><code>/</code></td><td>Find next (in filter bar)</td></tr>
+    <tr><td><code>Ctrl+Shift+A</code></td><td>Toggle autoscroll during live capture</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Opening a PCAP</h2>
+<pre><code><span class="cm"># Open in Wireshark GUI</span>
+wireshark suspicious_traffic.pcap
+
+<span class="cm"># Open in tshark (CLI)</span>
+tshark -r suspicious_traffic.pcap
+
+<span class="cm"># Read pcap, apply display filter, show specific fields</span>
+tshark -r suspicious.pcap -Y "http.request" -T fields \
+  -e frame.number -e ip.src -e http.host -e http.request.uri
+
+<span class="cm"># List all capture interfaces</span>
+tshark -D</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Understanding key Wireshark concepts</h4>
+    <ul>
+      <li>PCAP = saved packet capture file — contains all raw frames across L2–L7</li>
+      <li>Display filters narrow what you see but never delete packets from the file</li>
+      <li>Capture filters (BPF) run in the kernel — unmatched packets are permanently excluded</li>
+      <li>tshark is the CLI equivalent — ideal for scripted or headless analysis</li>
+    </ul>
+    <pre><code>wireshark suspicious_traffic.pcap  <span class="cm"># open in GUI</span>
+tshark -r suspicious_traffic.pcap  <span class="cm"># open in CLI</span>
+tshark -D                          <span class="cm"># list network interfaces</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Working with PCAP formats and field extraction</h4>
+    <ul>
+      <li>pcapng adds per-packet comments and multi-interface metadata over classic pcap</li>
+      <li>tshark -T fields -e extracts named dissector fields from any OSI layer</li>
+      <li>capinfos gives file stats (duration, packet count, timestamps) without a full GUI load</li>
+    </ul>
+    <pre><code>tshark -r suspicious.pcap -Y "http.request" -T fields \
+  -e frame.number -e ip.src -e http.host -e http.request.uri
+<span class="cm"># Extracts L3 (ip.src) and L7 (http.*) fields together</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Automated multi-layer triage pipelines</h4>
+    <ul>
+      <li>Chain tshark | sort | uniq -c | sort -rn for rapid frequency analysis without opening the GUI</li>
+      <li>Use -q -z statistics modules (io,phs; conv,tcp; endpoints,ip) for protocol summaries in scripts</li>
+      <li>Combine -r (read PCAP), -Y (display filter), -T fields, -e for precise targeted extraction</li>
+    </ul>
+    <pre><code>tshark -r suspicious.pcap -q -z io,phs
+tshark -r suspicious.pcap -Y "dns.flags.response==0" \
+  -T fields -e ip.src -e dns.qry.name | sort | uniq -c | sort -rn | head -20
+<span class="cm"># Protocol hierarchy then top DNS domain frequency</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-interface">
+<article class="topic">
+<h1>02 · Interface &amp; Panels</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l2">L2 Data Link</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">The Packet Details panel shows each OSI layer as a collapsible tree node — from L2 Ethernet headers at the top to L7 application data at the bottom.</span>
+</div>
+<hr class="divider">
+
+<h2>The Four Main Panels</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Panel</th><th>Location</th><th>Content</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Packet List</strong></td><td>Top</td><td>One row per packet — frame number, time, source, destination, protocol, length, info summary</td></tr>
+    <tr><td><strong>Packet Details</strong></td><td>Middle</td><td>Tree view of decoded protocol layers — click to expand each protocol header</td></tr>
+    <tr><td><strong>Packet Bytes</strong></td><td>Bottom</td><td>Raw hex dump of packet bytes with ASCII interpretation alongside</td></tr>
+    <tr><td><strong>Filter Bar</strong></td><td>Top (toolbar)</td><td>Display filter entry — green = valid filter, red = syntax error, yellow = warning</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Packet List Columns</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Column</th><th>Field</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>No.</td><td><code>frame.number</code></td><td>Sequential packet number in capture file</td></tr>
+    <tr><td>Time</td><td><code>frame.time_relative</code></td><td>Default: seconds since first packet. Change via View → Time Display Format.</td></tr>
+    <tr><td>Source</td><td><code>ip.src</code> / <code>eth.src</code></td><td>Source IP (or MAC for non-IP)</td></tr>
+    <tr><td>Destination</td><td><code>ip.dst</code></td><td>Destination IP</td></tr>
+    <tr><td>Protocol</td><td><code>frame.protocols</code></td><td>Highest-layer protocol identified by Wireshark</td></tr>
+    <tr><td>Length</td><td><code>frame.len</code></td><td>Frame length in bytes (including all headers)</td></tr>
+    <tr><td>Info</td><td>Protocol-specific</td><td>One-line human summary — varies by protocol</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Adding Custom Columns</h2>
+<pre><code><span class="cm"># Right-click any field in Packet Details panel</span>
+<span class="cm"># → "Apply as Column" — adds to Packet List view</span>
+
+<span class="cm"># Useful columns to add for SOC work:</span>
+http.host              <span class="cm"># HTTP Host header</span>
+http.request.uri       <span class="cm"># HTTP request URI</span>
+http.request.method    <span class="cm"># GET, POST, etc.</span>
+tls.handshake.extensions_server_name  <span class="cm"># TLS SNI</span>
+dns.qry.name           <span class="cm"># DNS query name</span>
+tcp.stream             <span class="cm"># TCP stream index number</span>
+
+<span class="cm"># Add via: Edit → Preferences → Columns → + button</span></code></pre>
+
+<h2>Packet Details Tree — Protocol Stack</h2>
+<pre><code><span class="cm"># Typical HTTP packet — layers expand in Packet Details:</span>
+▼ Frame 142: 678 bytes on wire
+▼ Ethernet II, Src: Dell_ab:cd:ef, Dst: Cisco_12:34:56
+▼ Internet Protocol Version 4, Src: 192.168.1.50, Dst: 185.220.101.34
+    Source: 192.168.1.50
+    Destination: 185.220.101.34
+    Protocol: TCP (6)
+    TTL: 64
+▼ Transmission Control Protocol, Src Port: 54321, Dst Port: 80
+    [Stream index: 5]
+    Sequence number: 1
+    Flags: 0x018 (PSH, ACK)
+▼ Hypertext Transfer Protocol
+    GET /update?id=abc123 HTTP/1.1\r\n
+    Host: 185.220.101.34\r\n
+    User-Agent: Mozilla/4.0 (compatible; MSIE 6.0)\r\n
+
+<span class="cm"># Click any field → highlighted in hex bytes panel below</span>
+<span class="cm"># Right-click field → Apply as Filter / Prepare as Filter / Copy</span></code></pre>
+
+<h2>Time Display Formats</h2>
+<pre><code><span class="cm"># View → Time Display Format options:</span>
+Date and Time of Day       <span class="cm"># 2024-03-07 09:15:42.123456</span>
+Seconds Since Beginning    <span class="cm"># 0.000000 (default relative)</span>
+Seconds Since Epoch        <span class="cm"># Unix timestamp</span>
+UTC Date and Time          <span class="cm"># Same as above but UTC</span>
+
+<span class="cm"># For incident response: use "Date and Time of Day" (UTC)</span>
+<span class="cm"># Correlate with SIEM events, Windows Event IDs, Zeek logs</span>
+
+<span class="cm"># Set time reference on first suspicious packet:</span>
+<span class="cm"># Right-click packet → Set/Unset Time Reference</span>
+<span class="cm"># All subsequent timestamps shown relative to that packet</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Navigating the four panels</h4>
+    <ul>
+      <li>Top pane (Packet List): one row per packet — click a row to select it</li>
+      <li>Middle pane (Packet Details): tree view — expand each protocol layer to see its fields</li>
+      <li>Bottom pane (Bytes): raw hex dump — selected field is highlighted here automatically</li>
+      <li>Right-click any field in Packet Details → "Apply as Filter" to instantly build a display filter</li>
+    </ul>
+    <pre><code><span class="cm"># Right-click ip.src field → Apply as Filter → ip.src == 192.168.1.50</span>
+<span class="cm"># No typing required — Wireshark writes the filter for you</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Adding custom columns for SOC work</h4>
+    <ul>
+      <li>Right-click any Packet Details field → "Apply as Column" to add it to the packet list</li>
+      <li>Useful columns: http.host, tls.handshake.extensions_server_name, dns.qry.name, tcp.stream</li>
+      <li>Change time format to "UTC Date and Time" for correlation with SIEM events</li>
+    </ul>
+    <pre><code><span class="cm"># Add TLS SNI as a column to see encrypted target hostnames in the list:</span>
+<span class="cm"># Right-click tls.handshake.extensions_server_name → Apply as Column</span>
+tls.handshake.type == 1  <span class="cm"># filter to see only Client Hello packets + SNI column</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Protocol stack deep-dive and dissector customization</h4>
+    <ul>
+      <li>Decode-as: right-click a port → "Decode As" to force a dissector (e.g. non-standard HTTP port)</li>
+      <li>Set a time reference on the first suspicious packet — all times become relative to the incident</li>
+      <li>Use Edit → Preferences → Protocols to tweak dissector behavior per protocol</li>
+    </ul>
+    <pre><code><span class="cm"># Force Wireshark to treat traffic on port 4444 as HTTP:</span>
+<span class="cm"># Right-click packet on port 4444 → Decode As → HTTP</span>
+<span class="cm"># Then http display filters work on that stream</span>
+tcp.port == 4444  <span class="cm"># filter first, then Decode As</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-workflow">
+<article class="topic">
+<h1>03 · SOC Triage Workflow</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l2">L2 Data Link</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">SOC triage starts at L2/L3 (who's talking to whom) and progressively drills into L4 streams and L7 protocol payloads to identify malicious behavior.</span>
+</div>
+<hr class="divider">
+
+<div class="callout lab"><strong>Standard approach:</strong> Start broad, go narrow. Identify the conversation scope first, then drill into suspicious protocols, then follow individual streams.</div>
+
+<h2>Step-by-Step PCAP Triage</h2>
+<pre><code><span class="cm">── Step 1: Understand the capture ─────────────────────────────</span>
+Statistics → Capture File Properties
+  Duration, packet count, file size
+  Start/end timestamps
+
+<span class="cm">── Step 2: Protocol overview ──────────────────────────────────</span>
+Statistics → Protocol Hierarchy
+  Which protocols account for most traffic?
+  Unexpected protocols? (e.g. IRC, Tor, raw TCP beaconing)
+  DNS making up unusually large % → tunneling?
+
+<span class="cm">── Step 3: Who's talking to whom? ────────────────────────────</span>
+Statistics → Conversations (TCP/UDP tab)
+  Sort by bytes → identify top talkers
+  Look for external IPs with high byte counts
+  Check for many connections to one external IP (C2 beacon)
+
+<span class="cm">── Step 4: Apply targeted filters ────────────────────────────</span>
+Filter to external IPs of interest
+Filter to suspicious protocol (e.g. just dns, just http)
+Filter by port (tcp.port == 4444 — common reverse shell)
+
+<span class="cm">── Step 5: Follow streams ────────────────────────────────────</span>
+Right-click suspicious packet → Follow → TCP Stream
+Inspect payload — C2 beaconing? Data exfil? Credentials?
+
+<span class="cm">── Step 6: Extract IOCs ──────────────────────────────────────</span>
+IPs: Statistics → Endpoints
+Domains: filter dns, export dns.qry.name
+File hashes: File → Export Objects → HTTP
+Certificates: follow TLS stream, inspect cert fields</code></pre>
+
+<h2>Quick Triage Filters</h2>
+<pre><code><span class="cm"># Remove common noise — see only external traffic</span>
+not (ip.addr == 192.168.0.0/16 or ip.addr == 10.0.0.0/8 or ip.addr == 172.16.0.0/12)
+
+<span class="cm"># Find all unique external destinations</span>
+<span class="cm"># (use Statistics → Endpoints after filtering)</span>
+
+<span class="cm"># Show only packets NOT from the gateway</span>
+ip.src != 192.168.1.1
+
+<span class="cm"># Look for suspicious ports</span>
+tcp.port == 4444 or tcp.port == 1234 or tcp.port == 31337
+
+<span class="cm"># High-volume single stream (potential exfil)</span>
+tcp.stream == 3    <span class="cm"># replace 3 with stream index from Conversations</span>
+
+<span class="cm"># Packets with POST data (credential submission, exfil)</span>
+http.request.method == "POST"
+
+<span class="cm"># DNS queries only (remove noise)</span>
+dns and dns.flags.response == 0</code></pre>
+
+<h2>Red Flags to Look For</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Indicator</th><th>Filter / Check</th><th>Implication</th></tr></thead>
+  <tbody>
+    <tr><td>Regular interval HTTP GETs</td><td>Follow TCP stream, check time delta</td><td>C2 beacon / heartbeat</td></tr>
+    <tr><td>Odd User-Agent strings</td><td><code>http.user_agent</code></td><td>Malware, tools (curl, python-requests, nmap)</td></tr>
+    <tr><td>Long DNS subdomains</td><td><code>dns.qry.name</code> length &gt; 50 chars</td><td>DNS tunneling exfiltration</td></tr>
+    <tr><td>Encoded URI parameters</td><td><code>http.request.uri contains "%"</code></td><td>SQLi, XSS, encoded payloads</td></tr>
+    <tr><td>Non-standard port TLS</td><td><code>tls and not tcp.port == 443</code></td><td>C2 over encrypted channel</td></tr>
+    <tr><td>Large ICMP payloads</td><td><code>icmp and data.len &gt; 100</code></td><td>ICMP tunneling</td></tr>
+    <tr><td>SMB to external IPs</td><td><code>smb2 and ip.dst != 10.0.0.0/8</code></td><td>SMB relay, data exfil</td></tr>
+    <tr><td>FTP PASS in cleartext</td><td><code>ftp.request.command == "PASS"</code></td><td>Credential exposure</td></tr>
+    <tr><td>High RST rate</td><td><code>tcp.flags.rst == 1</code></td><td>Port scanning, connection failures</td></tr>
+    <tr><td>ARP storm</td><td><code>arp</code></td><td>ARP poisoning, scanning</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>tshark — Quick File Summary</h2>
+<pre><code><span class="cm"># File info without opening GUI</span>
+capinfos suspicious.pcap
+
+<span class="cm"># Output example:</span>
+# File name:     suspicious.pcap
+# File type:     Wireshark/tcpdump/... - pcap
+# Packet size limit: file hdr: 65535
+# Number of packets: 4,821
+# File size:     2,847,212 bytes
+# Data size:     2,815,980 bytes
+# Capture duration: 600.123456 seconds
+# First packet time: 2024-03-07 09:00:00.000000
+# Last packet time:  2024-03-07 09:10:00.123456
+
+<span class="cm"># Protocol hierarchy in terminal</span>
+tshark -r suspicious.pcap -q -z io,phs</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Starting a PCAP triage — the broad-to-narrow approach</h4>
+    <ul>
+      <li>Always start with Statistics → Protocol Hierarchy before filtering anything</li>
+      <li>Check Statistics → Conversations (TCP tab, sort by bytes) to find the top talkers</li>
+      <li>Use "not (ip.addr == 192.168.0.0/16 or ip.addr == 10.0.0.0/8)" to isolate external traffic</li>
+      <li>Right-click any suspicious packet → Follow → TCP Stream to read the full conversation</li>
+    </ul>
+    <pre><code><span class="cm"># Remove RFC1918 noise, see only external L3 traffic</span>
+not (ip.addr == 192.168.0.0/16 or ip.addr == 10.0.0.0/8 or ip.addr == 172.16.0.0/12)</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Targeted red-flag detection with combined filters</h4>
+    <ul>
+      <li>Combine L3 IP filter with L7 protocol to narrow scope quickly</li>
+      <li>Use tcp.port == 4444 or tcp.port == 31337 to catch common reverse shell ports</li>
+      <li>Layer http.request.method == "POST" with ip.dst filters to find exfil candidates</li>
+    </ul>
+    <pre><code>ip.src == 192.168.56.30 and http and not ip.dst == 192.168.0.0/16
+<span class="cm"># External HTTP from Windows victim — examine every result</span>
+tcp.flags == 0x002  <span class="cm"># Pure SYN scan from Kali 192.168.56.10</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Automated triage workflow with tshark</h4>
+    <ul>
+      <li>Run capinfos first for file metadata, then io,phs for protocol breakdown</li>
+      <li>Extract all external IPs and submit to threat intel in a single pipeline</li>
+      <li>Use Statistics → IO Graphs with 10-second intervals to visualize beacon timing</li>
+    </ul>
+    <pre><code>capinfos suspicious.pcap
+tshark -r suspicious.pcap -q -z io,phs
+tshark -r suspicious.pcap -Y "ip.src == 192.168.56.30" \
+  -T fields -e ip.dst | grep -v "^192\.168\." | sort -u
+<span class="cm"># Full triage pipeline: metadata → protocol mix → external IPs</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-coloring">
+<article class="topic">
+<h1>04 · Coloring Rules</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l2">L2 Data Link</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Coloring rules apply display filters across all layers — ARP is L2, ICMP is L3, TCP RST is L4, and HTTP is L7. Each protocol layer gets distinct coloring for instant recognition.</span>
+</div>
+<hr class="divider">
+
+<p>Wireshark applies color rules to packets in the Packet List panel to make different protocol types and anomalies instantly recognizable. Built-in rules cover common protocols; custom rules can be added for SOC-specific detection.</p>
+
+<h2>Default Color Rules (Key Ones)</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Color</th><th>Meaning</th><th>Filter</th></tr></thead>
+  <tbody>
+    <tr><td style="background:#ffcccc; color:#000">Light red</td><td>TCP RST — connection reset</td><td><code>tcp.flags.reset eq 1</code></td></tr>
+    <tr><td style="background:#ffd1d1; color:#000">Pink/red</td><td>TCP errors, retransmissions</td><td><code>tcp.analysis.flags</code></td></tr>
+    <tr><td style="background:#ffffcc; color:#000">Light yellow</td><td>ARP packets</td><td><code>arp</code></td></tr>
+    <tr><td style="background:#ccffcc; color:#000">Light green</td><td>HTTP traffic</td><td><code>http</code></td></tr>
+    <tr><td style="background:#cce5ff; color:#000">Light blue</td><td>DNS queries/responses</td><td><code>dns</code></td></tr>
+    <tr><td style="background:#e8ccff; color:#000">Purple/violet</td><td>TCP — general</td><td><code>tcp</code></td></tr>
+    <tr><td style="background:#ffccff; color:#000">Light pink</td><td>ICMP</td><td><code>icmp</code></td></tr>
+    <tr><td style="background:#ccccff; color:#000">Blue-gray</td><td>SMB / CIFS</td><td><code>smb || smb2</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Managing Color Rules</h2>
+<pre><code><span class="cm"># Open coloring rules editor:</span>
+View → Coloring Rules (Ctrl+Alt+C)
+
+<span class="cm"># Rules evaluated top-to-bottom — first match wins</span>
+<span class="cm"># Add new rule with + button; set filter expression and colors</span>
+
+<span class="cm"># Toggle all coloring on/off quickly:</span>
+View → Colorize Packet List (toggles all rules)</code></pre>
+
+<h2>Useful Custom SOC Coloring Rules</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>Filter</th><th>Suggested Color</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td>C2 Port</td><td><code>tcp.dstport == 4444 or tcp.dstport == 1337</code></td><td>Red background</td><td>Common reverse shell ports</td></tr>
+    <tr><td>HTTP POST</td><td><code>http.request.method == "POST"</code></td><td>Orange background</td><td>Data submission / exfil</td></tr>
+    <tr><td>Long DNS</td><td><code>dns.qry.name matches ".{50,}"</code></td><td>Yellow background</td><td>DNS tunneling indicator</td></tr>
+    <tr><td>Cleartext Auth</td><td><code>ftp.request.command == "PASS" or http.authorization</code></td><td>Bright red</td><td>Credentials in plaintext</td></tr>
+    <tr><td>SMB to External</td><td><code>smb2 and not ip.dst == 10.0.0.0/8</code></td><td>Purple</td><td>Unusual SMB destination</td></tr>
+    <tr><td>Large ICMP</td><td><code>icmp and frame.len &gt; 200</code></td><td>Yellow</td><td>ICMP tunneling</td></tr>
+    <tr><td>TLS non-443</td><td><code>tls and not (tcp.port == 443 or tcp.port == 8443)</code></td><td>Orange</td><td>Encrypted C2 on unusual port</td></tr>
+    <tr><td>HTTP Error</td><td><code>http.response.code &gt;= 400</code></td><td>Light orange</td><td>4xx/5xx server errors</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Saving and Sharing Color Rules</h2>
+<pre><code><span class="cm"># Color rules stored in:</span>
+~/.config/wireshark/colorfilters     <span class="cm"># Linux/macOS</span>
+%APPDATA%\Wireshark\colorfilters     <span class="cm"># Windows</span>
+
+<span class="cm"># Format: one rule per line</span>
+# @rule_name@filter_expression@fg_color@bg_color@
+@HTTP POST@http.request.method == "POST"@[0,0,0]@[65535,20000,0]@
+@C2 Port@tcp.dstport == 4444@[65535,65535,65535]@[65535,0,0]@
+
+<span class="cm"># Share by copying the colorfilters file to team members</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Reading the default color scheme</h4>
+    <ul>
+      <li>Light red/pink = TCP RST or retransmission (L4) — connection problems</li>
+      <li>Light yellow = ARP (L2) — normal but watch for floods</li>
+      <li>Light green = HTTP (L7) — cleartext web traffic, inspect carefully</li>
+      <li>Light blue = DNS (L7) — name resolution, watch for high volume</li>
+    </ul>
+    <pre><code><span class="cm"># Toggle all coloring on/off to see raw packet list:</span>
+View → Colorize Packet List
+<span class="cm"># View → Coloring Rules (Ctrl+Alt+C) to see all active rules</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Adding SOC-specific custom color rules</h4>
+    <ul>
+      <li>Add rules before built-in ones — first match wins, order matters</li>
+      <li>Color tcp.dstport == 4444 bright red to catch common reverse shell ports</li>
+      <li>Color http.request.method == "POST" orange to catch potential exfil or login forms</li>
+    </ul>
+    <pre><code><span class="cm"># View → Coloring Rules → + → set filter and colors:</span>
+tcp.dstport == 4444 or tcp.dstport == 1337  <span class="cm"># L4 — C2 ports (red)</span>
+http.request.method == "POST"               <span class="cm"># L7 — POST data (orange)</span>
+dns.qry.name matches ".{50,}"              <span class="cm"># L7 — long DNS (yellow)</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Distributing team color rule sets</h4>
+    <ul>
+      <li>Export the colorfilters file and share across your SOC team for consistent triage views</li>
+      <li>Build a rule set ordered by severity: C2 ports (highest priority) → cleartext auth → suspicious DNS → noise suppression</li>
+      <li>Combine L4 and L7 conditions to reduce false positives in coloring rules</li>
+    </ul>
+    <pre><code><span class="cm"># SOC combined coloring filter examples:</span>
+tls and not (tcp.port in {443 8443 465 993})  <span class="cm"># L4+L6 — non-standard TLS</span>
+ftp.request.command == "PASS"                 <span class="cm"># L7 — FTP cleartext password</span>
+arp.duplicate-address-detected                <span class="cm"># L2 — ARP poisoning</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<template id="tpl-sub-pages">
+<article class="topic">
+<h1>→ · Wireshark Sub-Notebooks</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l2">L2 Data Link</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l6">L6 Presentation</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Each sub-notebook covers specific OSI layers — BPF capture filters (L2–L4), display filters span all layers, protocol analysis covers L7 and L6 (TLS), and streams reconstruct L4→L7 conversations.</span>
+</div>
+<hr class="divider">
+<p>The Wireshark section is split into focused notebooks. Each is a standalone page with its own sidebar.</p>
+
+<h2>Available Sub-Notebooks</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Notebook</th><th>Topics Covered</th></tr></thead>
+  <tbody>
+    <tr><td><a href="wireshark-filters.html" style="color:var(--accent-h)">Display Filters</a></td><td>Filter syntax, all operators, IP/TCP/UDP/HTTP/DNS/TLS/SMB filter cheat sheet with SOC examples</td></tr>
+    <tr><td><a href="wireshark-capture-filters.html" style="color:var(--accent-h)">Capture Filters (BPF)</a></td><td>BPF syntax vs display filters, when each is appropriate, tshark integration</td></tr>
+    <tr><td><a href="wireshark-protocol-analysis.html" style="color:var(--accent-h)">Protocol Analysis</a></td><td>HTTP credential exposure &amp; file extraction, DNS tunneling, TLS SNI &amp; SSLKEYLOGFILE, SMB lateral movement</td></tr>
+    <tr><td><a href="wireshark-streams.html" style="color:var(--accent-h)">Follow Streams</a></td><td>TCP/HTTP/UDP stream reconstruction, color interpretation, tshark follow equivalents</td></tr>
+    <tr><td><a href="wireshark-statistics.html" style="color:var(--accent-h)">Statistics</a></td><td>Protocol Hierarchy, Conversations, Endpoints, IO Graphs, Expert Information — SOC use for each</td></tr>
+    <tr><td><a href="wireshark-lab.html" style="color:var(--accent-h)">Lab: C2 PCAP Analysis</a></td><td>Step-by-step malware C2 traffic analysis — HTTP beaconing, DNS tunneling, IOC extraction with tshark one-liners</td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Choosing the right sub-notebook</h4>
+    <ul>
+      <li>Start with Display Filters (L3–L7) — the most-used skill in daily SOC work</li>
+      <li>Capture Filters (L2–L4) matter when on a high-volume tap port — learn BPF basics next</li>
+      <li>Protocol Analysis covers the L7 protocols you'll see most: HTTP, DNS, TLS, SMB</li>
+    </ul>
+    <pre><code><span class="cm"># First filters to learn for any layer:</span>
+ip.addr == 192.168.56.30       <span class="cm"># L3 — all traffic from Windows victim</span>
+tcp.port == 80 or tcp.port == 443  <span class="cm"># L4 — web traffic</span>
+http or dns                    <span class="cm"># L7 — app protocol shortcuts</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Cross-layer investigation workflow</h4>
+    <ul>
+      <li>Combine Capture Filters (L2/L3/L4) during collection with Display Filters (L7) during analysis</li>
+      <li>Use Follow Streams (L4→L7) to read reassembled application-layer conversations</li>
+      <li>Statistics tools span all layers and tell you the traffic composition before filtering</li>
+    </ul>
+    <pre><code><span class="cm"># BPF capture filter (L3/L4) + display filter (L7) workflow:</span>
+tshark -i eth0 -f "tcp port 80" -Y "http.request.method == \"POST\""
+<span class="cm"># Captures only web traffic, then filters to POST requests</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Full-stack analysis combining all sub-notebooks</h4>
+    <ul>
+      <li>Start with Statistics (all layers) → pivot to Protocol Analysis (L6/L7) → confirm via Stream Follow (L4/L7)</li>
+      <li>Use tshark commands from each sub-notebook in a single automated IOC extraction script</li>
+      <li>TLS decryption (L6) with SSLKEYLOGFILE unlocks L7 analysis of encrypted traffic</li>
+    </ul>
+    <pre><code>tshark -r capture.pcap -q -z io,phs          <span class="cm"># Statistics — all layers</span>
+tshark -r capture.pcap -Y "tls.handshake.type==1" \
+  -T fields -e tls.handshake.extensions_server_name  <span class="cm"># L6 SNI</span>
+tshark -r capture.pcap -q -z "follow,tcp,ascii,0"   <span class="cm"># L4→L7 stream</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<script src="js/app.js"></script>
+</body>
+</html>

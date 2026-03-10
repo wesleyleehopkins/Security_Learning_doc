@@ -1,0 +1,1586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenVAS / GVM — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .xref { display:inline; color:var(--accent,#3b82f6); font-size:.75em; font-weight:600; border:1px solid var(--accent,#3b82f6); border-radius:3px; padding:1px 5px; margin-left:4px; text-decoration:none; cursor:pointer; white-space:nowrap; opacity:.85; }
+    .xref:hover { background:rgba(59,130,246,.15); opacity:1; }
+    .xref-group { color:#8b949e; font-size:.82em; margin-left:2px; }
+    td .xref-group { display:block; margin-top:3px; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html" class="active">OpenVAS</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()">☰</button>
+
+<aside id="sb" class="sidebar"></aside>
+
+<main id="main" class="main">
+  <div id="content-area"></div>
+</main>
+
+<!-- ============================================================ -->
+<!-- 01 OVERVIEW -->
+<!-- ============================================================ -->
+<template id="tpl-overview">
+<article class="topic">
+<h1>Overview &amp; Architecture</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">OpenVAS operates at L3 (IP-based host targeting), L4 (TCP/UDP port scanning and service probing), and L7 (application-level NVT checks against web servers, databases, and protocols).</span>
+</div>
+<hr class="divider">
+<p><strong>OpenVAS</strong> (Open Vulnerability Assessment Scanner) is the scanning engine at the core of <strong>GVM — Greenbone Vulnerability Management</strong>. It tests hosts against thousands of NVTs (Network Vulnerability Tests) to find exploitable weaknesses, misconfigurations, and missing patches — producing CVSS-scored results that feed directly into remediation workflows and SIEM correlation.</p>
+
+<div class="callout"><strong>SOC Role:</strong> Vulnerability scanners are a proactive tool — run them against your own assets before attackers do. Alert correlation improves dramatically when you know which hosts are unpatched against the CVE a Suricata rule just triggered on.</div>
+
+<h3>GVM Component Stack</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Component</th><th>Role</th><th>Process / Port</th></tr></thead>
+  <tbody>
+    <tr><td><strong>GSA</strong> (Greenbone Security Assistant)</td><td>Web UI — the interface you work in daily</td><td>gsad · TCP 9392 (HTTPS)</td></tr>
+    <tr><td><strong>GVM</strong> (Greenbone Vulnerability Manager)</td><td>Manager daemon — orchestrates scans, stores results in PostgreSQL</td><td>gvmd · Unix socket</td></tr>
+    <tr><td><strong>OpenVAS Scanner</strong></td><td>Executes NVTs (Lua/NASL scripts) against targets, sends results to GVM</td><td>openvas · Unix socket</td></tr>
+    <tr><td><strong>Notus Scanner</strong></td><td>Fast local security checks using VEX JSON advisories (replaces some NVTs)</td><td>notus-scanner</td></tr>
+    <tr><td><strong>OSPD-OpenVAS</strong></td><td>OSP daemon wrapping the scanner — GVM speaks to it via OSP protocol</td><td>ospd-openvas · Unix socket</td></tr>
+    <tr><td><strong>Greenbone Feed</strong></td><td>Daily updated NVT/CVE/CPE feed — the vulnerability knowledge base</td><td>greenbone-feed-sync</td></tr>
+    <tr><td><strong>PostgreSQL</strong></td><td>Stores all targets, tasks, results, reports, credentials</td><td>TCP 5432 (local)</td></tr>
+    <tr><td><strong>Redis</strong></td><td>NVT cache shared between GVM and scanner processes</td><td>TCP 6379 (local)</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Scan Data Flow</h3>
+<pre><code>Analyst creates Task (Target + Scan Config + Credentials)
+              ↓
+         gvmd sends task to ospd-openvas
+              ↓
+    openvas loads NVTs from Redis cache
+              ↓
+    Scanner probes target hosts:
+      ├── Port discovery (TCP SYN / connect / UDP)
+      ├── Service detection (banner grabbing, protocol handshakes)
+      ├── Authenticated checks (if credentials provided)
+      └── NVT execution (NASL scripts test each finding)
+              ↓
+    Results (vulnerability, severity, CVSS, solution) → gvmd → PostgreSQL
+              ↓
+    Analyst views Results in GSA → exports Report (PDF/XML/CSV)</code></pre>
+
+<h3>Severity Ratings (CVSS v3)</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Label</th><th>CVSS v3 Score</th><th>Analyst Action</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><strong style="color:#f85149">Critical</strong></td><td>9.0 – 10.0</td><td>Patch immediately — check for active exploitation in SIEM</td><td>EternalBlue, Log4Shell, unauthenticated RCE</td></tr>
+    <tr><td><strong style="color:#db6d28">High</strong></td><td>7.0 – 8.9</td><td>Patch in next maintenance window — verify no exploitation</td><td>Privilege escalation, authenticated RCE, SSRF</td></tr>
+    <tr><td><strong style="color:#d29922">Medium</strong></td><td>4.0 – 6.9</td><td>Schedule remediation, document risk acceptance if deferred</td><td>XSS, information disclosure, weak ciphers</td></tr>
+    <tr><td><strong style="color:#3fb950">Low</strong></td><td>0.1 – 3.9</td><td>Batch remediate — low urgency, track in vuln management</td><td>Missing security headers, outdated banners</td></tr>
+    <tr><td>Log / Info</td><td>0.0</td><td>Informational findings — no direct risk, useful for asset inventory</td><td>Open ports list, OS detection, SSL cert details</td></tr>
+  </tbody>
+</table></div>
+
+<h3>OpenVAS vs Commercial Greenbone</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Edition</th><th>NVT Feed</th><th>Cost</th><th>Best For</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Community Edition (GCE)</strong></td><td>Greenbone Community Feed — updated daily, slightly behind Enterprise</td><td>Free</td><td>Home labs, small orgs, learning</td></tr>
+    <tr><td><strong>Greenbone Enterprise</strong></td><td>Full feed — more NVTs, faster CVE coverage, compliance content</td><td>Paid subscription</td><td>Production SOC, compliance requirements</td></tr>
+  </tbody>
+</table></div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Understanding OpenVAS architecture and severity ratings</h4>
+    <ul>
+      <li>OpenVAS is the scanning engine inside GVM — gvmd orchestrates tasks and ospd-openvas wraps the scanner</li>
+      <li>CVSS scores map to actionable severity labels: Critical (9–10) patch immediately, High (7–8.9) patch this window</li>
+      <li>L3/L4 probes discover what is listening; L7 NVT scripts determine whether those services are exploitable</li>
+    </ul>
+    <pre><code><span class="cm"># Verify all GVM services are up after install</span>
+sudo gvm-check-setup
+sudo systemctl status gvmd ospd-openvas gsad</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Correlating GVM feed data with your asset inventory</h4>
+    <ul>
+      <li>Cross-reference Greenbone NVT families against your asset OS types to choose the right scan config</li>
+      <li>Use Redis NVT cache status to confirm feed sync completed before scheduling scans</li>
+    </ul>
+    <pre><code><span class="cm"># Check NVT count loaded into scanner (should be 80,000+)</span>
+sudo runuser -u _gvm -- gvmd --get-scanners
+<span class="cm"># Sync all feeds if count is low</span>
+sudo runuser -u _gvm -- greenbone-feed-sync</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Integrating GVM feed versioning into CI/CD vulnerability gates</h4>
+    <ul>
+      <li>Pin NVT feed version and track feed deltas in version control to audit which new CVE checks were added each week</li>
+      <li>Automate feed sync via cron and alert when feed age exceeds 48 hours — stale feeds miss new CVEs</li>
+    </ul>
+    <pre><code><span class="cm"># Automate weekly feed sync and rebuild NVT cache</span>
+sudo runuser -u _gvm -- greenbone-feed-sync --type SCAP
+sudo runuser -u _gvm -- gvmd --rebuild-gvmd-data
+<span class="cm"># Log feed version for audit trail</span>
+sudo runuser -u _gvm -- gvmd --get-scanners >> /var/log/gvm/feed-audit.log</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ============================================================ -->
+<!-- 02 INSTALLATION -->
+<!-- ============================================================ -->
+<template id="tpl-install">
+<article class="topic">
+<h1>Installation &amp; Setup</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Installation configures the GVM web application stack (GSA on TCP 9392) and its backend services — operating at L7 where the management interface and API live.</span>
+</div>
+<hr class="divider">
+<p>The easiest way to get GVM running is from the <strong>Kali Linux repos</strong> (GVM is pre-packaged there) or from the official <strong>source build</strong> on Ubuntu. For our lab we'll install on the Ubuntu VM.</p>
+
+<h3>Method A — Kali Linux (Fastest for Lab)</h3>
+<pre><code><span class="cm"># GVM is packaged in Kali — single command install</span>
+sudo apt update && sudo apt install -y gvm
+
+<span class="cm"># Run setup script — downloads feed, creates DB, generates certs (~15-30 min first run)</span>
+sudo gvm-setup
+
+<span class="cm"># Check setup completed correctly — verify all services green</span>
+sudo gvm-check-setup
+
+<span class="cm"># Start all GVM services</span>
+sudo gvm-start
+
+<span class="cm"># Get the auto-generated admin password from setup output</span>
+<span class="cm"># OR reset it:</span>
+sudo runuser -u _gvm -- gvmd --user=admin --new-password='SOClab123!'
+
+<span class="cm"># Open GSA web interface</span>
+<span class="cm"># https://127.0.0.1:9392  (Kali local)  or  https://192.168.56.10:9392 (from host)</span></code></pre>
+
+<h3>Method B — Ubuntu 22.04 (Community Script)</h3>
+<pre><code><span class="cm"># Use the Greenbone community install script</span>
+curl -f -L https://greenbone.github.io/docs/latest/_static/setup-and-start-greenbone-community-edition.sh \
+  -o setup-gvm.sh
+chmod +x setup-gvm.sh && sudo bash setup-gvm.sh
+
+<span class="cm"># The script installs all components via pip + apt and starts services</span>
+<span class="cm"># Check services after install:</span>
+sudo systemctl status gvmd ospd-openvas notus-scanner gsad
+
+<span class="cm"># Default port: 9392 — allow through firewall if needed</span>
+sudo ufw allow 9392/tcp
+
+<span class="cm"># Access from browser — accept the self-signed cert warning</span>
+<span class="cm"># https://192.168.56.20:9392</span></code></pre>
+
+<h3>Feed Sync (Run After Install &amp; Weekly)</h3>
+<pre><code><span class="cm"># Sync all feeds: NVTs, CVEs, CPEs, CERT advisories, SCAP data</span>
+sudo runuser -u _gvm -- greenbone-feed-sync
+
+<span class="cm"># Or sync individually</span>
+sudo runuser -u _gvm -- greenbone-feed-sync --type GVMD_DATA
+sudo runuser -u _gvm -- greenbone-feed-sync --type SCAP
+sudo runuser -u _gvm -- greenbone-feed-sync --type CERT
+
+<span class="cm"># After sync — update NVT cache in database (required after first sync)</span>
+sudo runuser -u _gvm -- gvmd --rebuild-gvmd-data
+
+<span class="cm"># Verify NVT count loaded (should be 80,000+)</span>
+sudo runuser -u _gvm -- gvmd --get-scanners</code></pre>
+
+<h3>Common Post-Install Checks</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Check</th><th>Command</th><th>Expected Result</th></tr></thead>
+  <tbody>
+    <tr><td>All services running</td><td><code>sudo gvm-check-setup</code></td><td>No red errors — all green</td></tr>
+    <tr><td>NVTs loaded</td><td><code>sudo runuser -u _gvm -- gvmd --get-scanners</code></td><td>Shows scanner with NVT count</td></tr>
+    <tr><td>GSA accessible</td><td>Browser → https://host:9392</td><td>Login page loads (accept self-signed cert)</td></tr>
+    <tr><td>Admin login works</td><td>admin / (password from setup)</td><td>Dashboard loads</td></tr>
+    <tr><td>Feed version</td><td>Administration → Feed Status</td><td>All feeds show "Current"</td></tr>
+  </tbody>
+</table></div>
+
+<div class="callout warn">
+  <strong>RAM requirement:</strong> GVM needs at least 4 GB RAM to run comfortably. The initial feed sync and first scan use significant memory. Allocate 6+ GB to the VM if possible. Running on Kali alongside other tools may cause OOM — monitor with <code>free -h</code>.
+</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Getting GVM up and running on Kali Linux</h4>
+    <ul>
+      <li>Use <code>sudo gvm-setup</code> on Kali — it handles all components including the PostgreSQL database and Redis cache</li>
+      <li>Always run <code>gvm-check-setup</code> after install to confirm all services are green before creating your first scan</li>
+      <li>The GSA web interface runs at L7 on HTTPS port 9392 — accept the self-signed certificate in your browser</li>
+    </ul>
+    <pre><code><span class="cm"># Full Kali install and verify sequence</span>
+sudo apt update && sudo apt install -y gvm
+sudo gvm-setup
+sudo gvm-check-setup
+sudo gvm-start</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Managing feeds and verifying NVT cache completeness</h4>
+    <ul>
+      <li>Run <code>greenbone-feed-sync</code> weekly to keep NVT, SCAP, and CERT feeds current — stale feeds miss new CVEs</li>
+      <li>After feed sync, rebuild the gvmd data so new NVTs are available to scan configs</li>
+    </ul>
+    <pre><code><span class="cm"># Sync all feed types then rebuild NVT cache</span>
+sudo runuser -u _gvm -- greenbone-feed-sync --type GVMD_DATA
+sudo runuser -u _gvm -- greenbone-feed-sync --type SCAP
+sudo runuser -u _gvm -- greenbone-feed-sync --type CERT
+sudo runuser -u _gvm -- gvmd --rebuild-gvmd-data</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Ubuntu source build with custom service hardening</h4>
+    <ul>
+      <li>Deploy GVM on Ubuntu with separate service accounts and restrict the gsad socket to a reverse proxy (nginx) — avoids exposing GVM directly on 9392</li>
+      <li>Use systemd drop-in overrides to apply security hardening (PrivateTmp, ProtectSystem) to gvmd and ospd-openvas</li>
+    </ul>
+    <pre><code><span class="cm"># Restrict GSA to localhost and reverse-proxy via nginx</span>
+sudo sed -i 's/--listen=0.0.0.0/--listen=127.0.0.1/' /lib/systemd/system/gsad.service
+sudo systemctl daemon-reload && sudo systemctl restart gsad
+<span class="cm"># Verify only listening on loopback</span>
+ss -tlnp | grep 9392</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ============================================================ -->
+<!-- 03 TARGETS -->
+<!-- ============================================================ -->
+<template id="tpl-targets">
+<article class="topic">
+<h1>Targets &amp; Port Lists</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-note">Targets define L3 IP address scope (hosts, CIDRs, ranges) and L4 port lists that determine which TCP/UDP ports the scanner probes on each host.</span>
+</div>
+<hr class="divider">
+<p>A <strong>Target</strong> is the scope definition for a scan — one or more hosts, the port range to test, and optionally credentials for authenticated scanning. Always define targets before creating tasks.</p>
+
+<h3>Creating a Target (GSA UI)</h3>
+<pre><code>Configuration → Targets → New Target (★ icon)
+
+Name:          Windows 10 Lab Host
+Hosts:         192.168.56.30
+               <span class="cm"># or CIDR: 192.168.56.0/24</span>
+               <span class="cm"># or range: 192.168.56.1-50</span>
+               <span class="cm"># or hostname: win10.lab.local</span>
+               <span class="cm"># or comma-separated: 192.168.56.10, 192.168.56.30</span>
+
+Exclude Hosts: 192.168.56.20   <span class="cm"># skip the scanner itself</span>
+
+Port List:     All IANA assigned TCP    <span class="cm"># see table below</span>
+
+Alive Test:    ICMP, TCP-ACK Service Ping   <span class="cm"># recommended default</span>
+
+Credentials:   (leave empty for unauthenticated, or attach — see Section 07)</span>
+
+SSH:           (optional — for Linux credential scan)
+SMB:           (optional — for Windows credential scan)</code></pre>
+
+<h3>Port Lists</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Port List</th><th>Ports Scanned</th><th>Best For</th><th>Scan Speed</th></tr></thead>
+  <tbody>
+    <tr><td><strong>OpenVAS Default</strong></td><td>~4,500 most common ports (TCP)</td><td>Quick general scan — covers the vast majority of services</td><td>Fast</td></tr>
+    <tr><td><strong>All IANA Assigned TCP</strong></td><td>All registered TCP ports (0–49151)</td><td>Thorough — catches non-standard service ports</td><td>Medium</td></tr>
+    <tr><td><strong>All TCP</strong></td><td>All 65535 TCP ports</td><td>Full coverage — slowest, use for critical hosts</td><td>Slow</td></tr>
+    <tr><td><strong>All TCP and Nmap Top 100 UDP</strong></td><td>All TCP + top 100 UDP ports</td><td>Most comprehensive — catches DNS, SNMP, TFTP misconfigs</td><td>Very Slow</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Alive Test Methods</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Method</th><th>How It Works</th><th>Use When</th></tr></thead>
+  <tbody>
+    <tr><td>ICMP Ping</td><td>Sends ICMP echo request — host alive if reply received</td><td>Internal networks where ICMP is not blocked</td></tr>
+    <tr><td>TCP-ACK Service Ping</td><td>Sends TCP ACK to ports 80, 443 — RST reply = alive</td><td>Hosts that block ICMP (common for Windows with firewall)</td></tr>
+    <tr><td>ARP Ping</td><td>Layer-2 ARP request — works only on same subnet</td><td>Same-subnet scans only, very reliable</td></tr>
+    <tr><td>Consider Alive</td><td>Skips alive check entirely — scans host regardless</td><td>When hosts block all probes but are known to be up</td></tr>
+    <tr><td>ICMP + TCP-ACK (recommended)</td><td>Tries both — more reliable alive detection</td><td>Default recommendation for mixed environments</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Target CLI (gvm-cli)</h3>
+<pre><code><span class="cm"># List all targets</span>
+gvm-cli --gmp-username admin --gmp-password 'SOClab123!' \
+  socket --xml '<get_targets/>'
+
+<span class="cm"># Create a target via GMP XML</span>
+gvm-cli --gmp-username admin --gmp-password 'SOClab123!' \
+  socket --xml '<create_target>
+    <name>Lab Windows 10</name>
+    <hosts>192.168.56.30</hosts>
+    <port_list id="33d0cd82-57c6-11e1-8ed1-406186ea4fc5"/>
+  </create_target>'
+<span class="cm"># Port list ID above = "All IANA assigned TCP" — get IDs via get_port_lists</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Defining scan targets with the right scope</h4>
+    <ul>
+      <li>Always create a named Target before a Task — it defines the L3 IP scope and L4 port range in one reusable object</li>
+      <li>Exclude the scanner's own IP from target ranges to avoid scanning yourself and generating false alerts</li>
+      <li>Use <em>ICMP + TCP-ACK Service Ping</em> as the alive test — catches hosts that block ICMP (common on Windows)</li>
+    </ul>
+    <pre><code><span class="cm"># Minimal target via GSA for the lab Windows 10 VM</span>
+<span class="cm"># Configuration → Targets → New Target</span>
+<span class="cm"># Hosts: 192.168.56.30  |  Port List: All IANA Assigned TCP</span>
+<span class="cm"># Exclude: 192.168.56.10 (scanner itself)</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Creating targets via CLI and managing port list selection</h4>
+    <ul>
+      <li>Use "All TCP and Nmap Top 100 UDP" port list for critical servers — catches SNMP, DNS, and TFTP misconfigs invisible in TCP-only scans</li>
+      <li>Automate target creation with gvm-cli for large asset inventories pulled from a CMDB or CSV</li>
+    </ul>
+    <pre><code><span class="cm"># Create target via GMP CLI with IANA TCP port list</span>
+gvm-cli --gmp-username admin --gmp-password 'SOClab123!' \
+  socket --xml '<create_target>
+    <name>Lab Windows 10</name>
+    <hosts>192.168.56.30</hosts>
+    <exclude_hosts>192.168.56.10</exclude_hosts>
+    <port_list id="33d0cd82-57c6-11e1-8ed1-406186ea4fc5"/>
+  </create_target>'</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Dynamic target generation from live asset inventory feeds</h4>
+    <ul>
+      <li>Script target creation from a CMDB API — pull active host IPs, group by OS type, create separate targets for Windows vs Linux to apply appropriate credentials and NVT families</li>
+      <li>Use ARP Ping alive test for same-subnet scans to find hosts that silently drop ICMP and TCP probes</li>
+    </ul>
+    <pre><code><span class="cm"># Python loop to create one target per host from a CSV asset list</span>
+<span class="cm">#!/usr/bin/env python3</span>
+from gvm.connections import UnixSocketConnection
+from gvm.protocols.gmp import Gmp
+import csv
+
+with Gmp(connection=UnixSocketConnection()) as gmp:
+    gmp.authenticate("admin", "SOClab123!")
+    with open("assets.csv") as f:
+        for row in csv.DictReader(f):
+            gmp.create_target(name=row["hostname"], hosts=[row["ip"]],
+                              port_list_id="33d0cd82-57c6-11e1-8ed1-406186ea4fc5")</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ============================================================ -->
+<!-- 04 SCAN CONFIGS -->
+<!-- ============================================================ -->
+<template id="tpl-configs">
+<article class="topic">
+<h1>Scan Configs &amp; NVTs</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-note">Scan configs select NVT families that target L3/L4 services — Windows SMB families probe L4 TCP 445, web server NVTs probe L4 port 80/443, and SSL/TLS families test the encryption layer between L4 and L7.</span>
+</div>
+<hr class="divider">
+<p>A <strong>Scan Config</strong> defines <em>what</em> to test — which NVT (Network Vulnerability Test) families are enabled and how aggressive the scanner should be. The right config balances thoroughness against scan duration and network impact.</p>
+
+<h3>Built-in Scan Configs</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Config</th><th>What It Runs</th><th>Duration</th><th>Best For</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Full and Fast</strong></td><td>All NVT families with safe/non-disruptive checks only. Uses dependency optimization for speed.</td><td>Medium (30–120 min for single host)</td><td>Default for most production scans</td></tr>
+    <tr><td><strong>Full and Deep</strong></td><td>All NVT families including slow/thorough checks. No dependency optimization.</td><td>Long (2–8 hours)</td><td>High-value targets, quarterly deep scan</td></tr>
+    <tr><td><strong>Full and Fast Ultimate</strong></td><td>Full and Fast + potentially disruptive checks (may crash services)</td><td>Medium-Long</td><td>Test/lab environments only — not production</td></tr>
+    <tr><td><strong>Host Discovery</strong></td><td>Only alive detection — no vulnerability checks</td><td>Fast (seconds–minutes)</td><td>Asset discovery, IP range enumeration</td></tr>
+    <tr><td><strong>System Discovery</strong></td><td>OS fingerprinting and service enumeration only</td><td>Fast</td><td>Asset inventory before vulnerability scan</td></tr>
+    <tr><td><strong>Empty</strong></td><td>No NVTs — base for building custom configs</td><td>Instant</td><td>Building a custom config from scratch</td></tr>
+  </tbody>
+</table></div>
+
+<h3>NVT Families (What Gets Tested)</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>NVT Family</th><th>What It Tests</th><th>Notable CVEs Covered</th></tr></thead>
+  <tbody>
+    <tr><td>Windows</td><td>Missing patches, SMB vulns, RDP, WinRM, .NET framework issues</td><td>MS17-010 (EternalBlue), BlueKeep, PrintNightmare</td></tr>
+    <tr><td>Web Servers</td><td>Apache, Nginx, IIS misconfigs, directory listing, default creds</td><td>Log4Shell (CVE-2021-44228), Shellshock</td></tr>
+    <tr><td>Web Applications</td><td>SQL injection, XSS, LFI detection via safe probes</td><td>Various OWASP Top 10</td></tr>
+    <tr><td>Databases</td><td>Default credentials, open without auth, exposed management ports</td><td>Unauthenticated MongoDB, Redis RCE</td></tr>
+    <tr><td>SSL/TLS</td><td>Weak ciphers, expired certs, BEAST, POODLE, Heartbleed</td><td>CVE-2014-0160 (Heartbleed)</td></tr>
+    <tr><td>Credentials</td><td>Default credential checks across many services</td><td>admin:admin, admin:password combinations</td></tr>
+    <tr><td>Denial of Service</td><td>Potentially disruptive checks — disabled in safe configs</td><td>Crash-inducing probes</td></tr>
+    <tr><td>Compliance</td><td>CIS benchmark checks, policy compliance (credential required)</td><td>Hardening validation</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Custom Scan Config</h3>
+<pre><code>Configuration → Scan Configs → Clone "Full and Fast" → Edit
+
+<span class="cm"># Customize NVT family selection:</span>
+→ NVT Families tab:
+  ✓ Windows            (if scanning Windows hosts)
+  ✓ Web Servers        (if scanning web servers)
+  ✓ SSL/TLS            (always useful)
+  ✗ Denial of Service  (disable for production targets)
+
+<span class="cm"># Customize scanner preferences:</span>
+→ Scanner Preferences tab:
+  network_targets: 192.168.56.0/24    <span class="cm"># restrict scanner's scope</span>
+  max_checks: 4                        <span class="cm"># parallel NVTs per host</span>
+  max_hosts: 20                        <span class="cm"># parallel hosts to scan</span>
+  time_between_request: 0              <span class="cm"># ms delay between requests</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Choosing the right built-in scan config</h4>
+    <ul>
+      <li><strong>Full and Fast</strong> is the correct default — it runs all safe NVT families with dependency optimization for speed</li>
+      <li>Never use <em>Full and Fast Ultimate</em> on production hosts — it includes potentially disruptive checks that can crash services</li>
+      <li>NVT families map directly to the L3/L4 services you want to test: Windows family = SMB/RDP, Web Servers = HTTP/HTTPS</li>
+    </ul>
+    <pre><code><span class="cm"># Use Host Discovery config first to map live hosts before vulnerability scanning</span>
+<span class="cm"># Scans → Tasks → New Task → Scan Config: Host Discovery</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Building a custom scan config for targeted assessments</h4>
+    <ul>
+      <li>Clone "Full and Fast" and disable the Denial of Service NVT family for production environments</li>
+      <li>Tune <code>max_checks</code> and <code>max_hosts</code> scanner preferences to prevent scan traffic from saturating network links</li>
+    </ul>
+    <pre><code><span class="cm"># Clone and edit via GSA</span>
+<span class="cm"># Configuration → Scan Configs → Clone "Full and Fast" → Edit</span>
+<span class="cm"># NVT Families: uncheck Denial of Service</span>
+<span class="cm"># Scanner Preferences: max_checks=4, max_hosts=5</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Custom NVT selection for compliance-focused configs</h4>
+    <ul>
+      <li>Build a config that runs only Compliance NVT family with SSH credentials — generates CIS benchmark pass/fail results per control</li>
+      <li>Export config as XML and version-control it alongside your scan schedules for repeatable, auditable assessments</li>
+    </ul>
+    <pre><code><span class="cm"># Export scan config for version control</span>
+gvm-cli --gmp-username admin --gmp-password 'SOClab123!' \
+  socket --xml '<get_configs config_id="CONFIG-UUID" details="1"/>' \
+  > configs/cis-linux-scan-config.xml
+<span class="cm"># Import on new GVM instance</span>
+gvm-cli ... socket --xml "$(cat configs/cis-linux-scan-config.xml | \
+  sed 's/get_configs/import_config/')"</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ============================================================ -->
+<!-- 05 TASKS -->
+<!-- ============================================================ -->
+<template id="tpl-tasks">
+<article class="topic">
+<h1>Tasks &amp; Scheduling</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Task scheduling and alert configuration are L7 management-plane operations — they orchestrate when and how the scanner generates L3/L4/L7 probe traffic toward targets.</span>
+</div>
+<hr class="divider">
+<p>A <strong>Task</strong> ties together a Target, Scan Config, Scanner, and optionally a Schedule and Alerts. It's the unit of work that produces a Report when run.</p>
+
+<h3>Creating and Running a Task</h3>
+<pre><code>Scans → Tasks → New Task (★ icon)
+
+Name:         Weekly Windows 10 Vuln Scan
+Scanner:      OpenVAS Default Scanner
+Scan Config:  Full and Fast
+Target:       Windows 10 Lab Host     <span class="cm"># created in Targets section</span>
+Schedule:     Weekly (Monday 02:00)   <span class="cm"># or leave blank for on-demand</span>
+Alerts:       Email on Done           <span class="cm"># optional — see Alerts section</span>
+Max Concurrent NVTs:   4
+Max Concurrent Hosts:  1              <span class="cm"># scan one host at a time in lab</span>
+
+→ Save → then click ▶ (Play) to start immediately</code></pre>
+
+<h3>Task Status Meanings</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Status</th><th>Icon</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Requested</strong></td><td>⟳</td><td>Queued — waiting for scanner resources</td></tr>
+    <tr><td><strong>Running</strong></td><td>▶</td><td>Actively scanning — shows % progress</td></tr>
+    <tr><td><strong>Done</strong></td><td>✓</td><td>Completed — click to view report</td></tr>
+    <tr><td><strong>Stopped</strong></td><td>⏹</td><td>Manually stopped or timed out</td></tr>
+    <tr><td><strong>Error</strong></td><td>✗</td><td>Failed — check task logs for reason</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Monitoring a Running Scan</h3>
+<pre><code><span class="cm"># Watch scanner process on host</span>
+ps aux | grep openvas
+top -p $(pgrep openvas)
+
+<span class="cm"># Tail scanner log for active NVT execution</span>
+sudo tail -f /var/log/gvm/openvas.log
+
+<span class="cm"># GVM manager log</span>
+sudo tail -f /var/log/gvm/gvmd.log
+
+<span class="cm"># Check ospd status</span>
+sudo tail -f /var/log/gvm/ospd-openvas.log
+
+<span class="cm"># In GSA: Scans → Tasks → click running task → "Details" → see live progress %</span></code></pre>
+
+<h3>Scheduling</h3>
+<pre><code>Configuration → Schedules → New Schedule
+
+Name:      Weekly Scan Window
+First Run: Monday 2026-01-20 02:00 UTC
+Period:    1 Week
+Duration:  8 hours   <span class="cm"># if scan exceeds this time, it stops</span>
+Timezone:  UTC
+
+<span class="cm"># Then in the Task → Schedule field → select the schedule</span>
+<span class="cm"># Best practice: scan during maintenance windows, not peak hours</span>
+<span class="cm"># Large CIDR ranges: consider splitting into smaller tasks per subnet</span></code></pre>
+
+<h3>Alerts (Notifications)</h3>
+<pre><code>Configuration → Alerts → New Alert
+
+Condition:   Task Status changed to Done
+             OR: Severity at least High
+Method:      Email
+To:          soc-team@company.com
+Subject:     GVM Scan Complete: $n ($T findings)
+
+<span class="cm"># Other notification methods:</span>
+<span class="cm"># HTTP GET/POST → webhook to SOAR/Slack/Teams</span>
+<span class="cm"># SNMP trap → for legacy monitoring systems</span>
+<span class="cm"># SMB → write report to network share</span>
+<span class="cm"># Tipping Point SMS/SCP → specialized integrations</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Creating and running your first scan task</h4>
+    <ul>
+      <li>A Task combines Target + Scan Config + Scanner into a runnable job — click the Play (▶) button to start immediately</li>
+      <li>Monitor progress in Scans → Tasks — the percentage updates live as NVTs execute against the L3/L4 target</li>
+      <li>Watch <code>/var/log/gvm/openvas.log</code> during a scan to see exactly which NVTs are running</li>
+    </ul>
+    <pre><code><span class="cm"># Tail the scanner log to see live NVT execution</span>
+sudo tail -f /var/log/gvm/openvas.log
+<span class="cm"># Tail the manager log for task orchestration events</span>
+sudo tail -f /var/log/gvm/gvmd.log</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Scheduling recurring scans aligned with maintenance windows</h4>
+    <ul>
+      <li>Configure schedules with a duration limit to auto-stop scans that run over — prevents interference with business hours traffic</li>
+      <li>Add email or webhook alerts on "Severity at least High" so the SOC is notified before the full report is reviewed</li>
+    </ul>
+    <pre><code><span class="cm"># Create a weekly schedule via GSA</span>
+<span class="cm"># Configuration → Schedules → New Schedule</span>
+<span class="cm"># Period: 1 Week | Duration: 8 hours | First Run: Monday 02:00 UTC</span>
+<span class="cm"># Attach to task: Scans → Tasks → edit task → Schedule field</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Automating task execution and chaining scans via GMP API</h4>
+    <ul>
+      <li>Use python-gvm to trigger scans after deployment pipeline events — scan new hosts within minutes of provisioning</li>
+      <li>Chain tasks: run Host Discovery first, extract live IPs, auto-create targets, then trigger Full and Fast tasks programmatically</li>
+    </ul>
+    <pre><code><span class="cm"># Start a task programmatically via GMP</span>
+gvm-cli --gmp-username admin --gmp-password 'SOClab123!' \
+  socket --xml '<start_task task_id="TASK-UUID"/>'
+<span class="cm"># Poll status until Done</span>
+gvm-cli ... socket --xml '<get_tasks task_id="TASK-UUID"/>' \
+  | grep -E '&lt;status&gt;|&lt;progress&gt;'</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ============================================================ -->
+<!-- 06 RESULTS -->
+<!-- ============================================================ -->
+<template id="tpl-results">
+<article class="topic">
+<h1>Results &amp; Reports</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Results map vulnerabilities to specific hosts (L3), ports (L4), and application-layer services (L7) — each finding references the exact network location where the weakness was detected.</span>
+</div>
+<hr class="divider">
+<p>After a task completes, GVM generates a <strong>Report</strong> containing all findings. Results are individual vulnerability instances — each one maps to an NVT, a host, a port/service, a CVSS score, and remediation guidance.</p>
+
+<h3>Navigating a Report</h3>
+<pre><code>Scans → Reports → click the latest report for your task
+
+<span class="cm"># Default view: results filtered by severity (Critical first)</span>
+<span class="cm"># Columns: Vulnerability · Severity · QoD · Host · Location · Created</span>
+
+Filter bar — useful combinations:
+  severity>7.0              <span class="cm"># High and Critical only</span>
+  host=192.168.56.30        <span class="cm"># single host focus</span>
+  family="Windows"          <span class="cm"># Windows NVT family only</span>
+  solution_type="VendorFix" <span class="cm"># only patching fixes (not workarounds)</span>
+
+<span class="cm"># Click any result row to expand full details:</span>
+→ Vulnerability name and description
+→ CVSS v3 vector string and score breakdown
+→ Affected software/version detected
+→ Solution (patch version, config change, etc.)
+→ References (CVE IDs, Bugtraq, CERT advisories)
+→ Port / service where vulnerability was found</code></pre>
+
+<h3>Understanding a Result</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Field</th><th>Meaning</th><th>What to Look For</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Severity</strong></td><td>CVSS v3 score (0–10) mapped to label</td><td>Critical/High = patch immediately or accept risk with documentation</td></tr>
+    <tr><td><strong>QoD</strong></td><td>Quality of Detection (%) — confidence that this is a real finding</td><td>&gt;70% = reliable. &lt;30% = remote banner-based guess, may be FP</td></tr>
+    <tr><td><strong>Solution Type</strong></td><td>VendorFix / Workaround / Mitigation / WillNotFix / NoneAvailable</td><td>VendorFix = patch exists. WillNotFix = EOL software — document risk</td></tr>
+    <tr><td><strong>CVE</strong></td><td>CVE identifier(s) associated with the finding</td><td>Cross-reference with Suricata ET exploit rules — is this being targeted?</td></tr>
+    <tr><td><strong>Location</strong></td><td>Port and protocol (e.g. 445/tcp, 80/tcp)</td><td>Unexpected open ports = additional attack surface beyond the vuln itself</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Exporting Reports</h3>
+<pre><code><span class="cm"># From report view — click the download icon (📥)</span>
+Format options:
+  PDF            → executive summary and findings (best for management)
+  XML            → machine-readable, import to SIEM or vuln mgmt platform
+  CSV            → spreadsheet for tracking and filtering
+  HTML           → web-readable full report
+  TXT            → plain text
+
+<span class="cm"># CLI export via gvm-cli</span>
+gvm-cli --gmp-username admin --gmp-password 'SOClab123!' \
+  socket --xml '<get_reports report_id="REPORT-UUID" format_id="FORMAT-ID"/>' \
+  > report.xml
+
+<span class="cm"># Get available format IDs</span>
+gvm-cli --gmp-username admin --gmp-password 'SOClab123!' \
+  socket --xml '<get_report_formats/>'</code></pre>
+
+<h3>Delta Reports — Tracking Remediation</h3>
+<pre><code><span class="cm"># Compare two reports to see what was fixed and what's new</span>
+Scans → Reports → select a report → "Delta" button → select previous report
+
+<span class="cm"># Delta result states:</span>
+New      → vulnerability appeared in this scan, not the previous one
+Gone     → was in previous scan, no longer present (remediated or closed port)
+Same     → unchanged — still present, not addressed
+Changed  → same NVT, but severity or details changed (patch partially applied)
+
+<span class="cm"># Use delta reports to prove remediation in change tickets</span>
+<span class="cm"># Best practice: run baseline scan → remediate → run again → compare delta</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Reading and filtering scan results</h4>
+    <ul>
+      <li>Results are sorted by CVSS score descending — always address Critical (9–10) first, then High (7–8.9)</li>
+      <li>The QoD (Quality of Detection) percentage indicates confidence — results below 30% may be banner-based guesses at L4 and require manual verification</li>
+      <li>Click any result row to see the CVE reference, affected software version, and the exact L3/L4 location (host:port)</li>
+    </ul>
+    <pre><code><span class="cm"># GSA filter bar — focus on high-confidence actionable findings</span>
+<span class="cm"># severity>7.0 AND solution_type=VendorFix AND min_qod=70</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Exporting reports and using delta comparison</h4>
+    <ul>
+      <li>Export XML for SIEM ingestion — the GVM XML schema includes CVSS vectors, CVE lists, and affected host:port per finding</li>
+      <li>Use Delta Reports to prove remediation — "Gone" status confirms the vulnerability at a specific L3/L4 location was resolved</li>
+    </ul>
+    <pre><code><span class="cm"># Export high/critical findings as CSV for tracking</span>
+gvm-cli --gmp-username admin --gmp-password 'SOClab123!' \
+  socket --xml '<get_reports report_id="REPORT-UUID" \
+  format_id="c1645568-627a-11e3-a660-406186ea4fc5" \
+  filter="severity>7"/>' | base64 -d > critical_findings.csv</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Automated report parsing and SIEM feed integration</h4>
+    <ul>
+      <li>Parse GVM XML reports with python-gvm to extract CVE-to-host mappings and push structured records to Elasticsearch for cross-correlation with IDS alerts</li>
+      <li>Build a remediation SLA tracker: auto-flag findings that remain "Same" across consecutive delta reports past your patch window deadline</li>
+    </ul>
+    <pre><code><span class="cm"># Parse GVM XML and push findings to Elasticsearch</span>
+python3 -c "
+import xml.etree.ElementTree as ET, json, requests
+tree = ET.parse('report.xml')
+for r in tree.getroot().iter('result'):
+    doc = {'host': r.findtext('.//host'), 'port': r.findtext('.//port'),
+           'severity': r.findtext('.//severity'), 'cve': r.findtext('.//cve')}
+    requests.post('http://192.168.56.20:9200/gvm-vulns/_doc', json=doc)
+"</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ============================================================ -->
+<!-- 07 CREDENTIALS -->
+<!-- ============================================================ -->
+<template id="tpl-credentials">
+<article class="topic">
+<h1>Credentialed Scans</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Credentialed scanning authenticates at L7 via SSH (Linux) or SMB (Windows) to run local checks — moving beyond network-visible L3/L4 findings to enumerate installed software versions, registry values, and file permissions.</span>
+</div>
+<hr class="divider">
+<p>Unauthenticated scans only see what's exposed to the network — services, open ports, and remotely detectable vulnerabilities. <strong>Credentialed scans</strong> log into the host and run local checks: installed package versions, registry values, file permissions, patch state. They typically find <strong>3–5× more vulnerabilities</strong> than unauthenticated scans on the same host.</p>
+
+<h3>What Credentialed Scans Check</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Check Type</th><th>Examples</th><th>Requires</th></tr></thead>
+  <tbody>
+    <tr><td>Installed package versions</td><td>OpenSSL 1.0.2 (EOL), Apache 2.4.49 (path traversal CVE)</td><td>SSH or SMB login</td></tr>
+    <tr><td>Windows patch state</td><td>Missing KB numbers, Windows Update history</td><td>SMB + admin rights</td></tr>
+    <tr><td>Local service configuration</td><td>Weak SSH config, unencrypted protocols enabled</td><td>SSH + read access</td></tr>
+    <tr><td>File permissions</td><td>World-writable /etc/passwd, SUID binaries</td><td>SSH</td></tr>
+    <tr><td>Compliance checks</td><td>CIS benchmark Level 1/2 pass/fail per control</td><td>SSH or SMB + admin</td></tr>
+    <tr><td>Running services</td><td>Unpatched services listening on loopback only (invisible without login)</td><td>SSH or SMB</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Creating SSH Credentials (Linux Targets)</h3>
+<pre><code><span class="cm"># Best practice: dedicated scan user with sudo (not root login)</span>
+
+<span class="cm"># On the target Linux host:</span>
+sudo useradd -m -s /bin/bash gvm-scanner
+sudo passwd gvm-scanner          <span class="cm"># or use key-based auth (preferred)</span>
+echo "gvm-scanner ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/gvm-scanner
+
+<span class="cm"># Generate SSH key pair for scanner (on GVM host)</span>
+ssh-keygen -t ed25519 -f ~/.ssh/gvm_scan_key -N ""
+ssh-copy-id -i ~/.ssh/gvm_scan_key.pub gvm-scanner@192.168.56.30
+
+<span class="cm"># In GSA — create SSH credential:</span>
+Configuration → Credentials → New Credential
+  Name:       Lab SSH Key
+  Type:       Username + SSH Key
+  Username:   gvm-scanner
+  Private Key: (paste contents of gvm_scan_key)
+  → Attach to Target → SSH field</code></pre>
+
+<h3>Creating SMB Credentials (Windows Targets)</h3>
+<pre><code><span class="cm"># Windows target needs SMB accessible and an admin account</span>
+<span class="cm"># For lab: use the local Administrator account</span>
+
+<span class="cm"># Enable SMB if needed (on Windows 10 target):</span>
+Set-SmbServerConfiguration -EnableSMB2Protocol $true
+netsh advfirewall firewall add rule name="SMB" dir=in action=allow protocol=TCP localport=445
+
+<span class="cm"># In GSA — create SMB credential:</span>
+Configuration → Credentials → New Credential
+  Name:       Lab Windows Admin
+  Type:       Username + Password
+  Username:   Administrator
+  Password:   Password123
+  → Attach to Target → SMB field
+
+<span class="cm"># Note: WMI is used for some Windows checks — ensure WMI is enabled</span>
+<span class="cm"># and the firewall allows: Windows Management Instrumentation (WMI-In)</span></code></pre>
+
+<h3>Verifying Credential Auth Worked</h3>
+<pre><code><span class="cm"># After running a credentialed scan, look for:</span>
+Scans → Reports → your report → filter: family="Credentials"
+
+<span class="cm"># A successful credential check shows:</span>
+NVT: "SSH Authorization" → Result: "Login: gvm-scanner — OK"
+
+<span class="cm"># If credentials failed you'll see:</span>
+NVT: "SSH Authorization" → Result: "SSH login failed"
+<span class="cm"># → Fix: check SSH key permissions, sudo config, firewall rules</span>
+
+<span class="cm"># Windows credential failure:</span>
+NVT: "SMB Login" → Result: "Login failed"
+<span class="cm"># → Fix: check SMB enabled, account not locked, WMI accessible</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Why credentialed scans find far more vulnerabilities</h4>
+    <ul>
+      <li>Unauthenticated scans see only L3/L4 exposed services — credentialed scans log in at L7 and run local checks finding 3–5× more issues</li>
+      <li>For Windows targets, SMB on TCP 445 is the authentication channel; for Linux, SSH on TCP 22</li>
+      <li>After the scan, verify credentials worked by filtering results for <em>family="Credentials"</em> and checking the SSH/SMB Login NVT result</li>
+    </ul>
+    <pre><code><span class="cm"># Verify SSH credential success in the report</span>
+<span class="cm"># Filter: family="Credentials" → look for "SSH Authorization" NVT</span>
+<span class="cm"># Expected result: "Login: gvm-scanner — OK"</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Setting up least-privilege scan accounts with SSH key auth</h4>
+    <ul>
+      <li>Create a dedicated <code>gvm-scanner</code> user with passwordless sudo rather than using root — limits blast radius if credentials are compromised</li>
+      <li>Use SSH key pairs instead of passwords for L7 authentication — prevents credential exposure in GVM database if it is accessed</li>
+    </ul>
+    <pre><code><span class="cm"># Create dedicated scan user on Linux target</span>
+sudo useradd -m -s /bin/bash gvm-scanner
+echo "gvm-scanner ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/gvm-scanner
+<span class="cm"># Generate and deploy SSH key from scanner host</span>
+ssh-keygen -t ed25519 -f ~/.ssh/gvm_scan_key -N ""
+ssh-copy-id -i ~/.ssh/gvm_scan_key.pub gvm-scanner@192.168.56.30</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Secrets management for scan credentials at scale</h4>
+    <ul>
+      <li>Rotate scan credentials via Vault or CyberArk and update GVM credential objects via the GMP API — eliminates long-lived static passwords stored in GVM's database</li>
+      <li>Use per-subnet dedicated service accounts so credential compromise of one scan zone does not expose the entire environment</li>
+    </ul>
+    <pre><code><span class="cm"># Update a GVM credential object via GMP (rotate password)</span>
+gvm-cli --gmp-username admin --gmp-password 'SOClab123!' \
+  socket --xml '<modify_credential credential_id="CRED-UUID">
+    <password>NewRotatedPassword!</password>
+  </modify_credential>'
+<span class="cm"># Automate with a Vault lease renewal hook</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ============================================================ -->
+<!-- 08 FALSE POSITIVES -->
+<!-- ============================================================ -->
+<template id="tpl-falsepos">
+<article class="topic">
+<h1>False Positives &amp; Overrides</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Override management is an L7 application-layer workflow — suppressing or adjusting false positive findings often requires understanding application-specific context like backported patches or compensating network controls.</span>
+</div>
+<hr class="divider">
+<p>Not every finding is exploitable in your environment. <strong>Overrides</strong> let you change the displayed severity of a result — marking it as false positive, adjusting its priority, or adding context notes — without deleting the underlying data.</p>
+
+<h3>When to Use Overrides</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Scenario</th><th>Override Action</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td>Compensating control mitigates the risk</td><td>Lower severity + add note explaining control</td><td>SMB signing disabled — but host has host-based firewall blocking all SMB from untrusted IPs</td></tr>
+    <tr><td>Vendor confirmed false positive</td><td>Set severity to False Positive</td><td>OpenSSL version string matches vuln but patch was backported by distro</td></tr>
+    <tr><td>Risk formally accepted by management</td><td>Lower to Log + note with ticket number</td><td>Legacy system can't be patched — risk accepted until EOL replacement</td></tr>
+    <tr><td>Finding doesn't apply to your environment</td><td>Set to False Positive + note</td><td>Windows RDP vuln on a Linux host (banner-based false detection)</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Creating an Override</h3>
+<pre><code><span class="cm"># From a result row:</span>
+Click result → Result Details → "Create Override" button
+
+NVT:           (auto-filled from selected result)
+Hosts:         192.168.56.30    <span class="cm"># or leave blank for all hosts</span>
+Port:          445/tcp          <span class="cm"># or leave blank for any port</span>
+
+Active:        Yes (permanent) / Until (date) / No (disabled)
+
+New Severity:  False Positive   <span class="cm"># removes from active findings count</span>
+               -OR- set a custom numeric value (e.g. lower to 2.0)
+
+Text:          "Risk accepted: HOST is isolated VLAN, no SMB reach from users.
+                Ticket #CHG-2024-0045 approved by CISO 2024-01-15."
+
+<span class="cm"># Best practice: always document WHY in the override text</span>
+<span class="cm"># Overrides are audit trails — important for compliance reviews</span></code></pre>
+
+<h3>Reviewing Overrides &amp; Suppression Hygiene</h3>
+<pre><code><span class="cm"># List all active overrides</span>
+gvm-cli --gmp-username admin --gmp-password 'SOClab123!' \
+  socket --xml '<get_overrides/>'
+
+<span class="cm"># In GSA</span>
+Scans → Overrides → filter by Active: Yes → review periodically
+
+<span class="cm"># Override hygiene checklist (quarterly review):</span>
+[ ] Is the compensating control still in place?
+[ ] Has the vendor released a patch since the override was set?
+[ ] Is the accepted risk still within tolerance?
+[ ] Are temporary overrides (Until: date) still needed?
+[ ] Have any hosts moved out of the scope of the override?</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Understanding when to override vs when to patch</h4>
+    <ul>
+      <li>False positives most commonly occur with low QoD banner-based NVTs — the scanner sees an L4 service version string but the distro backported the patch</li>
+      <li>Always add a documented reason to the Override text field — these are audit trail entries for compliance reviews</li>
+      <li>Never suppress a finding just because it is inconvenient — document the compensating control or accepted risk with a ticket number</li>
+    </ul>
+    <pre><code><span class="cm"># List all active overrides via GMP</span>
+gvm-cli --gmp-username admin --gmp-password 'SOClab123!' \
+  socket --xml '<get_overrides filter="active=1"/>'</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Scoping overrides precisely to avoid masking real vulnerabilities</h4>
+    <ul>
+      <li>Scope overrides to the specific host IP and port — a blanket override on an NVT across all hosts may hide real vulnerabilities on other assets</li>
+      <li>Use time-limited overrides (Active: Until date) for temporary compensating controls — they auto-expire when the control ends</li>
+    </ul>
+    <pre><code><span class="cm"># Create a scoped, time-limited override via GSA</span>
+<span class="cm"># Result Details → Create Override</span>
+<span class="cm"># Host: 192.168.56.30 | Port: 445/tcp</span>
+<span class="cm"># Active: Until 2026-06-01 | New Severity: False Positive</span>
+<span class="cm"># Text: "Compensating control: host isolated to VLAN-99, no SMB routing in"</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Programmatic override hygiene and compliance reporting</h4>
+    <ul>
+      <li>Automate quarterly override review by querying all overrides older than 90 days via GMP and generating a report for the security team to validate each suppression</li>
+      <li>Export override lists alongside scan results to feed compliance evidence packages — auditors need to see that suppressions are documented and justified</li>
+    </ul>
+    <pre><code><span class="cm"># Export all overrides with age > 90 days for review</span>
+gvm-cli --gmp-username admin --gmp-password 'SOClab123!' \
+  socket --xml '<get_overrides details="1"/>' \
+  | python3 -c "
+import sys, xml.etree.ElementTree as ET
+from datetime import datetime, timedelta
+root = ET.parse(sys.stdin).getroot()
+cutoff = datetime.now() - timedelta(days=90)
+for o in root.findall('.//override'):
+    created = o.findtext('creation_time', '')
+    print(o.get('id'), created, o.findtext('text', '')[:80])
+"</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ============================================================ -->
+<!-- 09 CLI & API -->
+<!-- ============================================================ -->
+<template id="tpl-cli">
+<article class="topic">
+<h1>CLI &amp; API Automation</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">The GMP API is an L7 application protocol (XML over Unix socket or TLS) — all management operations including creating targets, launching scans, and exporting results happen through this application-layer interface.</span>
+</div>
+<hr class="divider">
+<p>GVM exposes all functionality via the <strong>GMP (Greenbone Management Protocol)</strong> — an XML-based API. The <code>gvm-cli</code> tool lets you drive everything from the command line, and <strong>python-gvm</strong> provides a Python SDK for automation.</p>
+
+<h3>gvm-cli Essentials</h3>
+<pre><code><span class="cm"># Install gvm-tools (includes gvm-cli)</span>
+pip install gvm-tools
+
+<span class="cm"># Base connection pattern (socket — works locally on GVM host)</span>
+gvm-cli --gmp-username admin --gmp-password 'SOClab123!' socket --xml '<COMMAND/>'
+
+<span class="cm"># Base connection pattern (TLS — remote access)</span>
+gvm-cli --gmp-username admin --gmp-password 'SOClab123!' \
+  tls --hostname 192.168.56.20 --port 9390 --xml '<COMMAND/>'
+
+<span class="cm"># Common commands</span>
+<span class="cm"># Get all tasks</span>
+gvm-cli ... socket --xml '<get_tasks/>'
+
+<span class="cm"># Start a specific task by UUID</span>
+gvm-cli ... socket --xml '<start_task task_id="TASK-UUID"/>'
+
+<span class="cm"># Get task status</span>
+gvm-cli ... socket --xml '<get_tasks task_id="TASK-UUID"/>' | grep -E 'status|progress'
+
+<span class="cm"># Get all reports</span>
+gvm-cli ... socket --xml '<get_reports/>'
+
+<span class="cm"># Export report as PDF (format_id for PDF)</span>
+gvm-cli ... socket --xml \
+  '<get_reports report_id="REPORT-UUID" format_id="c402cc3e-b531-11e1-9163-406186ea4fc5" \
+   filter="severity>7"/>' | base64 -d > report.pdf
+
+<span class="cm"># Create a target via XML</span>
+gvm-cli ... socket --xml \
+  '<create_target><name>New Host</name><hosts>10.0.0.1</hosts>
+   <port_list id="33d0cd82-57c6-11e1-8ed1-406186ea4fc5"/></create_target>'</code></pre>
+
+<h3>python-gvm Script — Run Scan &amp; Export</h3>
+<pre><code><span class="cm">#!/usr/bin/env python3</span>
+<span class="cm"># Trigger a scan, wait for completion, export CSV</span>
+from gvm.connections import UnixSocketConnection
+from gvm.protocols.gmp import Gmp
+import time, base64
+
+TASK_ID   = "your-task-uuid-here"
+REPORT_FMT = "c1645568-627a-11e3-a660-406186ea4fc5"  <span class="cm"># CSV format ID</span>
+
+with Gmp(connection=UnixSocketConnection()) as gmp:
+    gmp.authenticate("admin", "SOClab123!")
+
+    <span class="cm"># Start the task</span>
+    gmp.start_task(TASK_ID)
+    print("Scan started...")
+
+    <span class="cm"># Poll until done</span>
+    while True:
+        task = gmp.get_task(TASK_ID)
+        status = task.find(".//status").text
+        progress = task.find(".//progress").text
+        print(f"Status: {status}  Progress: {progress}%")
+        if status == "Done":
+            break
+        time.sleep(30)
+
+    <span class="cm"># Get the latest report ID</span>
+    reports = gmp.get_reports(filter_string=f"task_id={TASK_ID}")
+    report_id = reports.find(".//report").get("id")
+
+    <span class="cm"># Export and decode</span>
+    result = gmp.get_report(report_id, report_format_id=REPORT_FMT,
+                             filter_string="severity>4.0")
+    csv_data = base64.b64decode(result.find(".//report").text)
+    with open("scan_results.csv", "wb") as f:
+        f.write(csv_data)
+    print("Exported scan_results.csv")</code></pre>
+
+<h3>Useful GMP Queries</h3>
+<pre><code><span class="cm"># Get scanners (includes NVT count)</span>
+socket --xml '<get_scanners/>'
+
+<span class="cm"># Get all NVT families and their counts</span>
+socket --xml '<get_nvt_families/>'
+
+<span class="cm"># Get credentials list</span>
+socket --xml '<get_credentials/>'
+
+<span class="cm"># Get schedules</span>
+socket --xml '<get_schedules/>'
+
+<span class="cm"># Delete a task</span>
+socket --xml '<delete_task task_id="TASK-UUID"/>'
+
+<span class="cm"># Pause / resume a running task</span>
+socket --xml '<stop_task task_id="TASK-UUID"/>'
+socket --xml '<resume_task task_id="TASK-UUID"/>'</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Using gvm-cli for basic task and report operations</h4>
+    <ul>
+      <li>Install <code>gvm-tools</code> with pip to get the <code>gvm-cli</code> command — it speaks GMP XML over the Unix socket locally on the GVM host</li>
+      <li>All GMP commands follow the pattern: <code>&lt;verb_noun/&gt;</code> for gets, <code>&lt;create_noun&gt;...&lt;/create_noun&gt;</code> for creates</li>
+      <li>Always authenticate first — every socket session requires the username and password parameters</li>
+    </ul>
+    <pre><code><span class="cm"># Install gvm-tools and list all tasks</span>
+pip install gvm-tools
+gvm-cli --gmp-username admin --gmp-password 'SOClab123!' \
+  socket --xml '<get_tasks/>'</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Scripting scan workflows with python-gvm</h4>
+    <ul>
+      <li>Use <code>python-gvm</code> (the official SDK) instead of raw gvm-cli for complex workflows — it provides typed methods and handles XML parsing</li>
+      <li>Pattern: authenticate → start_task → poll until Done → get_reports → export with format_id</li>
+    </ul>
+    <pre><code><span class="cm"># Python-gvm: start task and poll for completion</span>
+from gvm.connections import UnixSocketConnection
+from gvm.protocols.gmp import Gmp
+import time
+
+with Gmp(connection=UnixSocketConnection()) as gmp:
+    gmp.authenticate("admin", "SOClab123!")
+    gmp.start_task("TASK-UUID")
+    while True:
+        t = gmp.get_task("TASK-UUID")
+        if t.find(".//status").text == "Done": break
+        time.sleep(30)</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Building a CI/CD vulnerability gate with the GMP API</h4>
+    <ul>
+      <li>Integrate GVM into deployment pipelines — trigger a targeted scan on newly provisioned hosts and fail the deployment if any Critical CVSS findings are returned</li>
+      <li>Use TLS mode (<code>gvm-cli tls --hostname</code>) to reach a remote GVM instance from CI runners without SSH tunneling</li>
+    </ul>
+    <pre><code><span class="cm"># CI gate: scan new host, fail if Critical findings found</span>
+<span class="cm">#!/usr/bin/env python3</span>
+from gvm.connections import TLSConnection
+from gvm.protocols.gmp import Gmp
+
+with Gmp(connection=TLSConnection(hostname="192.168.56.10")) as gmp:
+    gmp.authenticate("admin", "SOClab123!")
+    <span class="cm"># ... create target, create task, start, poll ...</span>
+    reports = gmp.get_reports(filter_string="task_id=TASK-UUID severity>9")
+    critical_count = len(reports.findall(".//result"))
+    if critical_count > 0:
+        print(f"FAIL: {critical_count} critical vulnerabilities found")
+        exit(1)
+    print("PASS: No critical vulnerabilities detected")</code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ============================================================ -->
+<!-- 10 INTEGRATION -->
+<!-- ============================================================ -->
+<template id="tpl-integration">
+<article class="topic">
+<h1>SIEM Integration &amp; Correlation</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">SIEM integration operates at L7 — exporting vulnerability data via the GMP API and ingesting it into Splunk or ELK through HTTP Event Collector or direct API calls to enrich alert context with patch state information.</span>
+</div>
+<hr class="divider">
+<p>The real power of vulnerability data comes from <strong>correlating scan results with your SIEM alerts</strong>. When Suricata fires an EternalBlue exploit alert, knowing which hosts have MS17-010 unpatched tells you exactly how urgent that alert is.</p>
+
+<h3>CVE to Suricata Rule Correlation Workflow</h3>
+<pre><code><span class="cm"># Step 1 — Get all Critical/High CVEs from GVM report (export XML)</span>
+gvm-cli ... socket --xml '<get_reports report_id="UUID" filter="severity>7"/>' \
+  | xmllint --xpath "//cve" - | sort -u > critical_cves.txt
+
+<span class="cm"># Step 2 — Search your Suricata rules for those CVEs</span>
+grep -F -f critical_cves.txt /opt/so/rules/et/open/*.rules | grep "sid:"
+<span class="cm"># Result: rules actively detecting exploitation of your known-vulnerable hosts</span>
+
+<span class="cm"># Step 3 — In Security Onion Hunt, prioritize alerts for patched vs unpatched hosts</span>
+<span class="cm"># If CVE-2021-44228 (Log4Shell) host is 192.168.56.30 AND unpatched per GVM:</span>
+<span class="cm"># → any Suricata Log4Shell rule hit on that host = CRITICAL — immediate response</span></code></pre>
+
+<h3>Importing GVM Results into Splunk</h3>
+<pre><code><span class="cm"># Export GVM report as CSV</span>
+<span class="cm"># Upload to Splunk via HTTP Event Collector or monitor a directory</span>
+
+<span class="cm"># Splunk — index CSV from GVM export</span>
+[monitor:///opt/gvm/reports/*.csv]
+index = vulnerability
+sourcetype = gvm_csv
+disabled = false
+
+<span class="cm"># Splunk SPL — find hosts with critical vulns that also have Suricata alerts</span>
+index=vulnerability severity_class=Critical
+| stats values(vulnerability) as vulns by host
+| join host
+  [search index=ids sourcetype=suricata event.severity_label=high
+   | stats count by source.ip | rename source.ip as host]
+| table host, count, vulns</code></pre>
+
+<h3>Importing GVM Results into ELK</h3>
+<pre><code><span class="cm"># Export GVM report as XML, convert to JSON with xsltproc or python script</span>
+<span class="cm"># Then push to Elasticsearch</span>
+
+python3 -c "
+import xml.etree.ElementTree as ET, json, requests
+
+tree = ET.parse('report.xml')
+root = tree.getroot()
+for result in root.iter('result'):
+    doc = {
+        'host':     result.findtext('.//host'),
+        'port':     result.findtext('.//port'),
+        'severity': result.findtext('.//severity'),
+        'name':     result.findtext('.//name'),
+        'cve':      [c.text for c in result.findall('.//ref[@type=\"cve\"]')],
+    }
+    requests.post('http://192.168.56.20:9200/gvm-results/_doc', json=doc)
+print('Imported to Elasticsearch')
+"</code></pre>
+
+<h3>Correlating with Asset Inventory</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Vulnerability Finding</th><th>Correlation Action</th><th>Tool</th></tr></thead>
+  <tbody>
+    <tr><td>Critical CVE on host X</td><td>Check if Suricata has a rule for that CVE — how many hits recently?</td><td>Security Onion Hunt</td></tr>
+    <tr><td>Default credentials found</td><td>Correlate with auth logs — has anyone logged in with those creds?</td><td>Splunk / ELK / Zeek</td></tr>
+    <tr><td>Open port not in CMDB</td><td>Alert asset team — shadow service or misconfiguration</td><td>Ticketing system</td></tr>
+    <tr><td>EOL software detected</td><td>Schedule emergency replacement or network-segment isolation</td><td>Change management</td></tr>
+  </tbody>
+</table></div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Understanding CVE-to-alert correlation value</h4>
+    <ul>
+      <li>A Suricata IDS alert gains critical urgency when the targeted host is confirmed unpatched for that specific CVE in GVM — this is the core value of correlating vulnerability and detection data</li>
+      <li>Export GVM reports as CSV and ingest into Splunk index=vulnerability to enable SPL joins with IDS alert data</li>
+      <li>Start with Critical/High CVEs and search for corresponding Suricata ET rules using the CVE ID as the search term</li>
+    </ul>
+    <pre><code><span class="cm"># Find Suricata rules matching CVEs from GVM report</span>
+grep -r "CVE-2017-0144\|CVE-2021-44228" /opt/so/rules/ | grep "sid:"</code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Building a vulnerability-enriched alert triage workflow in Splunk</h4>
+    <ul>
+      <li>Join GVM vulnerability data with Suricata alerts in Splunk using the host IP as the common key — alerts on unpatched hosts auto-escalate to Critical priority</li>
+      <li>Create a Splunk dashboard tile showing "Critical CVE host IPs that have fired IDS alerts this week" for daily SOC triage</li>
+    </ul>
+    <pre><code><span class="cm"># Splunk SPL: hosts with critical vulns AND recent IDS alerts</span>
+index=vulnerability severity_class=Critical
+| stats values(vulnerability) as vulns by host
+| join host [search index=ids sourcetype=suricata
+    event.severity_label=high
+  | stats count by source.ip | rename source.ip as host]
+| table host, count, vulns</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Automated vulnerability context enrichment via SOAR playbooks</h4>
+    <ul>
+      <li>Integrate GVM GMP API into SOAR (XSOAR/TheHive) playbooks — when an IDS alert fires, the playbook auto-queries GVM for CVE patch state on that host and adds it to the incident ticket</li>
+      <li>Use ELK pipeline enrichment to tag incoming Zeek conn.log events with vulnerability status from the GVM Elasticsearch index in real time</li>
+    </ul>
+    <pre><code><span class="cm"># Logstash pipeline: enrich Zeek events with GVM vulnerability data</span>
+<span class="cm"># In logstash pipeline config:</span>
+<span class="cm"># filter { elasticsearch {</span>
+<span class="cm">#   hosts => ["192.168.56.20:9200"]</span>
+<span class="cm">#   index => "gvm-vulns"</span>
+<span class="cm">#   query => "host:%{[source][ip]} AND severity:>7"</span>
+<span class="cm">#   fields => { "vulnerability" => "gvm_vuln_name" }</span>
+<span class="cm"># }}</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<!-- ============================================================ -->
+<!-- 11 LAB -->
+<!-- ============================================================ -->
+<template id="tpl-lab">
+<article class="topic">
+<h1>Investigation Lab</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">This lab exercises the full OpenVAS scanning stack — L3 host discovery, L4 port enumeration, and L7 credentialed NVT checks — followed by correlation of findings with Suricata IDS rules in Security Onion.</span>
+</div>
+<hr class="divider">
+
+<div class="callout lab">
+  <strong>Lab Goal:</strong> Run both unauthenticated and credentialed vulnerability scans against the Windows 10 VM, analyze the findings, correlate high-severity CVEs with Suricata rules, and build a patch-priority report.
+</div>
+
+<h3>Lab Environment</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>VM</th><th>IP</th><th>Role</th><th>Software</th></tr></thead>
+  <tbody>
+    <tr><td>Kali Linux</td><td>192.168.56.10</td><td>GVM Scanner Host</td><td>GVM / OpenVAS (via apt)</td></tr>
+    <tr><td>Ubuntu 22.04</td><td>192.168.56.20</td><td>Optional ELK / log sink</td><td>Elasticsearch (from ELK lab)</td></tr>
+    <tr><td>Windows 10</td><td>192.168.56.30</td><td>Scan Target</td><td>Intentionally unpatched, SMB enabled</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Phase 1 — Install GVM on Kali (192.168.56.10)</h3>
+<pre><code><span class="cm"># On Kali Linux</span>
+sudo apt update && sudo apt install -y gvm
+
+<span class="cm"># Initial setup — takes 15–30 min (downloads NVT feed)</span>
+sudo gvm-setup
+
+<span class="cm"># Verify setup</span>
+sudo gvm-check-setup
+<span class="cm"># Fix any red items before continuing</span>
+
+<span class="cm"># Start GVM services</span>
+sudo gvm-start
+
+<span class="cm"># Open browser to https://127.0.0.1:9392</span>
+<span class="cm"># Login: admin / (password shown at end of gvm-setup output)</span>
+<span class="cm"># If lost: sudo runuser -u _gvm -- gvmd --user=admin --new-password='SOClab123!'</span></code></pre>
+
+<h3>Phase 2 — Prepare Windows 10 Target (192.168.56.30)</h3>
+<pre><code><span class="cm"># --- On Windows 10 (PowerShell as Admin) ---</span>
+
+<span class="cm"># Ensure SMB is enabled and accessible (for credentialed scan)</span>
+Set-SmbServerConfiguration -EnableSMB2Protocol $true -Force
+
+<span class="cm"># Allow SMB through Windows Firewall</span>
+Enable-NetFirewallRule -DisplayGroup "File and Printer Sharing"
+
+<span class="cm"># Optionally disable Windows Defender for lab purposes</span>
+Set-MpPreference -DisableRealtimeMonitoring $true
+
+<span class="cm"># Confirm the IP</span>
+ipconfig | findstr "192.168"</code></pre>
+
+<h3>Phase 3 — Run Unauthenticated Scan</h3>
+<pre><code><span class="cm">--- In GSA (https://127.0.0.1:9392) ---</span>
+
+<span class="cm"># Create Target</span>
+Configuration → Targets → New Target
+  Name:      Win10 Unauth
+  Hosts:     192.168.56.30
+  Port List: All IANA Assigned TCP
+  Alive Test: ICMP, TCP-ACK Service Ping
+
+<span class="cm"># Create Task</span>
+Scans → Tasks → New Task
+  Name:        Lab Unauthenticated Scan
+  Target:      Win10 Unauth
+  Scan Config: Full and Fast
+  → Save → ▶ Start
+
+<span class="cm"># Monitor progress</span>
+<span class="cm"># Scans → Tasks → watch % complete (15–45 min typical)</span>
+
+<span class="cm"># When Done: click report → note total finding count and severity breakdown</span></code></pre>
+
+<h3>Phase 4 — Run Credentialed Scan</h3>
+<pre><code><span class="cm">--- In GSA ---</span>
+
+<span class="cm"># Create SMB Credential</span>
+Configuration → Credentials → New Credential
+  Name:     Win10 Admin
+  Type:     Username + Password
+  Username: Administrator
+  Password: Password123   <span class="cm"># your lab Windows password</span>
+
+<span class="cm"># Create new Target with credentials attached</span>
+Configuration → Targets → New Target
+  Name:      Win10 Credentialed
+  Hosts:     192.168.56.30
+  Port List: All IANA Assigned TCP
+  SMB:       Win10 Admin        <span class="cm"># ← attach credential here</span>
+
+<span class="cm"># Create and run credentialed Task</span>
+Scans → Tasks → New Task
+  Name:        Lab Credentialed Scan
+  Target:      Win10 Credentialed
+  Scan Config: Full and Fast
+  → Start
+
+<span class="cm"># Compare results — credentialed scan should show significantly more findings</span>
+<span class="cm"># Verify credentials worked: filter results by family="Credentials"</span>
+<span class="cm"># Look for: "SMB Login" result with "Login: Administrator — OK"</span></code></pre>
+
+<h3>Phase 5 — Analyze Results &amp; Correlate with Suricata</h3>
+<pre><code><span class="cm">--- In the credentialed scan report ---</span>
+
+<span class="cm"># Step 1: Filter to Critical and High findings</span>
+Filter bar: severity>7.0 AND solution_type=VendorFix
+
+<span class="cm"># Step 2: Note all CVEs for these findings</span>
+<span class="cm"># Common findings on unpatched Windows 10:</span>
+CVE-2017-0144  → EternalBlue / MS17-010 (SMB RCE) — CRITICAL
+CVE-2019-0708  → BlueKeep (RDP RCE)
+CVE-2021-34527 → PrintNightmare (Print Spooler RCE)
+CVE-2020-0796  → SMBGhost (SMBv3 buffer overflow)
+
+<span class="cm"># Step 3: Cross-reference with Suricata/Security Onion rules</span>
+<span class="cm"># On Security Onion (192.168.56.20):</span>
+grep -r "CVE-2017-0144\|MS17-010\|EternalBlue" /opt/so/rules/ | grep "sid:"
+<span class="cm"># You should find ET EXPLOIT rules — these are now HIGH-PRIORITY alerts</span>
+
+<span class="cm"># Step 4: In SO Hunt — query for any existing alerts on these CVEs</span>
+rule.name: *EternalBlue* AND destination.ip: "192.168.56.30"
+rule.name: *BlueKeep* AND destination.ip: "192.168.56.30"
+<span class="cm"># Any hits here with the host confirmed vulnerable = CONFIRMED HIGH RISK</span>
+
+<span class="cm"># Step 5: Export PDF report from GVM for documentation</span>
+Report → Download → PDF
+<span class="cm"># Document findings, CVEs, recommended patches, and proposed remediation timeline</span></code></pre>
+
+<h3>Phase 6 — Delta Report After Patching</h3>
+<pre><code><span class="cm"># Simulate patching: on Windows 10, install available Windows Updates</span>
+<span class="cm"># Then run the credentialed scan again</span>
+
+<span class="cm"># In GSA — compare the two reports</span>
+Scans → Reports → new report → Delta button → select old report
+
+<span class="cm"># Review:</span>
+Gone    → patches applied successfully (CVE no longer detected)
+Same    → still vulnerable — patch did not work or different vector
+New     → newly discovered vulnerabilities (e.g. new CVE in recently updated software)
+Changed → severity changed (e.g. CVSS score updated by vendor)</code></pre>
+
+<h3>Expected Findings Summary</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Finding Type</th><th>Unauth Scan</th><th>Credentialed Scan</th><th>Suricata Rule Exists?</th></tr></thead>
+  <tbody>
+    <tr><td>SMB/RDP exposed</td><td>✓ (port detected)</td><td>✓ + version + CVEs</td><td>Yes — ET EXPLOIT families</td></tr>
+    <tr><td>Missing Windows patches</td><td>Partial (banner-based)</td><td>✓ Full patch gap list</td><td>Yes for major CVEs</td></tr>
+    <tr><td>Weak cipher suites</td><td>✓ (TLS scan)</td><td>✓</td><td>Informational only</td></tr>
+    <tr><td>Local user accounts</td><td>✗ (not visible remotely)</td><td>✓ (via SMB/WMI)</td><td>No — host-only risk</td></tr>
+    <tr><td>Installed EOL software</td><td>✗</td><td>✓ (registry check)</td><td>If exploitable CVE exists</td></tr>
+  </tbody>
+</table></div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Running your first unauthenticated scan in the lab</h4>
+    <ul>
+      <li>Phase 1 through 3 covers the minimum viable scan: install GVM on Kali, create a Target for 192.168.56.30, run Full and Fast unauthenticated</li>
+      <li>Look for open ports at L4 (SMB 445, RDP 3389) and any banner-based CVE findings — these are the attack surface visible from the network</li>
+      <li>Note the total finding count from the unauthenticated scan before moving to Phase 4 — you will compare it against the credentialed scan result</li>
+    </ul>
+    <pre><code><span class="cm"># Verify Windows 10 target is reachable from scanner</span>
+ping 192.168.56.30
+nmap -sn 192.168.56.30 <span class="cm"># confirm host is alive before scan</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Running the credentialed scan and comparing delta results</h4>
+    <ul>
+      <li>Phase 4 adds SMB credentials for Administrator — the credentialed scan should reveal 3–5× more findings including patch gaps visible only from inside the OS</li>
+      <li>After both scans complete, use the Delta Report to compare them — "New" entries in the credentialed scan are the additional local vulnerability findings</li>
+    </ul>
+    <pre><code><span class="cm"># Check that SMB credential authentication succeeded</span>
+<span class="cm"># Report filter: family="Credentials"</span>
+<span class="cm"># Look for: NVT "SMB Login" → "Login: Administrator — OK"</span>
+<span class="cm"># If failed: verify SMB is enabled on Win10 and firewall allows TCP 445</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Cross-correlating GVM CVEs with live Suricata alerts</h4>
+    <ul>
+      <li>Phase 5 is the key SOC skill: extract Critical/High CVE IDs from the GVM report and search Security Onion for matching Suricata ET rules and recent hits against 192.168.56.30</li>
+      <li>Any Suricata alert firing against a host confirmed unpatched by GVM is a high-confidence incident — document as confirmed exploitation attempt, not just suspicious traffic</li>
+    </ul>
+    <pre><code><span class="cm"># On Security Onion: find Suricata rules for CVEs from GVM report</span>
+grep -r "CVE-2017-0144\|CVE-2019-0708\|CVE-2021-34527" \
+  /opt/so/rules/ | grep "sid:"
+
+<span class="cm"># SO Hunt query: EternalBlue alerts targeting unpatched host</span>
+<span class="cm"># rule.name: *EternalBlue* AND destination.ip: "192.168.56.30"</span>
+
+<span class="cm"># Export final GVM report as PDF for lab documentation</span>
+<span class="cm"># Scans → Reports → your report → Download → PDF</span></code></pre>
+  </div>
+</details>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: 'OpenVAS / GVM',
+  topics: [
+    { id: 'overview',     badge: '01', label: 'Overview & Architecture'   },
+    { id: 'install',      badge: '02', label: 'Installation & Setup'      },
+    { id: 'targets',      badge: '03', label: 'Targets & Port Lists'      },
+    { id: 'configs',      badge: '04', label: 'Scan Configs & NVTs'       },
+    { id: 'tasks',        badge: '05', label: 'Tasks & Scheduling'        },
+    { id: 'results',      badge: '06', label: 'Results & Reports'         },
+    { id: 'credentials',  badge: '07', label: 'Credentialed Scans'        },
+    { id: 'falsepos',     badge: '08', label: 'False Positives & Overrides'},
+    { id: 'cli',          badge: '09', label: 'CLI & API Automation'      },
+    { id: 'integration',  badge: '10', label: 'SIEM Integration'          },
+    { id: 'lab',          badge: '11', label: 'Investigation Lab'         },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

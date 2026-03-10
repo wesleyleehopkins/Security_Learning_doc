@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alert Formats — Snort — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" aria-label="Toggle sidebar">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 5h14M3 10h14M3 15h14"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html" class="active">Snort</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">Alert Formats</div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  </aside>
+  <main class="content" id="content-area"></main>
+</div>
+
+<!-- ════════════════════════ Alert Modes ════════════════════════════════════ -->
+<template id="tpl-alert-modes">
+<article class="topic">
+  <h2>Alert Output Modes</h2>
+  <p>Snort supports multiple alert output formats. The mode is selected with the <code>-A</code> flag on the command line or <code>output alert_*</code> in <code>snort.conf</code>. Multiple modes can run simultaneously.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Mode</th><th>CLI Flag</th><th>snort.conf</th><th>Description</th><th>Best For</th></tr></thead>
+      <tbody>
+        <tr><td><strong>fast</strong></td><td><code>-A fast</code></td><td><code>output alert_fast</code></td><td>One-line summary per alert: timestamp, IPs, ports, message</td><td>Production — fast, low overhead, SIEM ingestion</td></tr>
+        <tr><td><strong>full</strong></td><td><code>-A full</code></td><td><code>output alert_full</code></td><td>Full alert with packet header dump</td><td>Investigation — more detail than fast</td></tr>
+        <tr><td><strong>console</strong></td><td><code>-A console</code></td><td>—</td><td>Fast format printed to stdout in real time</td><td>Testing and debugging rules</td></tr>
+        <tr><td><strong>none</strong></td><td><code>-A none</code></td><td>—</td><td>No alerting — log packets only</td><td>Packet capture without alert noise</td></tr>
+        <tr><td><strong>unified2</strong></td><td><code>-A unified2</code></td><td><code>output unified2</code></td><td>Binary format consumed by barnyard2</td><td>Production with Snorby/database backend</td></tr>
+        <tr><td><strong>syslog</strong></td><td><code>-s</code></td><td><code>output alert_syslog</code></td><td>Sends alerts via syslog</td><td>Centralized logging, SIEM agents</td></tr>
+        <tr><td><strong>csv</strong></td><td>—</td><td><code>output alert_csv</code></td><td>Comma-separated values</td><td>Parsing with scripts, spreadsheet import</td></tr>
+        <tr><td><strong>json</strong></td><td>—</td><td><code>alert_json</code> (Snort 3)</td><td>JSON format (Snort 3 only)</td><td>ELK Stack, Splunk HEC ingestion</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Enable Multiple Alert Modes</h3>
+  <pre><code><span class="cm"># snort.conf — run both fast and unified2 simultaneously</span>
+output alert_fast: /var/log/snort/alert
+output unified2: filename /var/log/snort/snort.u2, limit 128, nostamp
+
+<span class="cm"># Command line — test with console, also write to fast file</span>
+sudo snort -c /etc/snort/snort.conf -r test.pcap \
+  -A console -l /var/log/snort/
+
+<span class="cm"># Snort 3 — multiple alert loggers in snort.lua</span>
+alert_fast = { file = true, packet = false }
+alert_json = { file = true, fields = 'timestamp msg sid gid priority src_addr dst_addr' }</code></pre>
+</article>
+</template>
+
+<!-- ════════════════════════ Fast Format ════════════════════════════════════ -->
+<template id="tpl-fast-format">
+<article class="topic">
+  <h2>Fast Alert Format — Anatomy</h2>
+  <p>The fast alert format is the most common production format. Each alert is a single line containing everything a SOC analyst needs for initial triage.</p>
+
+  <h3>Fast Alert — Complete Example</h3>
+  <pre><code>03/07-14:22:15.542918 [**] [1:1000101:1] SQL Injection UNION SELECT in URI [**] [Classification: Web Application Attack] [Priority: 1] {TCP} 203.0.113.50:54321 -> 192.168.1.10:80</code></pre>
+
+  <h3>Field-by-Field Breakdown</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>Example Value</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Timestamp</strong></td><td><code>03/07-14:22:15.542918</code></td><td>Month/Day-Hour:Min:Sec.Microseconds (use <code>-y</code> for year)</td></tr>
+        <tr><td><strong>Alert banner</strong></td><td><code>[**]</code></td><td>Alert delimiter — marks beginning and end of rule message block</td></tr>
+        <tr><td><strong>GID</strong></td><td><code>[1:</code></td><td>Generator ID — 1 = rules engine, 100+ = preprocessors</td></tr>
+        <tr><td><strong>SID</strong></td><td><code>1000101</code></td><td>Snort rule ID — the unique identifier of the rule that fired</td></tr>
+        <tr><td><strong>REV</strong></td><td><code>:1]</code></td><td>Rule revision number</td></tr>
+        <tr><td><strong>Message</strong></td><td><code>SQL Injection UNION SELECT in URI</code></td><td>The <code>msg</code> field from the rule that matched</td></tr>
+        <tr><td><strong>Classification</strong></td><td><code>[Classification: Web Application Attack]</code></td><td>From the <code>classtype</code> rule option</td></tr>
+        <tr><td><strong>Priority</strong></td><td><code>[Priority: 1]</code></td><td>1 = High, 2 = Medium, 3 = Low (from classtype or priority option)</td></tr>
+        <tr><td><strong>Protocol</strong></td><td><code>{TCP}</code></td><td>Transport protocol of the triggering packet</td></tr>
+        <tr><td><strong>Source IP:Port</strong></td><td><code>203.0.113.50:54321</code></td><td>Originating IP and source port of the packet</td></tr>
+        <tr><td><strong>Direction</strong></td><td><code>-></code></td><td>Traffic direction</td></tr>
+        <tr><td><strong>Dest IP:Port</strong></td><td><code>192.168.1.10:80</code></td><td>Destination IP and port</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Multiple Fast Alerts</h3>
+  <pre><code><span class="cm"># Example: /var/log/snort/alert contents</span>
+
+03/07-14:22:10.001234 [**] [1:1000001:1] TCP NULL Scan [**] [Classification: Network Scan] [Priority: 3] {TCP} 10.10.10.5:45678 -> 192.168.1.15:22
+03/07-14:22:10.002145 [**] [1:1000001:1] TCP NULL Scan [**] [Classification: Network Scan] [Priority: 3] {TCP} 10.10.10.5:45678 -> 192.168.1.15:80
+03/07-14:22:10.003087 [**] [1:1000001:1] TCP NULL Scan [**] [Classification: Network Scan] [Priority: 3] {TCP} 10.10.10.5:45678 -> 192.168.1.15:443
+03/07-14:22:15.542918 [**] [1:1000101:1] SQL Injection UNION SELECT in URI [**] [Classification: Web Application Attack] [Priority: 1] {TCP} 203.0.113.50:54321 -> 192.168.1.10:80
+03/07-14:22:15.554022 [**] [1:1000102:1] SQL Error Response - Possible Injection Success [**] [Classification: Web Application Attack] [Priority: 1] {TCP} 192.168.1.10:80 -> 203.0.113.50:54321
+03/07-14:22:42.119875 [**] [1:1000300:1] ICMP Flood from External - Possible DoS [**] [Classification: Attempted Denial of Service] [Priority: 2] {ICMP} 198.51.100.7:0 -> 192.168.1.10:0</code></pre>
+
+  <h3>GID Reference — Preprocessor Events</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>GID</th><th>Source</th><th>Common SIDs</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Rules engine (your rules)</td><td>All rule-based alerts</td></tr>
+        <tr><td>100</td><td>frag3 preprocessor</td><td>1=IDS events</td></tr>
+        <tr><td>106</td><td>sfportscan preprocessor</td><td>1=portscan, 2=portsweep, 3=decoy</td></tr>
+        <tr><td>119</td><td>http_inspect preprocessor</td><td>1-31 (various HTTP anomalies)</td></tr>
+        <tr><td>120</td><td>stream5 preprocessor</td><td>1-37 (TCP anomalies)</td></tr>
+        <tr><td>125</td><td>SMTP preprocessor</td><td>1-12 (SMTP anomalies)</td></tr>
+        <tr><td>137</td><td>dcerpc2 preprocessor</td><td>1-47 (RPC/SMB events)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+</template>
+
+<!-- ════════════════════════ Full Format ════════════════════════════════════ -->
+<template id="tpl-full-format">
+<article class="topic">
+  <h2>Full Alert Format — Anatomy</h2>
+  <p>Full alert mode includes the same header information as fast mode plus a complete dump of the packet headers. Use this when you need to investigate the exact packet details — TTL, sequence numbers, TCP flags, and the payload hex dump.</p>
+
+  <h3>Full Alert — Complete Example</h3>
+  <pre><code>[**] [1:1000101:1] SQL Injection UNION SELECT in URI [**]
+[Classification: Web Application Attack] [Priority: 1]
+03/07-14:22:15.542918 203.0.113.50:54321 -> 192.168.1.10:80
+TCP TTL:54 TOS:0x0 ID:43210 IpLen:20 DgmLen:587 DF
+***AP*** Seq: 0xA1B2C3D4  Ack: 0x1E2F3A4B  Win: 0x8000 TcpLen: 20
+[Xref => http://www.snort.org/cgi-bin/cvsweb.cgi/sigs/WEB-ATTACKS]
+
+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+</code></pre>
+
+  <h3>IP Header Fields</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>Example</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>TTL</code></td><td><code>TTL:54</code></td><td>Time To Live — hops remaining. OS fingerprinting: Windows=128, Linux=64, Cisco=255. Low TTL may indicate spoofing.</td></tr>
+        <tr><td><code>TOS</code></td><td><code>TOS:0x0</code></td><td>Type of Service / DSCP byte. Non-zero may indicate QoS marking or covert channel.</td></tr>
+        <tr><td><code>ID</code></td><td><code>ID:43210</code></td><td>IP Identification field. Sequential IDs can confirm source OS; fixed IDs indicate fragmentation evasion.</td></tr>
+        <tr><td><code>IpLen</code></td><td><code>IpLen:20</code></td><td>IP header length in bytes (20 = standard, no options)</td></tr>
+        <tr><td><code>DgmLen</code></td><td><code>DgmLen:587</code></td><td>Total IP datagram length including header and payload</td></tr>
+        <tr><td><code>DF</code></td><td><code>DF</code></td><td>Don't Fragment flag set (standard for TCP connections)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>TCP Header Fields</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>Example</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>Flags</code></td><td><code>***AP***</code></td><td>TCP flag bits. Position: U R P A P S F (URG RST PSH ACK PSH SYN FIN). <code>*</code> = not set, letter = set.</td></tr>
+        <tr><td><code>Seq</code></td><td><code>Seq: 0xA1B2C3D4</code></td><td>TCP sequence number of this segment</td></tr>
+        <tr><td><code>Ack</code></td><td><code>Ack: 0x1E2F3A4B</code></td><td>TCP acknowledgment number (next expected byte)</td></tr>
+        <tr><td><code>Win</code></td><td><code>Win: 0x8000</code></td><td>TCP receive window size (0 = zero window = flow control)</td></tr>
+        <tr><td><code>TcpLen</code></td><td><code>TcpLen: 20</code></td><td>TCP header length in bytes (20 = standard, no options)</td></tr>
+        <tr><td><code>UrgPtr</code></td><td><code>UrgPtr: 0x0</code></td><td>Urgent pointer (only relevant if URG flag set)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>TCP Flag Decoding</h3>
+  <pre><code><span class="cm"># Full format flag field: U R P A P S F (8 bits, left to right)</span>
+<span class="cm"># Position:              7 6 5 4 3 2 1 0</span>
+<span class="cm">#                        U R P A P S F</span>
+<span class="cm"># (note: "P" appears twice in Snort's display — 2nd P = PSH flag bit 3)</span>
+
+***AP***   <span class="cm"># ACK + PSH set — normal data transfer</span>
+******S*   <span class="cm"># SYN only — new connection</span>
+***A**S*   <span class="cm"># SYN + ACK — server response to SYN</span>
+***A****   <span class="cm"># ACK only — acknowledgment</span>
+*****R**   <span class="cm"># RST — connection reset</span>
+*****F**   <span class="cm"># FIN — connection close</span>
+*P*AP***   <span class="cm"># Unusual combination — possible attack/evasion</span>
+00000000   <span class="cm"># NULL scan — no flags set</span>
+URAPAPSF   <span class="cm"># All flags set — invalid/Christmas scan variant</span></code></pre>
+</article>
+</template>
+
+<!-- ════════════════════════ Unified2 ═══════════════════════════════════════ -->
+<template id="tpl-unified2">
+<article class="topic">
+  <h2>Unified2 Binary Format</h2>
+  <p>Unified2 is a binary format that Snort writes at high speed with minimal CPU overhead. It must be read by a secondary process (barnyard2) to convert to human-readable formats or a database. This is the recommended production setup.</p>
+
+  <h3>Production Architecture</h3>
+  <pre><code><span class="cm">Network traffic</span>
+      ↓
+   Snort                    <span class="cm"># Reads packets, evaluates rules</span>
+      ↓
+/var/log/snort/snort.u2    <span class="cm"># Binary unified2 file (fast write)</span>
+      ↓
+  barnyard2                 <span class="cm"># Reads u2 file, processes in background</span>
+      ↓
+   ┌─────────────────────┐
+   │  MySQL / PostgreSQL  │  <span class="cm"># For Snorby or BASE web interface</span>
+   │  alert_fast file     │  <span class="cm"># Text alert for tail/grep</span>
+   │  Syslog / SIEM       │  <span class="cm"># Central logging</span>
+   └─────────────────────┘</code></pre>
+
+  <h3>Unified2 Configuration in snort.conf</h3>
+  <pre><code><span class="cm"># Basic unified2 output</span>
+output unified2: filename snort.u2, limit 128
+
+<span class="cm"># With options:</span>
+<span class="cm"># filename — prefix for u2 files (gets epoch timestamp appended if nostamp not set)</span>
+<span class="cm"># limit — max file size in MB before rotating to new file</span>
+<span class="cm"># nostamp — don't append timestamp (use with waldo/bookmark file in barnyard2)</span>
+output unified2: filename snort.u2, limit 128, nostamp
+
+<span class="cm"># Files created:</span>
+/var/log/snort/snort.u2          <span class="cm"># Current active file (with nostamp)</span>
+/var/log/snort/snort.u2.1678123456  <span class="cm"># Rotated file (without nostamp)</span></code></pre>
+
+  <h3>barnyard2 Configuration</h3>
+  <pre><code><span class="cm"># /etc/barnyard2.conf (key settings)</span>
+config logdir: /var/log/barnyard2
+config sid_file: /etc/snort/sid-msg.map    <span class="cm"># Maps SID to rule message</span>
+config gen_file: /etc/snort/gen-msg.map    <span class="cm"># Maps GID to generator name</span>
+config classification_file: /etc/snort/classification.config
+config reference_file: /etc/snort/reference.config
+
+<span class="cm"># Output to text alert file</span>
+output alert_fast: /var/log/barnyard2/alert.txt
+
+<span class="cm"># Output to MySQL database (for Snorby)</span>
+output database: log, mysql, user=snort password=snortpass dbname=snort host=localhost
+
+<span class="cm"># Run barnyard2</span>
+barnyard2 -c /etc/barnyard2.conf \
+  -d /var/log/snort \
+  -f snort.u2 \
+  -w /var/log/snort/barnyard2.waldo \
+  -u snort -g snort -D</code></pre>
+
+  <h3>Snort 3 JSON Alert Format</h3>
+  <pre><code><span class="cm"># Snort 3 can output JSON natively — no barnyard2 needed for ELK</span>
+<span class="cm"># In snort.lua:</span>
+alert_json =
+{
+    file = true,
+    limit = 10,
+    fields = 'timestamp msg sid gid rev priority classtype ' ..
+             'pkt_num proto src_addr src_port dst_addr dst_port ' ..
+             'eth_src eth_dst ttl b64_data',
+}
+
+<span class="cm"># Example JSON alert output:</span>
+{
+  "timestamp": "03/07-14:22:15.542918",
+  "msg": "SQL Injection UNION SELECT in URI",
+  "sid": 1000101,
+  "gid": 1,
+  "rev": 1,
+  "priority": 1,
+  "classtype": "web-application-attack",
+  "proto": "TCP",
+  "src_addr": "203.0.113.50",
+  "src_port": 54321,
+  "dst_addr": "192.168.1.10",
+  "dst_port": 80,
+  "ttl": 54,
+  "b64_data": "R0VUIC9wYWdlP2lkPTEnIFVOSU9OIFNFTEVDVCAxLDIsMy0t"
+}</code></pre>
+</article>
+</template>
+
+<!-- ════════════════════════ Reading Alerts ══════════════════════════════════ -->
+<template id="tpl-reading-alerts">
+<article class="topic">
+  <h2>Reading &amp; Tuning Alerts</h2>
+  <p>Raw Snort alerts require triage — not every alert is a true positive. Effective SOC work with Snort involves quickly determining signal from noise, then tuning rules to reduce false positives.</p>
+
+  <h3>Alert Triage Workflow</h3>
+  <pre><code><span class="cm"># Step 1: Monitor alerts in real time</span>
+tail -f /var/log/snort/alert
+
+<span class="cm"># Step 2: Check alert count by SID (find noisiest rules)</span>
+awk '{print $4}' /var/log/snort/alert | grep -o '\[[0-9:]*\]' | sort | uniq -c | sort -rn | head -20
+
+<span class="cm"># Step 3: See all alerts from a specific source IP</span>
+grep "192.168.1.100" /var/log/snort/alert | head -20
+
+<span class="cm"># Step 4: See all alerts of a specific SID</span>
+grep "\[1:1000101:" /var/log/snort/alert
+
+<span class="cm"># Step 5: Check alert rate per minute</span>
+awk '{print $1}' /var/log/snort/alert | cut -d. -f1 | uniq -c | tail -20</code></pre>
+
+  <h3>False Positive Management</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Scenario</th><th>Approach</th><th>Where to Make Change</th></tr></thead>
+      <tbody>
+        <tr><td>Specific internal IP triggers rule constantly (legitimate)</td><td>Suppress for that IP</td><td><code>threshold.conf</code> — suppress by src or dst</td></tr>
+        <tr><td>Rule fires too often from many sources</td><td>Rate-limit the rule</td><td><code>threshold.conf</code> — event_filter type limit</td></tr>
+        <tr><td>Rule content matches legit traffic broadly</td><td>Add more specific content match</td><td>Edit the rule in <code>local.rules</code></td></tr>
+        <tr><td>Rule covers wrong port/service</td><td>Restrict to correct port</td><td>Edit rule header in <code>local.rules</code></td></tr>
+        <tr><td>Preprocessor rule fires on known-good app</td><td>Whitelist the IP pair</td><td><code>threshold.conf</code> — suppress gen_id/sig_id</td></tr>
+        <tr><td>Entire rule file is too noisy for your environment</td><td>Comment out or remove include</td><td><code>snort.conf</code> — remove the include line</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Suppressing False Positives</h3>
+  <pre><code><span class="cm"># /etc/snort/threshold.conf</span>
+
+<span class="cm"># Suppress SID 1000200 (port scan rule) for trusted internal scanner IP</span>
+suppress gen_id 1, sig_id 1000200, track by_src, ip 192.168.1.200
+
+<span class="cm"># Suppress for both internal scanner src and its scan target range</span>
+suppress gen_id 1, sig_id 1000200, track by_src, ip 192.168.0.0/16
+
+<span class="cm"># Rate-limit noisy scan rule — alert at most once per source per 5 minutes</span>
+event_filter gen_id 1, sig_id 1000001, type limit, track by_src, count 1, seconds 300
+
+<span class="cm"># Suppress a preprocessor false positive (sfportscan GID 106)</span>
+suppress gen_id 106, sig_id 1, track by_src, ip 10.0.0.50
+
+<span class="cm"># Global rate-limit for all alerts (emergency noise reduction)</span>
+event_filter gen_id 0, sig_id 0, type limit, track by_src, count 10, seconds 60</code></pre>
+
+  <h3>Checking Rule SID Information</h3>
+  <pre><code><span class="cm"># Look up a SID in the community rules</span>
+grep "sid:1000101" /etc/snort/rules/*.rules
+
+<span class="cm"># Get the msg for a known SID via sid-msg.map</span>
+grep "^1000101" /etc/snort/sid-msg.map
+
+<span class="cm"># Find all rules matching a keyword</span>
+grep -ri "sql injection" /etc/snort/rules/
+
+<span class="cm"># Count total rules loaded</span>
+grep -r "^alert\|^drop\|^log" /etc/snort/rules/ | wc -l
+
+<span class="cm"># Validate that a specific rule is syntactically correct</span>
+echo 'alert tcp any any -> any 80 (msg:"Test"; sid:9999999; rev:1;)' \
+  | sudo snort -T -c /etc/snort/snort.conf --stdin-rules</code></pre>
+
+  <h3>Alert Priority Guide</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Priority</th><th>Typical Classtype</th><th>SOC Response Time</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td style="color:var(--red)"><strong>1 — High</strong></td><td>attempted-admin, shellcode-detect, trojan-activity</td><td>Immediate — within minutes</td><td>Meterpreter payload, Log4Shell exploitation</td></tr>
+        <tr><td style="color:var(--yellow)"><strong>2 — Medium</strong></td><td>attempted-dos, policy-violation, bad-unknown</td><td>Same shift — within hours</td><td>ICMP flood, port scan, suspicious HTTP</td></tr>
+        <tr><td style="color:var(--text2)"><strong>3 — Low</strong></td><td>network-scan, icmp-event, misc-activity</td><td>Next business day</td><td>Ping sweep, protocol anomaly</td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: "Snort — Alert Formats",
+  topics: [
+    { id: "alert-modes",    badge: "01", label: "Alert Modes" },
+    { id: "fast-format",    badge: "02", label: "Fast Format" },
+    { id: "full-format",    badge: "03", label: "Full Format" },
+    { id: "unified2",       badge: "04", label: "Unified2 &amp; Snort 3 JSON" },
+    { id: "reading-alerts", badge: "05", label: "Reading &amp; Tuning" },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

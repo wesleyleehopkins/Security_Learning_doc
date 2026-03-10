@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rules &amp; Decoders — OSSEC — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" aria-label="Toggle sidebar">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 5h14M3 10h14M3 15h14"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html" class="active">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">Rules &amp; Decoders</div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  </aside>
+  <main class="content" id="content-area"></main>
+</div>
+
+<!-- ══════════════════════════ Processing Pipeline ═══════════════════════════ -->
+<template id="tpl-pipeline">
+<article class="topic">
+  <h2>Log Processing Pipeline</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">The OSSEC/Wazuh processing pipeline operates entirely at L7 — it parses application-layer log events (syslog, Windows Event Log, JSON) through decoders and rule matchers to generate alerts.</span>
+  </div>
+  <p>OSSEC/Wazuh processes every log line through two stages: <strong>decoding</strong> (extract fields) then <strong>rule matching</strong> (evaluate conditions). Understanding this pipeline is essential for writing effective custom rules.</p>
+
+  <pre><code>Raw log line
+        ↓
+   Pre-decode
+   (extracts hostname, timestamp, program from syslog header)
+        ↓
+   Decoder matching
+   (decoder.xml files — regex extracts: srcip, user, url, action, ...)
+        ↓
+   Rule matching
+   (rules/*.xml — conditions: match, regex, srcip, user, level, freq)
+        ↓
+   Alert generated → alerts.log / alerts.json
+        ↓
+   Active response (if rule level meets threshold)</code></pre>
+
+  <h3>Where Files Live</h3>
+  <pre><code>/var/ossec/etc/decoders/          <span class="cm"># Custom decoder files</span>
+/var/ossec/ruleset/decoders/      <span class="cm"># Built-in OSSEC/Wazuh decoders (don't edit)</span>
+/var/ossec/etc/rules/             <span class="cm"># Custom rule files (local_rules.xml)</span>
+/var/ossec/ruleset/rules/         <span class="cm"># Built-in OSSEC/Wazuh rules (don't edit)</span>
+/var/ossec/etc/ossec.conf         <span class="cm"># Register custom decoder/rule paths here</span></code></pre>
+
+  <h3>Register Custom Files in ossec.conf</h3>
+  <pre><code>&lt;ossec_config&gt;
+  &lt;rules&gt;
+    <span class="cm">&lt;!-- Include built-in rules --&gt;</span>
+    &lt;include&gt;rules_config.xml&lt;/include&gt;
+    &lt;include&gt;sshd_rules.xml&lt;/include&gt;
+    &lt;include&gt;apache_rules.xml&lt;/include&gt;
+    <span class="cm">&lt;!-- Your custom rules (load last so you can override built-ins) --&gt;</span>
+    &lt;include&gt;local_rules.xml&lt;/include&gt;
+  &lt;/rules&gt;
+
+  &lt;ruleset&gt;
+    <span class="cm">&lt;!-- Decoder search paths (Wazuh syntax) --&gt;</span>
+    &lt;decoder_dir&gt;ruleset/decoders&lt;/decoder_dir&gt;
+    &lt;decoder_dir&gt;etc/decoders&lt;/decoder_dir&gt;
+    &lt;rule_dir&gt;ruleset/rules&lt;/rule_dir&gt;
+    &lt;rule_dir&gt;etc/rules&lt;/rule_dir&gt;
+  &lt;/ruleset&gt;
+&lt;/ossec_config&gt;</code></pre>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Understand the Two-Stage Pipeline</summary>
+    <div class="tier-body">
+      <h4>Decode First, Match Rules Second</h4>
+      <ul>
+        <li><strong>Stage 1 — Decode</strong>: extracts fields (srcip, user, url) from raw log text using decoder XML files</li>
+        <li><strong>Stage 2 — Rule match</strong>: evaluates decoded fields against rule conditions to generate an alert</li>
+        <li>Custom decoders go in <code>/var/ossec/etc/decoders/</code>; custom rules go in <code>/var/ossec/etc/rules/local_rules.xml</code></li>
+        <li>Never edit files in <code>/var/ossec/ruleset/</code> — those are overwritten by updates</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Register and Load Custom Files</summary>
+    <div class="tier-body">
+      <h4>Wire Custom Decoders and Rules into ossec.conf</h4>
+      <ul>
+        <li>Add <code>&lt;include&gt;local_rules.xml&lt;/include&gt;</code> at the end of the <code>&lt;rules&gt;</code> block so custom rules load after built-ins (allows overrides)</li>
+        <li>Add <code>&lt;decoder_dir&gt;etc/decoders&lt;/decoder_dir&gt;</code> to the <code>&lt;ruleset&gt;</code> block to activate custom decoders</li>
+        <li>After any change: validate with <code>ossec-analysisd -t</code>, then restart with <code>ossec-control restart</code></li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Pipeline Debugging</summary>
+    <div class="tier-body">
+      <h4>Trace Exactly Where a Log Line Gets Decoded</h4>
+      <ul>
+        <li>Use <code>ossec-logtest -v</code> (verbose) to see every decoder evaluated and why each succeeded or failed</li>
+        <li>If a log line doesn't fire any rule, check: is the program name matching a parent decoder? Is the prematch string correct?</li>
+        <li>Check <code>/var/ossec/logs/ossec.log</code> for "ERROR: Decoder" lines after restart — indicates XML parse failures</li>
+      </ul>
+      <pre><code><span class="cm"># Verbose decode trace for a specific log line</span>
+echo 'Mar 19 10:00:01 host myapp: LOGIN_FAILED user=bob src=10.0.0.1' | \
+  sudo /var/ossec/bin/ossec-logtest -v 2>&amp;1 | head -40</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ Decoders ══════════════════════════════════════ -->
+<template id="tpl-decoders">
+<article class="topic">
+  <h2>Decoder XML Syntax</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Decoders parse application-layer log content — extracting fields like srcip, user, url, and status from syslog, JSON, and Windows Event Log lines. The srcip field captures L3 info from within L7 log text.</span>
+  </div>
+  <p>Decoders parse log lines and extract named fields (srcip, user, url, etc.) that rules can then match against.</p>
+
+  <h3>Decoder Structure</h3>
+  <pre><code>&lt;decoder name="sshd"&gt;
+  &lt;program_name&gt;sshd&lt;/program_name&gt;
+&lt;/decoder&gt;
+
+&lt;!-- Child decoder: runs only if parent matched --&gt;
+&lt;decoder name="sshd-failed"&gt;
+  &lt;parent&gt;sshd&lt;/parent&gt;
+  &lt;prematch&gt;Failed password&lt;/prematch&gt;
+  &lt;regex&gt;Failed password for (\S+) from (\S+) port \d+ ssh2&lt;/regex&gt;
+  &lt;order&gt;user, srcip&lt;/order&gt;
+&lt;/decoder&gt;</code></pre>
+
+  <h3>Decoder XML Elements</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Element</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>&lt;program_name&gt;</code></td><td>Match log lines where the program name equals this value (from syslog header)</td></tr>
+        <tr><td><code>&lt;parent&gt;</code></td><td>Only run this decoder if the parent decoder matched first (child decoder)</td></tr>
+        <tr><td><code>&lt;prematch&gt;</code></td><td>Fast string match — log line must contain this before running the full regex</td></tr>
+        <tr><td><code>&lt;prematch offset="after_parent"&gt;</code></td><td>Match in the portion of the log after the parent decoder consumed</td></tr>
+        <tr><td><code>&lt;regex&gt;</code></td><td>POSIX regex with capture groups — groups map to field names in &lt;order&gt;</td></tr>
+        <tr><td><code>&lt;regex offset="after_prematch"&gt;</code></td><td>Apply regex to portion after the prematch string</td></tr>
+        <tr><td><code>&lt;order&gt;</code></td><td>Comma-separated list of field names matching capture groups in &lt;regex&gt;</td></tr>
+        <tr><td><code>&lt;type&gt;</code></td><td>Log type — syslog (default), json, eventchannel (Windows Event Log), multi-line</td></tr>
+        <tr><td><code>&lt;accumulate&gt;</code></td><td>Accumulate multi-line log events under a single session ID</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Available Decoded Fields (order values)</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>srcip</code></td><td>Source IP address</td></tr>
+        <tr><td><code>dstip</code></td><td>Destination IP address</td></tr>
+        <tr><td><code>srcport</code></td><td>Source port</td></tr>
+        <tr><td><code>dstport</code></td><td>Destination port</td></tr>
+        <tr><td><code>user</code></td><td>Username involved in the event</td></tr>
+        <tr><td><code>url</code></td><td>URL from web server logs</td></tr>
+        <tr><td><code>id</code></td><td>Generic ID field (event ID, process ID, etc.)</td></tr>
+        <tr><td><code>status</code></td><td>Status code (HTTP response code, auth result)</td></tr>
+        <tr><td><code>action</code></td><td>Action taken (block, allow, deny, accept)</td></tr>
+        <tr><td><code>protocol</code></td><td>Network protocol</td></tr>
+        <tr><td><code>data</code></td><td>Generic data field for extra context</td></tr>
+        <tr><td><code>extra_data</code></td><td>Additional data field</td></tr>
+        <tr><td><code>system_name</code></td><td>System or hostname extracted from log</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Complete Decoder Examples</h3>
+  <pre><code><span class="cm">&lt;!-- Example 1: Apache access log decoder --&gt;</span>
+&lt;decoder name="apache-access"&gt;
+  &lt;program_name&gt;apache2|httpd&lt;/program_name&gt;
+&lt;/decoder&gt;
+
+&lt;decoder name="apache-access-2"&gt;
+  &lt;parent&gt;apache-access&lt;/parent&gt;
+  &lt;type&gt;web-log&lt;/type&gt;
+  &lt;prematch&gt;^\d+\.\d+\.\d+\.\d+ &lt;/prematch&gt;
+  &lt;regex&gt;^(\S+) \S+ (\S+) \[(\S+) \S+\] "(\w+) (\S+) \S+" (\d+) (\d+)&lt;/regex&gt;
+  &lt;order&gt;srcip, user, id, action, url, status, size&lt;/order&gt;
+&lt;/decoder&gt;
+
+<span class="cm">&lt;!-- Example 2: Custom application decoder --&gt;</span>
+&lt;decoder name="myapp"&gt;
+  &lt;prematch&gt;MYAPP:&lt;/prematch&gt;
+&lt;/decoder&gt;
+
+&lt;decoder name="myapp-login-failed"&gt;
+  &lt;parent&gt;myapp&lt;/parent&gt;
+  &lt;prematch offset="after_parent"&gt;LOGIN_FAILED&lt;/prematch&gt;
+  &lt;regex offset="after_prematch"&gt; user=(\S+) src=(\S+)&lt;/regex&gt;
+  &lt;order&gt;user, srcip&lt;/order&gt;
+&lt;/decoder&gt;
+
+<span class="cm">&lt;!-- Example 3: JSON log decoder (Wazuh) --&gt;</span>
+&lt;decoder name="json-app"&gt;
+  &lt;prematch&gt;{"event":&lt;/prematch&gt;
+  &lt;type&gt;json&lt;/type&gt;
+  &lt;use_own_name&gt;true&lt;/use_own_name&gt;
+&lt;/decoder&gt;</code></pre>
+
+  <h3>Testing Decoders</h3>
+  <pre><code><span class="cm"># Use ossec-logtest to test a log line against decoders and rules</span>
+sudo /var/ossec/bin/ossec-logtest
+
+<span class="cm"># Paste a log line and press Enter</span>
+Mar 19 10:00:01 webserver sshd[12345]: Failed password for root from 10.0.0.1 port 54321 ssh2
+
+<span class="cm"># Output shows:</span>
+<span class="cm"># Phase 1: Completed pre-decoding (host: webserver, program: sshd)</span>
+<span class="cm"># Phase 2: Completed decoding.</span>
+<span class="cm">#          decoder: 'sshd'</span>
+<span class="cm">#          srcip: '10.0.0.1'</span>
+<span class="cm">#          user: 'root'</span>
+<span class="cm"># Phase 3: Completed filtering (rules).</span>
+<span class="cm">#          Rule id: 5710 'level: 5' -> 'sshd: Attempt to login using a non-existent user'</span>
+
+<span class="cm"># Wazuh: use wazuh-logtest instead</span>
+sudo /var/ossec/bin/wazuh-logtest</code></pre>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Read an Existing Decoder</summary>
+    <div class="tier-body">
+      <h4>Understand Parent/Child Decoder Structure</h4>
+      <ul>
+        <li>A parent decoder matches the <code>program_name</code> (e.g., sshd) — child decoders then extract specific fields</li>
+        <li><code>&lt;prematch&gt;</code> is a fast string check before the expensive regex runs — always include one</li>
+        <li><code>&lt;order&gt;</code> maps regex capture groups to field names: first group = first name in the list</li>
+        <li>Test with <code>ossec-logtest</code> — paste a log line and look for "decoder: 'sshd'" and field extractions</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Write a Custom Decoder</summary>
+    <div class="tier-body">
+      <h4>Decode a Custom Application Log Format</h4>
+      <ul>
+        <li>Create <code>/var/ossec/etc/decoders/local_decoder.xml</code> with your parent + child decoders</li>
+        <li>Use <code>offset="after_parent"</code> on prematch and <code>offset="after_prematch"</code> on regex to avoid re-matching consumed text</li>
+        <li>Use <code>&lt;type&gt;json&lt;/type&gt;</code> for JSON-formatted application logs — Wazuh will auto-extract JSON keys as fields</li>
+        <li>Test iteratively with <code>ossec-logtest</code> — ensure srcip and user fields appear in Phase 2 output</li>
+      </ul>
+      <pre><code><span class="cm">&lt;!-- Custom app decoder skeleton --&gt;</span>
+&lt;decoder name="myapp"&gt;
+  &lt;prematch&gt;MYAPP:&lt;/prematch&gt;
+&lt;/decoder&gt;
+&lt;decoder name="myapp-fail"&gt;
+  &lt;parent&gt;myapp&lt;/parent&gt;
+  &lt;prematch offset="after_parent"&gt;FAIL&lt;/prematch&gt;
+  &lt;regex offset="after_prematch"&gt; user=(\S+) src=(\S+)&lt;/regex&gt;
+  &lt;order&gt;user, srcip&lt;/order&gt;
+&lt;/decoder&gt;</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — JSON and Multi-line Decoders</summary>
+    <div class="tier-body">
+      <h4>Handle Complex Log Formats</h4>
+      <ul>
+        <li>For JSON logs, use <code>&lt;type&gt;json&lt;/type&gt;</code> and <code>&lt;use_own_name&gt;true&lt;/use_own_name&gt;</code> — Wazuh auto-maps JSON keys to decoder fields</li>
+        <li>For multi-line logs (stack traces), use <code>&lt;accumulate&gt;</code> with a session ID field to group related lines before rule matching</li>
+        <li>Use <code>type="eventchannel"</code> for Windows Event Log XML — maps EventID, Computer, and Data fields automatically</li>
+      </ul>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ Rules ══════════════════════════════════════════ -->
+<template id="tpl-rules">
+<article class="topic">
+  <h2>Rule XML Syntax</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Rules match against decoded L7 log fields. Frequency/timeframe rules correlate repeated application-layer events (e.g., 8 SSH failures) to detect attacks like brute force or web scanning.</span>
+  </div>
+
+  <h3>Rule Structure</h3>
+  <pre><code>&lt;group name="sshd,authentication_failed,"&gt;
+
+  &lt;rule id="5710" level="5"&gt;
+    &lt;if_sid&gt;5700&lt;/if_sid&gt;
+    &lt;match&gt;illegal user|invalid user&lt;/match&gt;
+    &lt;description&gt;sshd: Attempt to login using a non-existent user&lt;/description&gt;
+    &lt;mitre&gt;
+      &lt;id&gt;T1110&lt;/id&gt;
+    &lt;/mitre&gt;
+    &lt;group&gt;authentication_failed,gdpr_IV_35.7.d,gdpr_IV_32.2,pci_dss_10.2.4,&lt;/group&gt;
+  &lt;/rule&gt;
+
+&lt;/group&gt;</code></pre>
+
+  <h3>Rule Matching Elements</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Element</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>&lt;match&gt;</code></td><td>Substring match in the log line (OR-separated with |)</td></tr>
+        <tr><td><code>&lt;regex&gt;</code></td><td>POSIX regex match on the log line</td></tr>
+        <tr><td><code>&lt;srcip&gt;</code></td><td>Match on the decoded srcip field</td></tr>
+        <tr><td><code>&lt;dstip&gt;</code></td><td>Match on the decoded dstip field</td></tr>
+        <tr><td><code>&lt;user&gt;</code></td><td>Match on the decoded user field</td></tr>
+        <tr><td><code>&lt;url&gt;</code></td><td>Match on the decoded URL field</td></tr>
+        <tr><td><code>&lt;status&gt;</code></td><td>Match on the decoded status field</td></tr>
+        <tr><td><code>&lt;hostname&gt;</code></td><td>Match on the source hostname</td></tr>
+        <tr><td><code>&lt;program_name&gt;</code></td><td>Match on the program name field</td></tr>
+        <tr><td><code>&lt;action&gt;</code></td><td>Match on the decoded action field</td></tr>
+        <tr><td><code>&lt;id&gt;</code></td><td>Match on the decoded ID field</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Rule Condition Elements</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Element</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>&lt;if_sid&gt;</code></td><td>Only fire if the previous rule with this SID also matched (parent rule chaining)</td></tr>
+        <tr><td><code>&lt;if_group&gt;</code></td><td>Only fire if the previous event belongs to this group</td></tr>
+        <tr><td><code>&lt;if_matched_sid&gt;</code></td><td>Fire when this SID fires N times in the timeframe (requires frequency)</td></tr>
+        <tr><td><code>&lt;if_matched_group&gt;</code></td><td>Fire when events from this group fire N times in the timeframe</td></tr>
+        <tr><td><code>&lt;same_source_ip&gt;</code></td><td>Frequency/correlation must share the same source IP</td></tr>
+        <tr><td><code>&lt;same_user&gt;</code></td><td>Frequency/correlation must share the same user</td></tr>
+        <tr><td><code>&lt;different_url&gt;</code></td><td>Must have a different URL each time (for scan detection)</td></tr>
+        <tr><td><code>&lt;frequency&gt;</code></td><td>Number of events that must occur within the timeframe</td></tr>
+        <tr><td><code>&lt;timeframe&gt;</code></td><td>Time window in seconds for frequency counting</td></tr>
+        <tr><td><code>&lt;options&gt;no_log&lt;/options&gt;</code></td><td>Don't log this rule's events to alerts.log (suppress)</td></tr>
+        <tr><td><code>&lt;options&gt;alert_by_email&lt;/options&gt;</code></td><td>Force email for this rule regardless of email threshold</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Custom Rules — Real Examples</h3>
+  <pre><code><span class="cm">&lt;!-- /var/ossec/etc/rules/local_rules.xml --&gt;</span>
+&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;group name="local,custom,"&gt;
+
+  <span class="cm">&lt;!-- Rule 1: SSH brute force — 8+ failures from same IP in 60 seconds --&gt;</span>
+  &lt;rule id="100100" level="10" frequency="8" timeframe="60"&gt;
+    &lt;if_matched_sid&gt;5710&lt;/if_matched_sid&gt;
+    &lt;same_source_ip /&gt;
+    &lt;description&gt;SSH brute force attack — 8+ failures in 60s&lt;/description&gt;
+    &lt;group&gt;authentication_failures,attack,&lt;/group&gt;
+    &lt;mitre&gt;&lt;id&gt;T1110.001&lt;/id&gt;&lt;/mitre&gt;
+  &lt;/rule&gt;
+
+  <span class="cm">&lt;!-- Rule 2: Root login via SSH (success) --&gt;</span>
+  &lt;rule id="100101" level="9"&gt;
+    &lt;if_sid&gt;5715&lt;/if_sid&gt;  <span class="cm">&lt;!-- SSH authentication success --&gt;</span>
+    &lt;user&gt;root&lt;/user&gt;
+    &lt;description&gt;Successful root login via SSH — investigate immediately&lt;/description&gt;
+    &lt;group&gt;authentication_success,pam,&lt;/group&gt;
+    &lt;mitre&gt;&lt;id&gt;T1078&lt;/id&gt;&lt;/mitre&gt;
+  &lt;/rule&gt;
+
+  <span class="cm">&lt;!-- Rule 3: Sudo command execution by non-standard user --&gt;</span>
+  &lt;rule id="100102" level="7"&gt;
+    &lt;if_sid&gt;5402&lt;/if_sid&gt;  <span class="cm">&lt;!-- sudo: user executed command --&gt;</span>
+    &lt;match&gt;/bin/bash|/bin/sh|/bin/nc|python|perl&lt;/match&gt;
+    &lt;description&gt;Suspicious sudo: shell or interpreter executed via sudo&lt;/description&gt;
+    &lt;group&gt;sudo,privilege_escalation,&lt;/group&gt;
+    &lt;mitre&gt;&lt;id&gt;T1548.003&lt;/id&gt;&lt;/mitre&gt;
+  &lt;/rule&gt;
+
+  <span class="cm">&lt;!-- Rule 4: Apache 404 scan — many different URLs hitting 404 --&gt;</span>
+  &lt;rule id="100103" level="8" frequency="20" timeframe="30"&gt;
+    &lt;if_matched_sid&gt;30306&lt;/if_matched_sid&gt;  <span class="cm">&lt;!-- apache: 404 not found --&gt;</span>
+    &lt;same_source_ip /&gt;
+    &lt;description&gt;Web scanner: 20+ 404 responses in 30s from same IP&lt;/description&gt;
+    &lt;group&gt;web,attack,&lt;/group&gt;
+    &lt;mitre&gt;&lt;id&gt;T1595.003&lt;/id&gt;&lt;/mitre&gt;
+  &lt;/rule&gt;
+
+  <span class="cm">&lt;!-- Rule 5: SQL injection pattern in Apache URL --&gt;</span>
+  &lt;rule id="100104" level="10"&gt;
+    &lt;if_sid&gt;30105&lt;/if_sid&gt;  <span class="cm">&lt;!-- apache: access log --&gt;</span>
+    &lt;url&gt;select%20|union%20|1=1|'%20or%20|drop%20table&lt;/url&gt;
+    &lt;description&gt;SQL Injection attempt detected in URL&lt;/description&gt;
+    &lt;group&gt;web,attack,sql_injection,&lt;/group&gt;
+    &lt;mitre&gt;&lt;id&gt;T1190&lt;/id&gt;&lt;/mitre&gt;
+  &lt;/rule&gt;
+
+  <span class="cm">&lt;!-- Rule 6: New cron job added --&gt;</span>
+  &lt;rule id="100105" level="8"&gt;
+    &lt;if_sid&gt;550&lt;/if_sid&gt;  <span class="cm">&lt;!-- FIM checksum changed --&gt;</span>
+    &lt;match&gt;/etc/cron|/var/spool/cron&lt;/match&gt;
+    &lt;description&gt;Cron file modified — possible persistence mechanism&lt;/description&gt;
+    &lt;group&gt;syscheck,persistence,&lt;/group&gt;
+    &lt;mitre&gt;&lt;id&gt;T1053.003&lt;/id&gt;&lt;/mitre&gt;
+  &lt;/rule&gt;
+
+  <span class="cm">&lt;!-- Rule 7: Override a noisy built-in rule (lower its level) --&gt;</span>
+  &lt;rule id="100200" level="0"&gt;
+    &lt;if_sid&gt;1002&lt;/if_sid&gt;
+    &lt;match&gt;DNSSEC validation&lt;/match&gt;
+    &lt;description&gt;Suppress noisy DNSSEC validation messages&lt;/description&gt;
+  &lt;/rule&gt;
+
+&lt;/group&gt;</code></pre>
+
+  <h3>Rule ID Ranges</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Range</th><th>Owner</th></tr></thead>
+      <tbody>
+        <tr><td>1 – 999</td><td>OSSEC core rules</td></tr>
+        <tr><td>1000 – 1999</td><td>Syslog rules</td></tr>
+        <tr><td>5000 – 5999</td><td>Authentication (SSH, PAM, su, sudo)</td></tr>
+        <tr><td>30000 – 30999</td><td>Web server (Apache, nginx, IIS)</td></tr>
+        <tr><td>60000 – 60999</td><td>Windows Event Log rules</td></tr>
+        <tr><td>80000 – 89999</td><td>Wazuh built-in extended rules</td></tr>
+        <tr><td>100000+</td><td>Custom local rules (your namespace)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Write a Simple Alert Rule</summary>
+    <div class="tier-body">
+      <h4>Match a String and Fire at a Level</h4>
+      <ul>
+        <li>Every rule needs: a unique ID (100000+), a level (1–15), and at least one matching condition</li>
+        <li>Use <code>&lt;if_sid&gt;</code> to chain from a parent rule — this avoids re-running the decoder match</li>
+        <li>Use <code>&lt;match&gt;</code> for simple substring matching; <code>&lt;regex&gt;</code> for complex patterns</li>
+        <li>Always add a <code>&lt;description&gt;</code> — it appears in the alert body and dashboard</li>
+      </ul>
+      <pre><code><span class="cm">&lt;!-- Minimal working rule --&gt;</span>
+&lt;rule id="100100" level="7"&gt;
+  &lt;if_sid&gt;5710&lt;/if_sid&gt;
+  &lt;user&gt;root&lt;/user&gt;
+  &lt;description&gt;SSH: Failed login attempt for root&lt;/description&gt;
+&lt;/rule&gt;</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Frequency and Correlation Rules</summary>
+    <div class="tier-body">
+      <h4>Detect Patterns Over Time</h4>
+      <ul>
+        <li>Use <code>frequency="N"</code> + <code>timeframe="S"</code> + <code>&lt;if_matched_sid&gt;</code> to fire on N occurrences of a rule in S seconds</li>
+        <li>Add <code>&lt;same_source_ip /&gt;</code> to require all N events share the same source IP (brute force detection)</li>
+        <li>Add <code>&lt;different_url /&gt;</code> to require different URLs each time (web scanner detection)</li>
+        <li>Add MITRE tags with <code>&lt;mitre&gt;&lt;id&gt;T1110&lt;/id&gt;&lt;/mitre&gt;</code> — shows in Wazuh MITRE ATT&amp;CK dashboard</li>
+      </ul>
+      <pre><code><span class="cm">&lt;!-- SSH brute force: 8 failures in 60s from same IP --&gt;</span>
+&lt;rule id="100101" level="10" frequency="8" timeframe="60"&gt;
+  &lt;if_matched_sid&gt;5710&lt;/if_matched_sid&gt;
+  &lt;same_source_ip /&gt;
+  &lt;description&gt;SSH brute force detected&lt;/description&gt;
+  &lt;mitre&gt;&lt;id&gt;T1110.001&lt;/id&gt;&lt;/mitre&gt;
+&lt;/rule&gt;</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Override Built-ins and Chain Rules</summary>
+    <div class="tier-body">
+      <h4>Fine-tune and Chain Multiple Rules</h4>
+      <ul>
+        <li>Override a noisy built-in by writing a level-0 child rule with the same <code>&lt;if_sid&gt;</code> + a specific <code>&lt;match&gt;</code> condition</li>
+        <li>Chain three rules: auth failure (level 5) → brute force (level 10) → brute force + FIM change (level 14) for compound escalation</li>
+        <li>Use <code>&lt;options&gt;no_log&lt;/options&gt;</code> on intermediate low-level rules you only need as frequency counters, not individual alerts</li>
+      </ul>
+      <pre><code><span class="cm">&lt;!-- Suppress a noisy specific sub-case --&gt;</span>
+&lt;rule id="100200" level="0"&gt;
+  &lt;if_sid&gt;1002&lt;/if_sid&gt;
+  &lt;match&gt;DNSSEC validation&lt;/match&gt;
+  &lt;description&gt;Ignore DNSSEC validation noise&lt;/description&gt;
+&lt;/rule&gt;</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ Built-in Rules ═════════════════════════════════ -->
+<template id="tpl-builtin-rules">
+<article class="topic">
+  <h2>Key Built-in Rules</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Built-in rules detect application-layer events: SSH authentication failures, sudo usage, HTTP responses, and Windows Event Log entries. Source IPs (L3) are extracted from log text and used as correlation fields.</span>
+  </div>
+  <p>These rules fire from standard log sources. Use them as <code>&lt;if_matched_sid&gt;</code> or <code>&lt;if_sid&gt;</code> references when building custom correlation rules.</p>
+
+  <h3>SSH / PAM Authentication</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>SID</th><th>Level</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>5700</td><td>0</td><td>sshd grouping rule (parent for all SSH rules)</td></tr>
+        <tr><td>5701</td><td>5</td><td>sshd: Possible attack — SSH port scanning</td></tr>
+        <tr><td>5710</td><td>5</td><td>sshd: Attempt to login using a non-existent user</td></tr>
+        <tr><td>5711</td><td>5</td><td>sshd: Failed login attempt (invalid user or wrong password)</td></tr>
+        <tr><td>5712</td><td>10</td><td>sshd: SSHD brute force (8 failures in 120s)</td></tr>
+        <tr><td>5715</td><td>3</td><td>sshd: Authentication success</td></tr>
+        <tr><td>5720</td><td>10</td><td>sshd: Multiple authentication failures followed by success (brute &amp; win)</td></tr>
+        <tr><td>5503</td><td>5</td><td>PAM: User authentication failure</td></tr>
+        <tr><td>5504</td><td>5</td><td>PAM: User missed the password more than once</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>sudo / su / Privilege Escalation</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>SID</th><th>Level</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>5401</td><td>5</td><td>su: Attempt to run as a non-existent user</td></tr>
+        <tr><td>5402</td><td>3</td><td>sudo: Command executed via sudo</td></tr>
+        <tr><td>5403</td><td>5</td><td>sudo: Wrong password attempt</td></tr>
+        <tr><td>5404</td><td>8</td><td>sudo: User not in sudoers (unauthorized)</td></tr>
+        <tr><td>5405</td><td>3</td><td>su: Successful su</td></tr>
+        <tr><td>5406</td><td>5</td><td>su: Authentication failed</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Apache / Web Server</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>SID</th><th>Level</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>30105</td><td>0</td><td>Apache access log grouping rule</td></tr>
+        <tr><td>30131</td><td>5</td><td>Apache: Access attempt to restricted file or directory</td></tr>
+        <tr><td>30306</td><td>5</td><td>Apache: HTTP 404 Not Found</td></tr>
+        <tr><td>31101</td><td>10</td><td>Web attack: SQL injection attempt</td></tr>
+        <tr><td>31103</td><td>10</td><td>Web attack: XSS attempt</td></tr>
+        <tr><td>31104</td><td>10</td><td>Web attack: Directory traversal attempt</td></tr>
+        <tr><td>31105</td><td>10</td><td>Web attack: Remote file include attempt</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Windows Event Log (Wazuh)</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>SID</th><th>Level</th><th>Win Event ID</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>60106</td><td>5</td><td>4625</td><td>Windows: Logon failure — unknown username or password</td></tr>
+        <tr><td>60137</td><td>10</td><td>4625 (×10)</td><td>Windows: Multiple logon failures — brute force</td></tr>
+        <tr><td>60109</td><td>3</td><td>4624</td><td>Windows: Logon success</td></tr>
+        <tr><td>60110</td><td>9</td><td>4648</td><td>Windows: Logon with explicit credentials (pass-the-hash indicator)</td></tr>
+        <tr><td>60160</td><td>8</td><td>4720</td><td>Windows: User account created</td></tr>
+        <tr><td>60161</td><td>8</td><td>4726</td><td>Windows: User account deleted</td></tr>
+        <tr><td>60162</td><td>8</td><td>4732</td><td>Windows: User added to privileged group</td></tr>
+        <tr><td>60204</td><td>8</td><td>4688</td><td>Windows: New process created (requires process audit)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>FIM / Syscheck</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>SID</th><th>Level</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>550</td><td>7</td><td>Integrity checksum changed</td></tr>
+        <tr><td>551</td><td>7</td><td>File permissions changed</td></tr>
+        <tr><td>552</td><td>7</td><td>File ownership changed</td></tr>
+        <tr><td>553</td><td>7</td><td>File deleted from monitored directory</td></tr>
+        <tr><td>554</td><td>5</td><td>File added to monitored directory</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Know the Key Rule IDs</summary>
+    <div class="tier-body">
+      <h4>Essential Built-in Rules to Remember</h4>
+      <ul>
+        <li><strong>5712</strong> = SSH brute force (8 failures/120s) — level 10, triggers active response</li>
+        <li><strong>5720</strong> = Brute force then success — level 10, most critical SSH alert</li>
+        <li><strong>5404</strong> = Unauthorized sudo attempt — level 8</li>
+        <li><strong>550</strong> = FIM checksum changed — level 7; <strong>554</strong> = file added — level 5</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Use Built-ins as Correlation Anchors</summary>
+    <div class="tier-body">
+      <h4>Chain Custom Rules Off Built-in SIDs</h4>
+      <ul>
+        <li>Use <code>&lt;if_matched_sid&gt;5710&lt;/if_matched_sid&gt;</code> to build frequency rules on top of the SSH failed login base rule</li>
+        <li>Use <code>&lt;if_sid&gt;5715&lt;/if_sid&gt;</code> + <code>&lt;user&gt;root&lt;/user&gt;</code> to alert on successful root SSH logins specifically</li>
+        <li>Use <code>&lt;if_matched_sid&gt;30306&lt;/if_matched_sid&gt;</code> with frequency to detect web scanners generating many 404s</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Windows Lateral Movement Detection</summary>
+    <div class="tier-body">
+      <h4>Chain Windows Event Rules for Pass-the-Hash</h4>
+      <ul>
+        <li>Rule 60110 (Event 4648 — logon with explicit credentials) fires on pass-the-hash attempts at level 9</li>
+        <li>Correlate 60106 (4625 failure) + 60109 (4624 success) from same srcip within 60s = likely credential stuffing</li>
+        <li>Rule 60162 (4732 — user added to privileged group) = persistence via group membership — fire at level 10+</li>
+      </ul>
+      <pre><code><span class="cm">&lt;!-- Alert when 4625 failure then 4624 success from same IP in 30s --&gt;</span>
+&lt;rule id="100300" level="12" frequency="2" timeframe="30"&gt;
+  &lt;if_matched_sid&gt;60106&lt;/if_matched_sid&gt;
+  &lt;if_sid&gt;60109&lt;/if_sid&gt;
+  &lt;same_source_ip /&gt;
+  &lt;description&gt;Windows: Auth failure then success — possible credential stuffing&lt;/description&gt;
+  &lt;mitre&gt;&lt;id&gt;T1110&lt;/id&gt;&lt;/mitre&gt;
+&lt;/rule&gt;</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<!-- ══════════════════════════ Rule Testing ══════════════════════════════════ -->
+<template id="tpl-rule-testing">
+<article class="topic">
+  <h2>Testing Rules</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Rule testing validates application-layer log parsing — ossec-logtest traces each log line through the full decode + rule-match pipeline and shows exactly which decoder and rule fired.</span>
+  </div>
+
+  <h3>ossec-logtest / wazuh-logtest</h3>
+  <pre><code><span class="cm"># Run the log tester interactively</span>
+sudo /var/ossec/bin/ossec-logtest
+<span class="cm"># or for Wazuh</span>
+sudo /var/ossec/bin/wazuh-logtest
+
+<span class="cm"># Paste a log line to test:</span>
+Mar 19 10:00:01 webserver sshd[1234]: Failed password for root from 192.168.1.100 port 54321 ssh2
+
+<span class="cm"># Expected output:</span>
+**Phase 1: Completed pre-decoding.
+       full event: 'Mar 19 10:00:01 webserver sshd[1234]: Failed password for root from 192.168.1.100 port 54321 ssh2'
+       hostname: 'webserver'
+       program_name: 'sshd'
+       log: 'Failed password for root from 192.168.1.100 port 54321 ssh2'
+
+**Phase 2: Completed decoding.
+       decoder: 'sshd'
+       srcip: '192.168.1.100'
+       user: 'root'
+
+**Phase 3: Completed filtering (rules).
+       Rule id: '5710'
+       Level: '5'
+       Description: 'sshd: Attempt to login using a non-existent user'</code></pre>
+
+  <h3>After Editing Rules — Restart and Validate</h3>
+  <pre><code><span class="cm"># Validate ossec.conf XML syntax</span>
+sudo /var/ossec/bin/ossec-analysisd -t
+
+<span class="cm"># Restart OSSEC to load new rules</span>
+sudo /var/ossec/bin/ossec-control restart
+
+<span class="cm"># Wazuh: restart the manager</span>
+sudo systemctl restart wazuh-manager
+
+<span class="cm"># Watch the OSSEC log for errors</span>
+sudo tail -f /var/ossec/logs/ossec.log
+
+<span class="cm"># Common error: rule references undefined SID</span>
+<span class="cm"># ERROR: Line 45: Rule '100100' references a non-existing SID: '5999'</span></code></pre>
+
+  <h3>Useful ossec-logtest Flags</h3>
+  <pre><code><span class="cm"># Verbose output showing all decoder/rule phases</span>
+sudo /var/ossec/bin/ossec-logtest -v
+
+<span class="cm"># Test with a specific config file</span>
+sudo /var/ossec/bin/ossec-logtest -c /var/ossec/etc/ossec.conf
+
+<span class="cm"># Batch test from a file of log lines</span>
+sudo /var/ossec/bin/ossec-logtest &lt; /tmp/test-logs.txt</code></pre>
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Use ossec-logtest to Validate</summary>
+    <div class="tier-body">
+      <h4>Test Any Log Line Before It Goes Live</h4>
+      <ul>
+        <li>Run <code>sudo ossec-logtest</code>, paste a real log line, and press Enter — see exactly which decoder and rule fires</li>
+        <li>Phase 2 shows the decoder name and extracted fields — if srcip/user are blank, your decoder isn't matching</li>
+        <li>Phase 3 shows the rule ID and level — if no rule fires, your rule condition may not match the decoded output</li>
+        <li>Always test before restarting OSSEC with new rules</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Validate and Restart Safely</summary>
+    <div class="tier-body">
+      <h4>Validate XML Syntax Before Restarting</h4>
+      <ul>
+        <li>Run <code>sudo ossec-analysisd -t</code> to syntax-check all rules and decoders without actually restarting</li>
+        <li>If it exits cleanly, safe to restart: <code>sudo ossec-control restart</code> or <code>sudo systemctl restart wazuh-manager</code></li>
+        <li>Watch <code>/var/ossec/logs/ossec.log</code> for "ERROR: Line X" messages after restart — points to the broken rule</li>
+        <li>Batch test with: <code>sudo ossec-logtest &lt; test-logs.txt</code> to verify against a set of known-bad lines</li>
+      </ul>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Regression Testing with Sample Logs</summary>
+    <div class="tier-body">
+      <h4>Build a Test Suite for Your Rules</h4>
+      <ul>
+        <li>Maintain a <code>test-logs.txt</code> file with one representative line per detection scenario (SSH brute, web 404, FIM change)</li>
+        <li>After each rule change, run <code>ossec-logtest &lt; test-logs.txt</code> and verify all expected rule IDs still fire</li>
+        <li>Use <code>wazuh-logtest</code> REST API mode to integrate rule testing into a CI/CD pipeline for infrastructure-as-code deployments</li>
+      </ul>
+      <pre><code><span class="cm"># Build a regression log test file</span>
+cat &gt; /tmp/ossec-test.txt &lt;&lt;'EOF'
+Mar 19 10:00:01 web sshd[1]: Failed password for root from 192.168.56.10 port 54321 ssh2
+Mar 19 10:00:02 web sudo: bob : command not allowed ; TTY=pts/0 ; COMMAND=/bin/bash
+EOF
+sudo /var/ossec/bin/ossec-logtest &lt; /tmp/ossec-test.txt | grep "Rule id"</code></pre>
+    </div>
+  </details>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: "Rules &amp; Decoders",
+  topics: [
+    { id: "pipeline",      badge: "01", label: "Pipeline" },
+    { id: "decoders",      badge: "02", label: "Decoders" },
+    { id: "rules",         badge: "03", label: "Rule Syntax" },
+    { id: "builtin-rules", badge: "04", label: "Built-in Rules" },
+    { id: "rule-testing",  badge: "05", label: "Testing Rules" },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

