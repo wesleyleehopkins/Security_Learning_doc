@@ -22,7 +22,22 @@
     <a href="psaa.html">PSAA</a>
     <a href="security-onion.html">Security Onion</a>
     <a href="splunk.html">Splunk</a>
-    <a href="nmap.html">Nmap</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
+    <a href="nmap.html" class="active">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
     <a href="log-sources.html">Log Sources</a>
   </div>
 </nav>
@@ -69,6 +84,11 @@ window.NOTEBOOK = {
 <template id="tpl-nse-overview">
 <article class="topic">
 <h1>01 · NSE Overview &amp; Categories</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">NSE scripts operate at L7 by probing and interrogating application-layer services — SSH, HTTP, SMB, FTP, DNS. L4 TCP connections are used only as the transport vehicle to reach those services.</span>
+</div>
 <hr class="divider">
 
 <p>The Nmap Scripting Engine (NSE) allows users to write and run Lua scripts against discovered hosts and services. Scripts extend Nmap's capabilities from simple port scanning into service enumeration, vulnerability detection, exploitation, and more. Scripts ship with Nmap in <code>/usr/share/nmap/scripts/</code>.</p>
@@ -135,12 +155,57 @@ nmap --script="http-*" -p 80,443,8080 192.168.1.10
 <span class="cm"># Logical expressions</span>
 nmap --script="not intrusive and not brute" 192.168.1.10
 nmap --script="vuln or exploit" 192.168.1.10</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Know that NSE scripts live in <code>/usr/share/nmap/scripts/</code> and run Lua code against discovered hosts</li>
+      <li>Understand the 13 script categories — especially <code>default</code>, <code>safe</code>, <code>vuln</code>, <code>brute</code>, and why <code>intrusive</code> / <code>dos</code> are dangerous</li>
+      <li>Run <code>--script=default</code> (same as <code>-sC</code>) against a lab target: <code>nmap -sV --script=default 192.168.56.30</code></li>
+      <li>Use <code>--script-help=&lt;name&gt;</code> to read what any script does before running it</li>
+      <li>Run <code>nmap --script-updatedb</code> after adding a custom script</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Use category combinations: <code>--script="default,safe,vuln"</code> for broad non-intrusive coverage</li>
+      <li>Apply logical filter expressions: <code>--script="not intrusive and not brute"</code> to stay safe on production</li>
+      <li>Use wildcard script selectors: <code>--script="http-*"</code> or <code>--script="smb-vuln-*"</code></li>
+      <li>Search scripts by keyword: <code>grep -r "categories.*vuln" /usr/share/nmap/scripts/*.nse</code></li>
+      <li>Understand script lifecycle hooks — <code>prerule</code>, <code>portrule</code>, <code>hostrule</code>, <code>postrule</code> — to know when each script fires</li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Write a custom NSE script in Lua: define categories, portrule condition, and action function</li>
+      <li>Use <code>--script-trace</code> to debug packet-level NSE exchanges and diagnose failed scripts</li>
+      <li>Chain category filters with boolean logic to build precise engagement-specific script sets</li>
+      <li>Test against: <code>nmap --script="vuln or exploit" -sV -p 445,80,21,22 192.168.56.30</code></li>
+      <li>Integrate custom scripts into a portable <code>--datadir</code> for repeatable assessment kits</li>
+    </ul>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-default-scripts">
 <article class="topic">
 <h1>02 · Default Scripts (-sC)</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Default scripts establish L4 TCP connections to open ports, then exchange L7 application-layer messages — SSH handshakes, HTTP GET requests, SMB negotiation frames, and TLS ClientHellos.</span>
+</div>
 <hr class="divider">
 
 <div class="callout"><code>-sC</code> is equivalent to <code>--script=default</code>. Default scripts are judged safe, useful, and not excessively intrusive. They run automatically when their target port/service is open.</div>
@@ -213,12 +278,57 @@ PORT    STATE SERVICE  VERSION
 |   account_used: guest
 |   authentication_level: user
 |_  message_signing: disabled</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Run <code>nmap -sV -sC 192.168.56.30</code> and identify which script produced each output line</li>
+      <li>Understand that <code>-sC</code> = <code>--script=default</code> — equivalent and interchangeable</li>
+      <li>Recognize high-value default findings: <code>ftp-anon: Anonymous FTP login allowed</code>, weak SMB signing, expired SSL certs</li>
+      <li>Read <code>ssh-hostkey</code> output and know the three key types: RSA, ECDSA, ED25519</li>
+      <li>Note that <code>-A</code> includes <code>-sC</code> plus OS detection (<code>-O</code>) and traceroute</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Target specific services with default scripts: <code>nmap -sV -sC -p 22,80,443,445 192.168.56.30</code></li>
+      <li>Interpret <code>ssl-enum-ciphers</code> cipher grades (A–F) and flag weak suites (RC4, DES, EXPORT)</li>
+      <li>Recognize <code>smb-security-mode: message_signing: disabled</code> as a relay attack risk</li>
+      <li>Use <code>dns-zone-transfer</code> output to map internal DNS topology</li>
+      <li>Correlate <code>http-server-header</code> and <code>http-title</code> to fingerprint web application stacks</li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Map default script findings to MITRE ATT&CK: <code>ftp-anon</code> → T1083 (File Discovery), <code>smb-enum-shares</code> → T1135</li>
+      <li>Cross-reference <code>ssl-cert</code> expiry dates against internal PKI rotation schedules</li>
+      <li>Use <code>-sC</code> output as recon intelligence — identify outdated versions for targeted vuln script follow-up</li>
+      <li>Parse default script output with <code>-oX</code> XML and extract structured results via XSLT or Python</li>
+      <li>Build a baseline: run <code>-sV -sC</code> against Security Onion (<code>192.168.56.20</code>) and Windows 10 (<code>192.168.56.30</code>), compare outputs</li>
+    </ul>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-vuln-scripts">
 <article class="topic">
 <h1>03 · Vulnerability Scripts</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Vuln scripts send crafted L7 application-layer payloads — malformed SMB headers, oversized TLS heartbeat records, Bash environment strings — over L4 TCP connections to probe for known vulnerabilities.</span>
+</div>
 <hr class="divider">
 
 <div class="callout warn"><strong>Vuln scripts probe for specific vulnerabilities</strong> — they may send unusual payloads or trigger error responses, but generally do not exploit vulnerabilities. Always obtain authorization before running.</div>
@@ -322,12 +432,56 @@ PORT   STATE SERVICE VERSION
 
 <span class="cm"># --script-args uri=  → specify CGI path to test</span>
 <span class="cm"># Common CGI paths: /cgi-bin/status.cgi, /cgi-bin/test-cgi</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Know that vuln scripts <em>detect</em> vulnerabilities but do not exploit them — <code>exploit</code> category does that</li>
+      <li>Run <code>nmap -sV --script=vuln 192.168.56.30</code> and read the <code>VULNERABLE</code> / <code>NOT VULNERABLE</code> state lines</li>
+      <li>Recognize <code>smb-vuln-ms17-010</code> (EternalBlue / WannaCry) as the highest-priority SMB vuln check</li>
+      <li>Understand that you need explicit authorization before running vuln scripts on any system</li>
+      <li>Match CVE numbers from script output to CVSS severity scores on NVD</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Run targeted service checks: <code>nmap --script="smb-vuln-*" -p 445 192.168.56.30</code></li>
+      <li>Combine version detection with vuln scripts: <code>nmap -sV --script=vuln 192.168.56.30</code></li>
+      <li>Test Heartbleed: <code>nmap -sV --script=ssl-heartbleed -p 443 192.168.56.20</code></li>
+      <li>Correlate vuln script hits to known threat actor TTPs (EternalBlue → ransomware, Shellshock → botnets)</li>
+      <li>Understand why <code>ssl-poodle</code> and <code>ssl-dh-params</code> flag protocol downgrade / weak key risks</li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Chain vuln scan output into automated triage: <code>nmap -oX - --script=vuln | xsltproc nmap.xsl -</code></li>
+      <li>Scan an entire subnet for EternalBlue exposure: <code>nmap --script=smb-vuln-ms17-010 -p 445 192.168.56.0/24</code></li>
+      <li>Map vuln findings to MITRE ATT&CK exploit techniques for prioritized remediation reporting</li>
+      <li>Use <code>http-shellshock --script-args uri=</code> to iterate over multiple CGI paths systematically</li>
+      <li>Integrate vuln script results into vulnerability management platforms (OpenVAS, Tenable) as corroborating evidence</li>
+    </ul>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-auth-discovery">
 <article class="topic">
 <h1>04 · Auth &amp; Discovery Scripts</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Auth and discovery scripts operate entirely at L7, speaking application protocols — FTP anonymous login, HTTP header fetching, SMB share enumeration, DNS AXFR zone transfer, SNMP sysDescr queries — to map services and access controls.</span>
+</div>
 <hr class="divider">
 
 <h2>Authentication Scripts</h2>
@@ -427,12 +581,56 @@ PORT   STATE SERVICE
 
 <span class="cm"># Zone transfer reveals full internal DNS map</span>
 <span class="cm"># Fix: restrict AXFR to authorized secondary DNS servers only</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Run <code>nmap --script=ftp-anon -p 21 192.168.56.30</code> — note whether anonymous login is allowed and what files are listed</li>
+      <li>Understand what <code>smb-os-discovery</code> reveals: OS version, computer name, domain, FQDN</li>
+      <li>Use <code>http-robots.txt</code> to discover hidden paths a web app tries to exclude from crawlers</li>
+      <li>Know that DNS zone transfer (<code>dns-zone-transfer</code>) is a misconfiguration — AXFR should only work for secondary DNS servers</li>
+      <li>Recognize SNMP community strings — <code>public</code> and <code>private</code> — as default credentials worth testing</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Combine share and user enumeration: <code>nmap --script=smb-enum-shares,smb-enum-users -p 445 192.168.56.30</code></li>
+      <li>Flag world-writable shares (<code>Access: READ, WRITE</code>) as data exfiltration risks in pen test reports</li>
+      <li>Execute zone transfer: <code>nmap --script=dns-zone-transfer --script-args dns-zone-transfer.domain=corp.local -p 53 &lt;dns-server&gt;</code></li>
+      <li>Use <code>nbstat</code> on UDP 137 to resolve NetBIOS hostname and MAC address without touching TCP</li>
+      <li>Correlate <code>smb-enum-users</code> output (RIDs 500, 1001, etc.) with known account naming conventions</li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Chain <code>smb-enum-users</code> output into a targeted username list for credential spray (Hydra / CrackMapExec)</li>
+      <li>Use LDAP anonymous bind (<code>ldap-search</code>) to pull Active Directory base DN and enumerate OUs without credentials</li>
+      <li>Map SNMP interface data (<code>snmp-interfaces</code>) to build a L2/L3 network topology diagram</li>
+      <li>Correlate auth/discovery findings across multiple tools — Nmap + enum4linux + rpcclient — for comprehensive SMB recon</li>
+      <li>Detect auth/discovery scans on the defender side: watch for rapid multi-script SMB probes in Security Onion alerts (<code>192.168.56.10</code> → <code>192.168.56.30</code>)</li>
+    </ul>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-brute-scripts">
 <article class="topic">
 <h1>05 · Brute Force Scripts</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Brute force scripts repeatedly submit L7 application-layer authentication attempts — SSH AUTH_PASSWORD, HTTP POST login forms, SMB NTLM challenges, FTP USER/PASS sequences — cycling through credential lists until a valid combination is found.</span>
+</div>
 <hr class="divider">
 
 <div class="callout warn"><strong>Brute force scripts generate significant authentication log noise</strong> and may lock out accounts. Always check lockout policies before running. Only use with explicit authorization.</div>
@@ -519,12 +717,56 @@ nmap --script=ssh-brute --script-args brute.threads=2,brute.delay=3 -p 22 target
 nmap --script=ssh-brute \
   --script-args brute.firstonly=true,userdb=users.txt,passdb=pass.txt \
   -p 22 target</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Understand that brute force scripts generate <strong>heavy authentication log noise</strong> and can trigger account lockouts — never run without authorization</li>
+      <li>Know the three core arguments: <code>userdb</code> (username list), <code>passdb</code> (password list), <code>brute.threads</code> (concurrency)</li>
+      <li>Run a basic SSH brute attempt in the lab: <code>nmap -p 22 --script=ssh-brute 192.168.56.30</code></li>
+      <li>Understand <code>brute.firstonly=true</code> — stops after finding the first valid credential to minimize noise</li>
+      <li>Know that Nmap ships default wordlists at <code>/usr/share/nmap/nselib/data/</code></li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Use custom wordlists: <code>--script-args userdb=/usr/share/seclists/Usernames/top-usernames-shortlist.txt,passdb=/usr/share/seclists/Passwords/Common-Credentials/10k-most-common.txt</code></li>
+      <li>Limit concurrency to avoid lockout: <code>brute.threads=2,brute.delay=3</code> (2 threads, 3-second delay between attempts)</li>
+      <li>Run FTP brute on lab target: <code>nmap -p 21 --script=ftp-brute --script-args userdb=u.txt,passdb=p.txt 192.168.56.30</code></li>
+      <li>Check lockout policy before running — if AD has 5-attempt lockout, keep threads=1 and use targeted userdb</li>
+      <li>Use <code>brute.mode=pass</code> for password spray — tries one password against all users before moving to next</li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Build a targeted userdb from <code>smb-enum-users</code> output — combine discovery and brute into a chained workflow</li>
+      <li>Analyze lockout threshold vs. spray timing: if lockout is 5 attempts / 30 min, one attempt every 7 min per account is safe</li>
+      <li>Defender perspective: detect brute attempts in Security Onion — watch for repeated auth failures from <code>192.168.56.10</code> to <code>192.168.56.30</code> in Windows Event ID 4625</li>
+      <li>Use <code>http-form-brute</code> with precise form field args to target web login pages — requires inspecting form HTML for field names</li>
+      <li>Compare Nmap brute results against Hydra / Medusa for the same target — cross-validate findings and speed differences</li>
+    </ul>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-script-args">
 <article class="topic">
 <h1>06 · Script Args &amp; Management</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Script args control how NSE interacts with L7 application targets — specifying URI paths, credential wordlists, protocol community strings, and thread timing. The management layer sits above the actual protocol exchanges.</span>
+</div>
 <hr class="divider">
 
 <h2>Passing Script Arguments</h2>
@@ -619,6 +861,45 @@ nmap --script=smb-os-discovery -p 445 -d --script-trace 192.168.1.10 2>&amp;1
 
 <span class="cm"># Suppress script output for faster scanning</span>
 nmap --script=vuln --script-trace 0 192.168.1.10</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Pass a basic script argument: <code>nmap --script=http-shellshock --script-args uri=/cgi-bin/status.cgi 192.168.56.30</code></li>
+      <li>Use <code>--script-help=smb-vuln-ms17-010</code> to read a script's argument list before running</li>
+      <li>Know that multiple args are comma-separated in a single <code>--script-args</code> value</li>
+      <li>Understand script location: <code>/usr/share/nmap/scripts/</code> on Linux — copy custom scripts here and run <code>--script-updatedb</code></li>
+      <li>Use <code>-v</code> to increase script output verbosity and see more detail in results</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Load args from a file: <code>--script-args-file /tmp/assessment-args.txt</code> — useful for repeating complex assessments</li>
+      <li>Use <code>--script-trace</code> to inspect raw packet exchanges during NSE execution — essential for debugging failed scripts</li>
+      <li>Apply script-specific argument prefixes (<code>http-form-brute.path=</code>) to avoid collision when running multiple scripts</li>
+      <li>Run custom NSE from a non-default path: <code>nmap --script /opt/custom/recon.nse 192.168.56.30</code></li>
+      <li>Combine <code>-d</code> debug flag with <code>--script-trace</code> for maximum troubleshooting output</li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Build reusable <code>--script-args-file</code> templates for standard engagement types (web app, Active Directory, OT/ICS)</li>
+      <li>Use a custom <code>--datadir</code> containing both scripts and args files for a portable, self-contained assessment kit</li>
+      <li>Parse <code>--script-trace</code> output to understand exactly what data a script sends — useful for writing detection rules</li>
+      <li>Combine multiple complex scripts with shared auth credentials: <code>--script-args smbuser=admin,smbpass=Password1</code> applies to all smb-* scripts</li>
+      <li>Write a wrapper script to automate sequential nmap runs — discovery → version → vuln → targeted — saving args files per phase</li>
+    </ul>
+  </div>
+</details>
 </article>
 </template>
 

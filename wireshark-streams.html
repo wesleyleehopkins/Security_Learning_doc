@@ -20,24 +20,44 @@
     <a href="psaa.html">PSAA</a>
     <a href="security-onion.html">Security Onion</a>
     <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
     <a href="nmap.html">Nmap</a>
     <a href="wireshark.html" class="active">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
     <a href="log-sources.html">Log Sources</a>
   </div>
 </nav>
 
 <div class="layout">
-  <aside class="sidebar" id="sidebar">
+  <aside class="sidebar" id="sb">
     <div class="sidebar-header">Streams</div>
-    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+    <nav class="sidebar-nav" id="sb-nav"></nav>
   </aside>
-  <main class="content" id="content-area"></main>
+  <main class="main" id="content-area"></main>
 </div>
 
 <!-- ══════════════════════════ Follow TCP Stream ════════════════════════════ -->
 <template id="tpl-tcp-stream">
 <article class="topic">
   <h2>Follow TCP Stream</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">TCP stream reassembly works at L4 (sequencing TCP segments); reading the content — HTTP, SMTP, shell commands — is L7 application-layer analysis.</span>
+  </div>
   <p>Wireshark's <strong>Follow TCP Stream</strong> feature reassembles all TCP segments belonging to the same connection and displays the full conversation as human-readable text. This is one of the most powerful analysis techniques for cleartext protocols like HTTP, FTP, SMTP, and C2 shells.</p>
 
   <h3>How to Follow a Stream</h3>
@@ -135,6 +155,36 @@ ip.addr == 10.0.0.99 and tcp
 
 <span class="cm"># Then right-click any packet → Follow → TCP Stream</span>
 <span class="cm"># Use the stream number spinner in the dialog to navigate</span></code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Right-click any TCP packet → Follow → TCP Stream to reassemble the full conversation in one dialog</li>
+      <li>Understand color coding: <strong>red</strong> = client (SYN initiator), <strong>blue</strong> = server response — switch direction with the dropdown</li>
+      <li>Use the stream number spinner to navigate between conversations without closing the dialog</li>
+      <li>Switch to ASCII mode for readable protocols (HTTP, FTP, SMTP); use Hex Dump for binary protocols</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Filter specific streams: <code>tcp.stream eq N</code> — note the stream number in the packet details pane before following</li>
+      <li>Use the Find button in the stream dialog to search for: <code>password</code>, <code>Authorization</code>, <code>cmd.exe</code>, <code>powershell</code></li>
+      <li>Select direction "→" (server → client only) in Raw mode to extract HTTP response payloads (files, binaries) cleanly</li>
+      <li>Clear the auto-applied <code>tcp.stream eq N</code> filter (Ctrl+E) to return to the full packet view after analysis</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Follow all streams from 192.168.56.10 (Kali attacker) to reconstruct the full attack session: scan → exploit → shell → post-exploitation</li>
+      <li>Carve PE files from raw TCP streams: Save As Raw → locate MZ (0x4D5A) magic bytes in hex editor → strip HTTP headers → save clean binary for hashing</li>
+      <li>Detect Base64-encoded C2 channels: use Find in stream dialog with a Base64-length pattern to locate encoded commands hidden in cookies or custom headers</li>
+      <li>Chain workflow: Statistics → Conversations sorted by Duration → identify top candidates → follow each → document commands and output</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -142,6 +192,11 @@ ip.addr == 10.0.0.99 and tcp
 <template id="tpl-http-stream">
 <article class="topic">
   <h2>Follow HTTP Stream</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">HTTP Stream following operates entirely at L7 — it handles HTTP-specific features like keep-alive connection reuse, chunked encoding, and gzip decompression transparently.</span>
+  </div>
   <p>Follow HTTP Stream is similar to Follow TCP Stream but specifically designed for HTTP — it handles HTTP/1.1 connection reuse, chunked transfer encoding, and gzip decompression automatically.</p>
 
   <h3>HTTP vs. TCP Stream — Key Differences</h3>
@@ -223,6 +278,36 @@ with open('response.raw','rb') as f:
 start = data.index(b'\x1f\x8b')
 print(gzip.decompress(data[start:]).decode())
 "</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Use <strong>Follow HTTP Stream</strong> (not TCP) for HTTP traffic — it automatically decompresses gzip and handles chunked transfer encoding cleanly</li>
+      <li>Understand that keep-alive connections bundle multiple requests — HTTP Stream shows each request/response pair separately unlike TCP Stream</li>
+      <li>Find cleartext form credentials: filter <code>http.request.method == "POST"</code> → follow HTTP Stream → read the body for <code>username=</code> / <code>password=</code></li>
+      <li>Easiest file extraction method: File → Export Objects → HTTP — no manual stream navigation needed</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Read JSON POST bodies in HTTP Stream for API credential leaks: <code>{"username":"admin","password":"Secret123"}</code> patterns are visible as plaintext</li>
+      <li>For gzip-compressed responses that TCP Stream shows as binary garbage, switch to Follow HTTP Stream — decompression is automatic</li>
+      <li>Combine Export Objects with file type identification: extract files → run <code>file *</code> on all extracted objects → hash any executables for VirusTotal lookup</li>
+      <li>Use tshark <code>--export-objects http,/tmp/dir/</code> to extract HTTP objects from PCAPs without opening the GUI</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>File carving from TCP Stream raw output: Save As Raw → open in Python → find file magic bytes (MZ=PE, PK=ZIP, %PDF) → slice and save clean binary: <code>data[data.index(b'MZ'):]</code></li>
+      <li>Detect malware delivery in HTTP responses: combine <code>http.content_type contains "application/octet-stream"</code> filter + Export Objects for rapid triage</li>
+      <li>Inspect chunked transfer encoding attacks: Follow TCP Stream (not HTTP) to see raw chunk sizes and headers — chunked encoding can be abused to bypass WAFs</li>
+      <li>Script gzip manual decompression for HTTP archives: strip HTTP headers by finding <code>\x1f\x8b</code> (gzip magic) in raw bytes, then decompress with Python's gzip module</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -230,6 +315,12 @@ print(gzip.decompress(data[start:]).decode())
 <template id="tpl-udp-stream">
 <article class="topic">
   <h2>Follow UDP Stream</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">UDP pseudo-streams are grouped by L4 4-tuple (src/dst IP and port); DNS query names and TFTP filenames decoded inside are L7 application-layer data.</span>
+  </div>
   <p>UDP is connectionless — there are no stream numbers like TCP. Wireshark groups UDP packets into "streams" by matching on the same 4-tuple (src IP, src port, dst IP, dst port). Follow UDP Stream is most useful for DNS, TFTP, and custom UDP-based protocols.</p>
 
   <h3>How to Follow</h3>
@@ -277,6 +368,35 @@ tftp or udp port 69
 <span class="cm"># Follow UDP Stream on TFTP packet reveals filename being transferred</span>
 <span class="cm"># Export Objects → TFTP to extract transferred files</span>
 File → Export Objects → TFTP</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Right-click any DNS or TFTP packet → Follow → UDP Stream to see the query + response pair together</li>
+      <li>Understand that UDP "streams" are just 4-tuple groupings — no SYN/FIN tracking like TCP, purely by src/dst IP+port matching</li>
+      <li>For DNS analysis, the <strong>packet details pane</strong> (expand DNS dissector) is usually more useful than Follow UDP Stream — it shows decoded fields directly</li>
+      <li>Navigate between UDP pseudo-streams using <code>udp.stream eq N</code> the same way you would TCP</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Detect DNS tunneling via UDP Stream: follow a stream to <code>exfil.attacker-c2.net</code> — base64 subdomains in the query name are visible as raw binary, use hex dump mode to confirm encoding</li>
+      <li>Export TFTP transferred files with File → Export Objects → TFTP — useful when TFTP is used in a C2 or pivot scenario</li>
+      <li>Filter all UDP streams to a suspect domain: <code>dns.qry.name contains "attacker-c2.net"</code> — note <code>udp.stream</code> values to enumerate all channels</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Reconstruct DNS tunnel data: extract all subdomains with tshark, strip the parent domain, concatenate, and base64-decode to recover exfiltrated content</li>
+      <li>Correlate <code>udp.stream</code> numbers with DNS transaction IDs (<code>dns.id</code>) to match queries and responses and identify orphaned queries (no response = DNS blackholed)</li>
+      <li>Detect TXT-record DNS tunneling with <code>dns.qry.type == 16</code> filter + Follow UDP Stream — responses contain arbitrary-length data encoded in TXT records</li>
+      <li>Use <code>tshark -q -z "follow,udp,ascii,N"</code> to reconstruct DNS tunnel sessions on headless servers without Wireshark GUI</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -284,6 +404,12 @@ File → Export Objects → TFTP</code></pre>
 <template id="tpl-stream-navigate">
 <article class="topic">
   <h2>Stream Navigation &amp; Filtering</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Stream index fields (tcp.stream, udp.stream) are L4 transport identifiers; the C2 detection workflow using stream isolation reads L7 application content within each stream.</span>
+  </div>
   <p>Each TCP connection, UDP pseudo-connection, and HTTP exchange gets its own stream index. Using these fields you can isolate and step through conversations without using the Follow dialog.</p>
 
   <h3>Stream Filter Syntax</h3>
@@ -342,6 +468,33 @@ tcp.stream eq 7 and tcp.flags.push == 1  <span class="cm"># Only data packets in
       </tbody>
     </table>
   </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Know that <code>tcp.stream eq N</code> is automatically applied when you follow a stream — clear it (Ctrl+E) to return to the full packet view</li>
+      <li>Find which stream contains traffic to a suspect IP: filter <code>ip.addr == 192.168.56.10</code> → note the tcp.stream value in the packet details pane</li>
+      <li>Use <code>tcp.stream eq 0</code> through <code>tcp.stream eq N</code> to step through all connections in order of establishment</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Execute the full C2 detection workflow in the table above: Conversations → Duration sort → stream isolation → Follow → keyword search → IOC extraction</li>
+      <li>Combine stream with content filter: <code>tcp.stream eq 5 and http.request</code> to see only request packets within a specific connection</li>
+      <li>Find data exfiltration streams: Statistics → Conversations → TCP → sort by Bytes B→A descending → note stream numbers of top outbound conversations</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Script stream enumeration: extract all unique <code>tcp.stream</code> values matching a suspect IP with tshark, then batch-follow each one and grep for IOC keywords</li>
+      <li>Correlate stream numbers with timestamps to build an attack timeline — stream 0 = first connection, higher numbers = later in the session</li>
+      <li>Detect jitter-obfuscated beaconing: <code>tcp.stream eq N and frame.time_delta</code> shows inter-packet gaps within a stream — variance analysis distinguishes C2 jitter from legitimate traffic patterns</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -349,6 +502,12 @@ tcp.stream eq 7 and tcp.flags.push == 1  <span class="cm"># Only data packets in
 <template id="tpl-tshark-follow">
 <article class="topic">
   <h2>tshark Stream Commands</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">tshark stream commands extract at L4 transport (tcp/udp stream index) and output reassembled L7 application content — enabling scripted, headless PCAP analysis.</span>
+  </div>
   <p>tshark can follow and extract streams from the command line without opening the Wireshark GUI — critical for scripted analysis, headless servers, or large PCAP files.</p>
 
   <h3>Follow Stream Syntax</h3>
@@ -417,6 +576,34 @@ tshark -r capture.pcap \
 tshark -r capture.pcap -Y "tcp.stream eq 5" \
   -T fields -e tcp.payload \
   | tr -d '\n' | xxd -r -p | strings</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Follow the first stream in a PCAP: <code>tshark -r capture.pcap -q -z "follow,tcp,ascii,0"</code> — outputs the full conversation as ASCII text</li>
+      <li>Find stream numbers first before following: <code>tshark -r capture.pcap -Y "ip.addr == 192.168.56.10" -T fields -e tcp.stream | sort -u</code></li>
+      <li>Use <code>-q</code> flag to suppress per-packet output so only the stream content is printed</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Batch extract all streams from a suspect IP to files, then grep for credentials: <code>grep -l "password\|Authorization\|base64" /tmp/streams/*.txt</code></li>
+      <li>Save raw binary stream for file carving: <code>tshark -q -z "follow,tcp,raw,N" | xxd -r -p &gt; stream.bin</code> then run <code>file stream.bin</code> to identify the content type</li>
+      <li>Search all streams for C2 keywords in one pipeline: follow → grep for <code>cmd.exe|powershell|whoami|net user</code> to surface shell sessions instantly</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Full IOC pipeline: identify streams by IP → batch follow all → grep credentials/commands → export HTTP objects → hash all files → submit to VirusTotal API</li>
+      <li>Count total TCP streams to gauge attack complexity: <code>tshark -r capture.pcap -T fields -e tcp.stream | sort -un | wc -l</code> — many streams = scan or automated tool</li>
+      <li>Identify large data exfiltration streams: <code>tshark -q -z conv,tcp | sort -rn -k9 | head -10</code> then follow the highest-byte streams for content review</li>
+      <li>Reconstruct binary payloads from reassembled TCP payload field: <code>tshark -Y "tcp.stream eq 5" -T fields -e tcp.payload | tr -d '\n' | xxd -r -p | strings</code></li>
+    </ul></div>
+  </details>
 </article>
 </template>
 

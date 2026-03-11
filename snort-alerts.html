@@ -20,25 +20,44 @@
     <a href="psaa.html">PSAA</a>
     <a href="security-onion.html">Security Onion</a>
     <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
     <a href="nmap.html">Nmap</a>
     <a href="wireshark.html">Wireshark</a>
     <a href="snort.html" class="active">Snort</a>
+    <a href="ossec.html">OSSEC</a>
     <a href="log-sources.html">Log Sources</a>
   </div>
 </nav>
 
 <div class="layout">
-  <aside class="sidebar" id="sidebar">
+  <aside class="sidebar" id="sb">
     <div class="sidebar-header">Alert Formats</div>
-    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+    <nav class="sidebar-nav" id="sb-nav"></nav>
   </aside>
-  <main class="content" id="content-area"></main>
+  <main class="main" id="content-area"></main>
 </div>
 
 <!-- ════════════════════════ Alert Modes ════════════════════════════════════ -->
 <template id="tpl-alert-modes">
 <article class="topic">
   <h2>Alert Output Modes</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-note">Alert modes format and route L3/L4 detection metadata — source/destination IPs, ports, and protocol — to output destinations for storage and analysis.</span>
+  </div>
   <p>Snort supports multiple alert output formats. The mode is selected with the <code>-A</code> flag on the command line or <code>output alert_*</code> in <code>snort.conf</code>. Multiple modes can run simultaneously.</p>
 
   <div class="table-wrap">
@@ -69,6 +88,36 @@ sudo snort -c /etc/snort/snort.conf -r test.pcap \
 <span class="cm"># Snort 3 — multiple alert loggers in snort.lua</span>
 alert_fast = { file = true, packet = false }
 alert_json = { file = true, fields = 'timestamp msg sid gid priority src_addr dst_addr' }</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Know the 3 most common modes: <code>-A console</code> (testing), <code>-A fast</code> (production file), <code>unified2</code> (production with barnyard2)</li>
+      <li>Use <code>-A console</code> when writing new rules to see alerts immediately without digging through log files</li>
+      <li>Understand that multiple output modes can run simultaneously — fast + unified2 is the standard production setup</li>
+      <li>Know that Snort 3's <code>alert_json</code> replaces barnyard2 for modern ELK/Splunk integrations</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Configure both <code>alert_fast</code> and <code>unified2</code> in snort.conf for redundancy — text file for quick grep, binary for database</li>
+      <li>Use <code>output alert_syslog: LOG_AUTH LOG_ALERT</code> to forward alerts to a centralized syslog server or SIEM agent</li>
+      <li>Use <code>alert_csv</code> for scripted alert parsing — easier to process programmatically than fast format</li>
+      <li>Understand the performance tradeoff: <code>alert_full</code> has higher I/O overhead than <code>alert_fast</code></li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>In Snort 3, configure <code>alert_json fields</code> to include <code>b64_data</code> — captures base64 payload for automated IOC extraction</li>
+      <li>Pipe unified2 output to barnyard2 via a named pipe (FIFO) for real-time processing with reduced file I/O overhead</li>
+      <li>Build a multi-output strategy: unified2 → database for long-term storage, syslog → SIEM for real-time alerting</li>
+      <li>Tune <code>event_queue max_queue</code> and <code>log</code> settings to control how many events per packet are processed and logged</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -76,6 +125,12 @@ alert_json = { file = true, fields = 'timestamp msg sid gid priority src_addr ds
 <template id="tpl-fast-format">
 <article class="topic">
   <h2>Fast Alert Format — Anatomy</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-note">Fast format exposes L3 source/destination IPs and L4 ports and protocol on a single line for rapid analyst triage.</span>
+  </div>
   <p>The fast alert format is the most common production format. Each alert is a single line containing everything a SOC analyst needs for initial triage.</p>
 
   <h3>Fast Alert — Complete Example</h3>
@@ -127,6 +182,36 @@ alert_json = { file = true, fields = 'timestamp msg sid gid priority src_addr ds
       </tbody>
     </table>
   </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Know how to read a fast alert: timestamp → GID:SID:rev → message → classification → priority → protocol → src:port → dst:port</li>
+      <li>Understand that GID 1 = rule-based alert, GID 106 = sfportscan preprocessor, GID 119 = http_inspect</li>
+      <li>Add <code>-y</code> flag to include the year in timestamps: <code>03/07/2026-14:22:15</code></li>
+      <li>Use the SID from <code>[1:1000101:1]</code> to look up the rule: <code>grep "sid:1000101" /etc/snort/rules/*.rules</code></li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Correlate SID firing patterns: multiple different SIDs from the same src IP in a short window indicates a campaign</li>
+      <li>Use <code>awk</code> to count SIDs: <code>awk '{print $4}' /var/log/snort/alert | sort | uniq -c | sort -rn</code></li>
+      <li>Recognize that Priority 1 + GID 1 = a custom or community rule fired — treat as high-fidelity alert</li>
+      <li>Filter by classification: <code>grep "Web Application Attack" /var/log/snort/alert</code> to triage by attack category</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Parse fast alert files with Python using regex to extract all fields and load into a DataFrame for statistical analysis</li>
+      <li>Correlate Snort timestamps with Apache access.log to confirm attack success (HTTP 200 + large response size)</li>
+      <li>Build automated triage: de-duplicate alerts by SID+src IP, produce a top-10 attacker report per shift</li>
+      <li>Use <code>-y</code> flag and normalize timestamps to UTC for cross-sensor correlation in multi-Snort deployments</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -134,6 +219,12 @@ alert_json = { file = true, fields = 'timestamp msg sid gid priority src_addr ds
 <template id="tpl-full-format">
 <article class="topic">
   <h2>Full Alert Format — Anatomy</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-note">Full format adds L3 IP header fields (TTL, TOS, IP ID) and L4 TCP header fields (flags, seq/ack, window) for deep packet inspection.</span>
+  </div>
   <p>Full alert mode includes the same header information as fast mode plus a complete dump of the packet headers. Use this when you need to investigate the exact packet details — TTL, sequence numbers, TCP flags, and the payload hex dump.</p>
 
   <h3>Full Alert — Complete Example</h3>
@@ -191,6 +282,36 @@ TCP TTL:54 TOS:0x0 ID:43210 IpLen:20 DgmLen:587 DF
 *P*AP***   <span class="cm"># Unusual combination — possible attack/evasion</span>
 00000000   <span class="cm"># NULL scan — no flags set</span>
 URAPAPSF   <span class="cm"># All flags set — invalid/Christmas scan variant</span></code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Know that full format adds IP header (TTL, TOS, IP ID) and TCP header (flags, seq/ack, window) beyond fast format</li>
+      <li>Understand TCP flag notation: <code>***AP***</code> = ACK+PSH (data transfer), <code>******S*</code> = SYN (new connection)</li>
+      <li>Use TTL to estimate OS: Windows ≈ 128, Linux ≈ 64, Cisco ≈ 255 — large TTL drops suggest many routing hops</li>
+      <li>A TTL much lower than expected (e.g., 1–10) may indicate a locally spoofed packet or TTL manipulation attack</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Check the IP ID field for sequential values — OSes that increment IP IDs can be tracked and fingerprinted</li>
+      <li>Use TCP Seq/Ack numbers to determine payload position in a stream — confirms exploit stage and payload offset</li>
+      <li>Win:0x0 (zero window) in a full alert indicates TCP flow control or a potential denial-of-service condition</li>
+      <li>Absence of the DF bit on a TCP packet may indicate tunneling or fragmentation-based evasion</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Cross-reference IP ID values across multiple alerts from the same source to confirm they share a TCP stack</li>
+      <li>Use TOS byte analysis to detect DSCP-marked traffic from attackers using QoS-aware tooling (unusual in attack traffic)</li>
+      <li>Combine full format with <code>-l</code> pcap logging — correlate alert hex dump with Wireshark stream follow for full reconstruction</li>
+      <li>Write a Snort rule using <code>ttl:</code> or <code>ipopts:</code> options to target anomalous IP header fields found in full format analysis</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -198,6 +319,13 @@ URAPAPSF   <span class="cm"># All flags set — invalid/Christmas scan variant</
 <template id="tpl-unified2">
 <article class="topic">
   <h2>Unified2 Binary Format</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Unified2 preserves full L3/L4 headers plus L7 payload data for offline analysis by barnyard2 and database backends.</span>
+  </div>
   <p>Unified2 is a binary format that Snort writes at high speed with minimal CPU overhead. It must be read by a secondary process (barnyard2) to convert to human-readable formats or a database. This is the recommended production setup.</p>
 
   <h3>Production Architecture</h3>
@@ -279,6 +407,36 @@ alert_json =
   "ttl": 54,
   "b64_data": "R0VUIC9wYWdlP2lkPTEnIFVOSU9OIFNFTEVDVCAxLDIsMy0t"
 }</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Understand that unified2 is a binary format — you can't <code>cat</code> or <code>tail</code> it directly</li>
+      <li>Know the production flow: Snort writes <code>snort.u2</code> → barnyard2 reads it → outputs to database or text file</li>
+      <li>Use <code>output unified2: filename snort.u2, limit 128, nostamp</code> — the standard snort.conf production entry</li>
+      <li>Know that Snort 3's <code>alert_json</code> can replace barnyard2 entirely for ELK and Splunk integrations</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Configure the barnyard2 waldo file (<code>-w barnyard2.waldo</code>) so it resumes from the correct position after restart</li>
+      <li>Set <code>limit 128</code> to rotate unified2 files at 128 MB — prevents single giant files and aids log management</li>
+      <li>Configure barnyard2 with both database and <code>alert_fast</code> output simultaneously for redundancy</li>
+      <li>Use <code>sid-msg.map</code> and <code>gen-msg.map</code> in barnyard2.conf so alert messages are human-readable in the database</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Use <code>u2spewfoo</code> (bundled with Snort) to manually inspect unified2 files for debugging barnyard2 issues</li>
+      <li>Configure Snort 3's <code>alert_json b64_data</code> field to extract and decode payload bytes for automated IOC hunting</li>
+      <li>Build a pipeline: Snort unified2 → barnyard2 → MySQL → Snorby web UI for a complete open-source SIEM alternative</li>
+      <li>Implement logrotate + barnyard2 waldo to safely archive unified2 files without losing events during rotation</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -286,6 +444,13 @@ alert_json =
 <template id="tpl-reading-alerts">
 <article class="topic">
   <h2>Reading &amp; Tuning Alerts</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Alert triage correlates L3 source IPs with L4 port patterns and L7 rule messages to separate true positives from noise.</span>
+  </div>
   <p>Raw Snort alerts require triage — not every alert is a true positive. Effective SOC work with Snort involves quickly determining signal from noise, then tuning rules to reduce false positives.</p>
 
   <h3>Alert Triage Workflow</h3>
@@ -365,6 +530,36 @@ echo 'alert tcp any any -> any 80 (msg:"Test"; sid:9999999; rev:1;)' \
       </tbody>
     </table>
   </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Use <code>tail -f /var/log/snort/alert</code> to monitor alerts in real time during a lab exercise</li>
+      <li>Know the 3 false positive responses: suppress (whitelist IP), rate-limit (event_filter), or tighten the rule (edit local.rules)</li>
+      <li>Look up a firing SID: <code>grep "sid:1000101" /etc/snort/rules/*.rules</code></li>
+      <li>Understand priority: 1 = immediate response, 2 = same shift, 3 = next business day</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Find your top 20 noisiest rules: <code>awk '{print $4}' /var/log/snort/alert | sort | uniq -c | sort -rn | head -20</code></li>
+      <li>Use <code>threshold.conf</code> suppressions rather than editing rules — keeps rule files clean and auditable</li>
+      <li>For preprocessor false positives (GID 106, 119, etc.), suppress with the correct gen_id, not gen_id 1</li>
+      <li>After adding suppressions, re-run Snort against the original PCAP to confirm true positives still fire</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Build a daily false positive review process: count new SIDs, check against baselines, auto-suppress confirmed FPs</li>
+      <li>Use <code>event_filter gen_id 0, sig_id 0</code> as an emergency global rate limiter during alert floods — remove after root cause analysis</li>
+      <li>Correlate alert source IPs with threat intel (VirusTotal, AbuseIPDB) to separate opportunistic scanners from targeted attackers</li>
+      <li>Document every suppression in threshold.conf with date, analyst, and reason — maintain a suppression audit trail</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 

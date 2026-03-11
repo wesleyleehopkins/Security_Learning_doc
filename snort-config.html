@@ -20,25 +20,44 @@
     <a href="psaa.html">PSAA</a>
     <a href="security-onion.html">Security Onion</a>
     <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
     <a href="nmap.html">Nmap</a>
     <a href="wireshark.html">Wireshark</a>
     <a href="snort.html" class="active">Snort</a>
+    <a href="ossec.html">OSSEC</a>
     <a href="log-sources.html">Log Sources</a>
   </div>
 </nav>
 
 <div class="layout">
-  <aside class="sidebar" id="sidebar">
+  <aside class="sidebar" id="sb">
     <div class="sidebar-header">Configuration</div>
-    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+    <nav class="sidebar-nav" id="sb-nav"></nav>
   </aside>
-  <main class="content" id="content-area"></main>
+  <main class="main" id="content-area"></main>
 </div>
 
 <!-- ════════════════════════ Variables ═════════════════════════════════════ -->
 <template id="tpl-variables">
 <article class="topic">
   <h2>snort.conf — Network Variables</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-note">Network variables (HOME_NET, EXTERNAL_NET) define L3 IP scope; port variables (HTTP_PORTS, SSH_PORTS) define L4 detection boundaries for rule matching.</span>
+  </div>
   <p>Variables in <code>snort.conf</code> define the network topology that Snort uses to evaluate rules. Setting these correctly is critical — incorrect <code>HOME_NET</code> means rules using <code>$EXTERNAL_NET</code> won't fire correctly.</p>
 
   <h3>Core Network Variables</h3>
@@ -147,6 +166,36 @@ var BLACK_LIST_PATH /etc/snort/rules</code></pre>
       </tbody>
     </table>
   </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Know that <code>HOME_NET</code> defines your protected network — rules fire based on whether traffic goes to/from it</li>
+      <li>Understand <code>EXTERNAL_NET !$HOME_NET</code> means "everything not in HOME_NET"</li>
+      <li>Recognize that <code>portvar HTTP_PORTS</code> sets which ports HTTP inspection and rules apply to</li>
+      <li>Use <code>var HOME_NET 192.168.1.0/24</code> (or your specific subnet) — never leave it as <code>any</code> in production</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Scope <code>HTTP_SERVERS</code> to specific IPs rather than <code>$HOME_NET</code> to reduce false positives in web attack rules</li>
+      <li>Add non-standard ports to <code>portvar HTTP_PORTS</code> for apps running on 8080, 8443, 3000, 5000</li>
+      <li>Understand why wrong <code>HOME_NET</code> causes rules using <code>$EXTERNAL_NET</code> to miss attacks from internal hosts</li>
+      <li>Use <code>var DNS_SERVERS [192.168.1.5,192.168.1.6]</code> instead of <code>$HOME_NET</code> for targeted DNS attack detection</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Use CIDR lists for multi-segment environments: <code>var HOME_NET [10.0.0.0/8,172.16.0.0/12,192.168.0.0/16]</code></li>
+      <li>Create role-specific variables: <code>var KIOSK_SERVERS [192.168.1.50,192.168.1.51]</code> for targeted rules</li>
+      <li>Reference variables in rule headers to scope rules to specific server roles, minimizing detection engine overhead</li>
+      <li>Audit variable settings after network changes — stale <code>HOME_NET</code> is a leading cause of missed detections in production</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -154,6 +203,13 @@ var BLACK_LIST_PATH /etc/snort/rules</code></pre>
 <template id="tpl-preprocessors">
 <article class="topic">
   <h2>Preprocessor Configuration (Snort 2)</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Preprocessors span L3 (frag3 IP reassembly), L4 (stream5 TCP reassembly), and L7 (http_inspect, SMTP normalization) before rule matching.</span>
+  </div>
   <p>Preprocessors run before the detection engine, normalizing traffic so rules can match on reconstructed streams rather than raw fragmented/encoded packets.</p>
 
   <h3>frag3 — IP Fragment Reassembly</h3>
@@ -233,6 +289,36 @@ preprocessor dcerpc2_server: default, \
   detect [smb [139,445], tcp 135, udp 135, rpc-over-http-server 593], \
   autodetect [tcp 1025:, udp 1025:, rpc-over-http-server 1025:], \
   smb_max_chain 3, smb_invalid_shares ["C$", "D$", "ADMIN$"]</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Know that preprocessors run before rules — they normalize traffic so content rules can match correctly</li>
+      <li>Understand that <code>frag3</code> reassembles fragmented IP packets to defeat fragmentation-based evasion</li>
+      <li>Know that <code>stream5</code> enables the <code>flow</code> rule option (established, to_server, etc.)</li>
+      <li>Recognize that <code>http_inspect</code> URL-decodes URIs before rules match — catches <code>%27</code> → <code>'</code></li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Set <code>frag3_engine policy</code> to match your servers' OS — Windows and Linux have different fragment reassembly behavior</li>
+      <li>Add application ports to <code>stream5_tcp ports client</code> to enable stream reassembly for custom apps</li>
+      <li>Use <code>sfportscan sense_level high</code> in labs, <code>low</code> in production to reduce false positives</li>
+      <li>Configure <code>dcerpc2_server</code> to detect EternalBlue (SMB exploit) activity via RPC inspection</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Tune <code>stream5_global max_tcp</code> based on your connection rate — too low causes session drops under load</li>
+      <li>Use <code>http_inspect server_flow_depth 0</code> to inspect full response bodies (significant performance impact on high-traffic links)</li>
+      <li>Combine <code>frag3 overlap_limit</code> with <code>stream5 overlap_limit</code> to detect overlapping segment injection evasion</li>
+      <li>In Snort 3, inspectors replace preprocessors — understand the module mapping when migrating Snort 2 configs</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -240,6 +326,12 @@ preprocessor dcerpc2_server: default, \
 <template id="tpl-output-plugins">
 <article class="topic">
   <h2>Output Plugins &amp; Logging</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-note">Output plugins capture L3 IP and L4 port/protocol metadata from every alert for logging, SIEM forwarding, and database storage.</span>
+  </div>
   <p>Output plugins determine where and how Snort writes alerts and packet logs. Multiple output plugins can be active simultaneously.</p>
 
   <h3>Alert Output Modes (snort.conf)</h3>
@@ -308,6 +400,36 @@ event_filter gen_id 1, sig_id 1000300, type threshold, track by_src, count 10, s
 
 <span class="cm"># Include threshold.conf in snort.conf</span>
 include threshold.conf</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Know the difference: <code>alert_fast</code> = one-line text file, <code>unified2</code> = binary format for barnyard2</li>
+      <li>Use <code>-A console</code> when testing rules to see alerts in real time without writing files</li>
+      <li>Know that <code>tail -f /var/log/snort/alert</code> monitors the fast alert file live</li>
+      <li>Understand that multiple output plugins can run simultaneously in snort.conf</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Use <code>output unified2: filename snort.u2, limit 128, nostamp</code> — the standard production setup</li>
+      <li>Configure barnyard2 to read unified2 files and forward alerts to a database or SIEM</li>
+      <li>Use <code>threshold.conf</code> to suppress known false positives without modifying rules directly</li>
+      <li>Rate-limit noisy rules: <code>event_filter type limit, track by_src, count 3, seconds 60</code></li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>In Snort 3, use <code>alert_json</code> with <code>b64_data</code> field to capture base64-encoded payload for IOC extraction</li>
+      <li>Configure barnyard2 with a waldo file (<code>-w barnyard2.waldo</code>) to resume processing after restart without duplicate events</li>
+      <li>Build a tiered suppression strategy: rule-level thresholds for known noisy rules + global <code>event_filter gen_id 0</code> as emergency brake</li>
+      <li>Rotate unified2 files with <code>limit 128</code> and purge old files with logrotate to prevent disk exhaustion</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -315,6 +437,13 @@ include threshold.conf</code></pre>
 <template id="tpl-include-structure">
 <article class="topic">
   <h2>snort.conf Include Structure</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">snort.conf's ordered sections build detection from L3 IP variables through L4 stream reassembly to L7 application-layer rule evaluation.</span>
+  </div>
   <p>The <code>snort.conf</code> file is organized in sections. Understanding the order matters — variables must be defined before they're used, and preprocessors must run before rules that depend on their output.</p>
 
   <h3>snort.conf Section Order</h3>
@@ -393,6 +522,36 @@ alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"SQL Injection UNI
 
 <span class="cm"># ---- Malware ----</span>
 alert tcp $HOME_NET any -> $EXTERNAL_NET any (msg:"Possible C2 Beacon - Regular Intervals"; flow:established,to_server; content:"GET"; http_method; threshold:type both,track by_dst,count 1,seconds 60; classtype:trojan-activity; sid:1000020; rev:1;)</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Know the 9-step snort.conf structure: variables → decoder → engine → dynamic libs → preprocessors → output → preproc rules → rule files → thresholds</li>
+      <li>Always put <code>local.rules</code> first in includes — your custom rules get highest priority</li>
+      <li>SIDs 1000000+ are reserved for user-defined rules — never use lower SIDs for custom rules</li>
+      <li>Variables must be defined before they are used — Step 1 (variables) must precede Steps 5–8 (preprocessors/rules)</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Only include rule files you need — unnecessary includes increase startup time and memory usage</li>
+      <li>Comment out noisy rule files entirely rather than suppressing rules individually when a whole category is irrelevant</li>
+      <li>Use <code>include threshold.conf</code> at the end — thresholds override any rule-level threshold options</li>
+      <li>Keep local.rules organized by attack type with section comments to make maintenance easier</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Use <code>config detection: search-method ac-split search-optimize</code> to tune pattern matching for your rule set size</li>
+      <li>Load only SO (shared object) rules for categories where performance is critical — SO rules compile to native code</li>
+      <li>Maintain separate snort.conf files per interface or VLAN using <code>-c</code> flag with different configs</li>
+      <li>Build rule management automation: pull ET community rules nightly, diff against previous, review new SIDs before enabling</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -400,6 +559,13 @@ alert tcp $HOME_NET any -> $EXTERNAL_NET any (msg:"Possible C2 Beacon - Regular 
 <template id="tpl-snort3-config">
 <article class="topic">
   <h2>Snort 3 — Lua Configuration</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Snort 3's Lua configuration manages the same multi-layer detection stack as Snort 2 with a more expressive, programmable syntax.</span>
+  </div>
   <p>Snort 3 replaces the flat <code>snort.conf</code> format with Lua scripting. All configuration is expressed as Lua tables, which allows for programmatic configuration and much cleaner syntax.</p>
 
   <h3>snort.lua Structure</h3>
@@ -508,6 +674,36 @@ default_variables =
       </tbody>
     </table>
   </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Understand that Snort 3 uses Lua tables instead of flat keyword/value syntax</li>
+      <li>Know that <code>include 'snort_defaults.lua'</code> loads default variable values — override them below the include</li>
+      <li>Recognize that <code>ips = { mode = 'inline' }</code> enables IPS mode (active blocking) vs. <code>'passive'</code> for NIDS</li>
+      <li>Snort 3 uses inspectors (stream, http_inspect) instead of the <code>preprocessor</code> keyword</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Configure <code>alert_json = { file = true, fields = '...' }</code> — eliminates barnyard2 for ELK/Splunk ingestion</li>
+      <li>Use <code>stream_tcp = { policy = 'windows' }</code> to match your target OS for accurate stream reassembly</li>
+      <li>Understand the variable inheritance chain: <code>default_variables</code> table → override in snort.lua</li>
+      <li>Enable <code>event_queue = { order_events = 'priority' }</code> to ensure highest-priority alerts log first</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Write Lua functions in snort.lua for dynamic config logic (e.g., load different rule sets based on interface name)</li>
+      <li>Use <code>alert_json b64_data</code> field to extract base64 payload for automated IOC hunting in your SIEM</li>
+      <li>Configure <code>port_scan = { protos = 'all', scan_types = 'all' }</code> — Snort 3's unified port scan inspector</li>
+      <li>Use <code>snort2lua</code> converter tool as a starting point for migrating Snort 2 preprocessor configs, then review manually</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 

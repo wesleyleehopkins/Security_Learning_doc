@@ -20,24 +20,43 @@
     <a href="psaa.html">PSAA</a>
     <a href="security-onion.html">Security Onion</a>
     <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
     <a href="nmap.html">Nmap</a>
     <a href="wireshark.html" class="active">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
     <a href="log-sources.html">Log Sources</a>
   </div>
 </nav>
 
 <div class="layout">
-  <aside class="sidebar" id="sidebar">
+  <aside class="sidebar" id="sb">
     <div class="sidebar-header">Protocol Analysis</div>
-    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+    <nav class="sidebar-nav" id="sb-nav"></nav>
   </aside>
-  <main class="content" id="content-area"></main>
+  <main class="main" id="content-area"></main>
 </div>
 
 <!-- ══════════════════════════ HTTP Analysis ════════════════════════════════ -->
 <template id="tpl-http-analysis">
 <article class="topic">
   <h2>HTTP Analysis</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">HTTP is a cleartext application-layer protocol — all headers, credentials, URIs, and payload content are fully visible in Wireshark without decryption.</span>
+  </div>
   <p>HTTP is cleartext — every header, credential, and file transfer is visible in the PCAP. HTTP analysis in Wireshark focuses on credential exposure, file extraction, and suspicious request patterns.</p>
 
   <h3>Key HTTP Display Filter Fields</h3>
@@ -114,6 +133,36 @@ tshark -r capture.pcap -Y "http.content_type contains \"application/octet-stream
       </tbody>
     </table>
   </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Filter POST requests to find form submissions: <code>http.request.method == "POST"</code> — look in the packet bytes pane for <code>username=</code> / <code>password=</code></li>
+      <li>Find Basic Auth headers: filter <code>http.authorization</code>, then decode the Base64 value with <code>echo "..." | base64 -d</code></li>
+      <li>Extract files via File → Export Objects → HTTP — lists all transferred files with size and filename</li>
+      <li>Right-click any HTTP packet → Follow → TCP Stream to read the full cleartext request and response</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Detect directory brute force: filter <code>http.response.code == 404</code> and look for rapid requests from a single IP (e.g., from Kali 192.168.56.10)</li>
+      <li>Spot scripted/automated requests: <code>http.user_agent contains "python" or http.user_agent contains "curl" or http.user_agent contains "sqlmap"</code></li>
+      <li>Hunt executable downloads: <code>http.request.uri matches "\.(exe|dll|ps1|bat|vbs)$"</code> combined with <code>http.response.code == 200</code></li>
+      <li>tshark URI extraction: <code>tshark -r capture.pcap -Y "http.request" -T fields -e ip.src -e http.host -e http.request.uri</code></li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Detect C2 commands encoded in URIs: <code>http.request.uri matches "[A-Za-z0-9+/]{20,}={0,2}"</code> catches Base64 blobs embedded in query strings</li>
+      <li>Identify data exfiltration via long URIs: <code>http.request.uri matches ".{200,}"</code> — data encoded in URL parameters</li>
+      <li>Correlate 401 storms to credential stuffing: count distinct source IPs in 401 responses to determine if attack is distributed or single-source</li>
+      <li>Extract all HTTP objects automatically: <code>tshark -r capture.pcap --export-objects http,/tmp/extracted/</code> then run <code>file *</code> and hash each for VirusTotal lookups</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -121,6 +170,12 @@ tshark -r capture.pcap -Y "http.content_type contains \"application/octet-stream
 <template id="tpl-dns-analysis">
 <article class="topic">
   <h2>DNS Analysis</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">DNS messages are carried over UDP/TCP at L4 (port 53); resolution behavior, tunneling patterns, and query content are application-layer (L7) indicators.</span>
+  </div>
   <p>DNS is the primary protocol used for C2 communication and data exfiltration in environments that restrict direct outbound connections. Understanding normal vs. abnormal DNS is essential for SOC work.</p>
 
   <h3>Key DNS Display Filter Fields</h3>
@@ -200,6 +255,36 @@ tshark -r capture.pcap \
   -Y "dns.flags.response == 0" \
   -T fields -e dns.qry.name \
   | sort | uniq -c | sort -rn | head -20</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Distinguish queries from responses: <code>dns.flags.response == 0</code> (query) vs <code>dns.flags.response == 1</code> (response)</li>
+      <li>Find non-existent domain errors: <code>dns.flags.rcode == 3</code> (NXDOMAIN) — a storm of these from one host suggests DGA malware</li>
+      <li>Know common record type numbers: A=1, TXT=16, AAAA=28 — filter <code>dns.qry.type == 16</code> to spot TXT-based tunneling</li>
+      <li>Quickly see what domains a host is resolving: filter <code>dns.flags.response == 0 and ip.src == 192.168.56.30</code> to see Windows 10 VM's DNS queries</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Spot fast-flux C2 infrastructure: filter <code>dns.resp.ttl &lt; 60</code> — legitimate domains rarely use sub-60s TTLs</li>
+      <li>Detect DNS tunneling via long subdomain labels: look for query names over 50 characters with random-looking character distributions</li>
+      <li>Identify DNS tunneling by record type abuse: TXT + NULL record queries for the same domain in rapid succession is a strong indicator</li>
+      <li>Use tshark to extract top DNS query domains: <code>tshark -r pcap -Y "dns.flags.response==0" -T fields -e dns.qry.name | sort | uniq -c | sort -rn | head -20</code></li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Analyze beacon intervals with tshark+awk pipeline: compute delta times between queries to the same domain — regular intervals (±5%) indicate programmatic beaconing</li>
+      <li>Detect DGA (Domain Generation Algorithm) malware: correlate high NXDOMAIN ratio with high-entropy domain names across thousands of queries per hour</li>
+      <li>Filter high-entropy subdomains that indicate base64-encoded data channels: <code>dns.qry.name matches "^[A-Za-z0-9+/=]{50,}\."</code></li>
+      <li>Correlate DNS queries with subsequent TCP connections to validate C2 resolution → beaconing chains in the full PCAP timeline</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -207,6 +292,12 @@ tshark -r capture.pcap \
 <template id="tpl-tls-analysis">
 <article class="topic">
   <h2>TLS Analysis</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">TLS handshake messages ride on TCP (L4); SNI, cipher negotiation, and certificate data expose application-layer (L7) metadata even when payload content is fully encrypted.</span>
+  </div>
   <p>TLS encrypts payload data, but the handshake metadata remains visible. The Server Name Indication (SNI) extension reveals the target hostname even in encrypted traffic. With a pre-master secret log file, Wireshark can fully decrypt TLS sessions.</p>
 
   <h3>TLS Handshake Message Types</h3>
@@ -299,6 +390,35 @@ tshark -r tls_session.pcap \
   <div class="callout note">
     <strong>SSLKEYLOGFILE support:</strong> Works with Firefox, Chrome, Chromium-based browsers, and applications using NSS or OpenSSL with the SSLKEYLOGFILE hook. Does NOT work with applications that use system TLS stores (e.g., many Windows apps) without additional tools.
   </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Extract SNI (target hostname) from TLS Client Hello: <code>tls.handshake.type == 1</code> — look for the "Server Name" extension in packet details</li>
+      <li>Identify deprecated TLS versions: <code>tls.handshake.version == 0x0301</code> (TLS 1.0) or <code>0x0302</code> (TLS 1.1) — both deprecated and should alert</li>
+      <li>Understand what's visible without decryption: IP/port, SNI hostname, certificate subject, cipher suite — enough to identify C2 domains</li>
+      <li>Know TLS handshake types: 1=ClientHello (SNI here), 11=Certificate (inspect for self-signed/suspicious), 20=Finished</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Hunt C2 via suspicious SNI: <code>tls.handshake.extensions_server_name matches "[0-9a-f]{20,}"</code> (random hex string) or <code>!tls.handshake.extensions_server_name and tls.handshake.type==1</code> (missing SNI)</li>
+      <li>tshark SNI extraction for C2 domain hunting: <code>tshark -r pcap -Y "tls.handshake.type==1" -T fields -e ip.src -e ip.dst -e tls.handshake.extensions_server_name</code></li>
+      <li>Check for certificate/SNI mismatch: filter <code>tls.handshake.type == 11</code> then expand x509 fields in packet details — self-signed or mismatched certs indicate C2 infrastructure</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Set up SSLKEYLOGFILE in the lab: <code>export SSLKEYLOGFILE=/tmp/ssl.log</code>, launch browser, capture with tshark, then load the key log in Wireshark to fully decrypt HTTPS sessions from 192.168.56.30</li>
+      <li>Decrypt PCAPs offline: <code>tshark -r session.pcap -o "tls.keylog_file:/tmp/ssl.log" -Y "http.request" -T fields -e http.host -e http.request.uri</code></li>
+      <li>Profile cipher suite selection across all sessions: weak suites (RC4, 3DES, NULL) or unusual suites not seen in legitimate traffic indicate custom C2 tooling</li>
+      <li>JA3 fingerprinting: the TLS ClientHello cipher list + extensions creates a unique fingerprint per client application — use this to identify malware families by their TLS fingerprint even without SNI</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -306,6 +426,12 @@ tshark -r tls_session.pcap \
 <template id="tpl-smb-analysis">
 <article class="topic">
   <h2>SMB Analysis</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">SMB runs over TCP port 445 (L4); file operations, NTLM/Kerberos authentication, and share access are decoded by Wireshark's SMB2 dissector at the application layer (L7).</span>
+  </div>
   <p>SMB (Server Message Block) is the primary Windows file-sharing protocol and a key lateral movement vector. Wireshark can decode SMB2/3 traffic in detail, revealing file access, authentication attempts, and command execution paths.</p>
 
   <h3>SMB Protocol Versions</h3>
@@ -401,6 +527,36 @@ tshark -r capture.pcap \
 <span class="cm"># Note: The NTLMv2 hash can be cracked offline</span>
 <span class="cm"># Format: user::domain:challenge:ntproof:rest_of_blob</span>
 <span class="cm"># Extract with: tool like responder captures automatically</span></code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Filter all SMB traffic to the Windows 10 target: <code>host 192.168.56.30 and tcp port 445</code> — start every SMB investigation here</li>
+      <li>Spot admin share access: <code>smb2.tree contains "C$" or smb2.tree contains "ADMIN$"</code> — these are lateral movement red flags from non-admin systems</li>
+      <li>Know that NTLM authentication details (username, domain, hash challenge/response) are visible in plain text within SMB Session Setup packets</li>
+      <li>Use <code>smb2.nt_status != 0</code> to surface failed SMB operations — repeated failures suggest brute force or access denied probing</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Detect malware staging: <code>smb2.cmd == 9 and smb2.filename matches "\.(exe|dll|ps1|bat|vbs)$"</code> — Write commands for executables are highly suspicious</li>
+      <li>Identify PsExec lateral movement: <code>smb2.tree contains "IPC$" and smb2.filename contains "svcctl"</code> — service control manager access over named pipe</li>
+      <li>Correlate STATUS_LOGON_FAILURE storms: <code>smb2.nt_status == 0xc000006d</code> from multiple source IPs indicates password spraying; from one IP indicates brute force</li>
+      <li>tshark NTLM username extraction: <code>tshark -r pcap -Y "ntlmssp.auth.username" -T fields -e ip.src -e ntlmssp.auth.domain -e ntlmssp.auth.username</code></li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Reconstruct the lateral movement kill chain: Negotiate (cmd 0) → Session Setup with NTLM (cmd 1) → Tree Connect to C$ (cmd 3) → Create file (cmd 5) → Write payload (cmd 9) → Ioctl svcctl (cmd 14)</li>
+      <li>Extract NTLMv2 hashes for offline cracking: capture Type 2 Challenge + Type 3 Authenticate from the same session, format as <code>user::domain:challenge:NTProofStr:blob</code> for hashcat</li>
+      <li>Detect DCE/RPC-based remote execution: filter <code>dcerpc</code> — look for <code>IRemoteActivation</code> (DCOM), <code>ITaskSchedulerService</code>, or <code>ISCManager</code> interface UUIDs indicating scheduled tasks or service installation</li>
+      <li>Correlate SMB signing status: <code>smb2.flags.dfs == 0</code> with unsigned sessions indicates SMB relay attack vulnerability on 192.168.56.30</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -408,6 +564,12 @@ tshark -r capture.pcap \
 <template id="tpl-field-reference">
 <article class="topic">
   <h2>Protocol Field Reference</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">This reference covers display filter fields for HTTP, DNS, TLS, SMB, FTP, and SMTP — application-layer (L7) protocols decoded from TCP/UDP (L4) connections.</span>
+  </div>
   <p>Quick-reference for common Wireshark display filter field names across all major protocols analyzed in SOC work.</p>
 
   <h3>HTTP Fields</h3>
@@ -491,6 +653,36 @@ smtp.data.fragment           <span class="cm"># Email body fragment</span></code
       </tbody>
     </table>
   </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Learn the naming pattern: <code>protocol.category.field</code> (e.g., <code>http.request.method</code>, <code>dns.qry.name</code>, <code>smb2.filename</code>)</li>
+      <li>Use Wireshark's display filter toolbar autocomplete — start typing a protocol name and press Tab to explore available fields</li>
+      <li>Bookmark the SOC Protocol Summary table — the 8 rows cover 90% of alert-worthy traffic in the lab environment</li>
+      <li>In Wireshark, click any field in the packet details pane to auto-populate the filter bar with the exact field name and value</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Build cross-protocol hunt filters: <code>(http.user_agent contains "python") or (dns.qry.type == 16) or (smb2.tree contains "C$") or (tls.handshake.type==1 and !tls.handshake.extensions_server_name)</code></li>
+      <li>Use <code>tshark -G fields | grep "^F\s*http"</code> to list all available HTTP field names programmatically</li>
+      <li>Combine FTP credential capture: filter <code>ftp.request.command == "PASS"</code> — passwords appear as plaintext in the argument field</li>
+      <li>Detect SMTP credential brute force: <code>smtp.response.code == 535</code> (auth failed) storms from a single source IP</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Build persistent color rules in Wireshark (View → Coloring Rules) using this reference: red for NTLM auth, orange for DNS TXT queries, yellow for executable downloads, purple for missing TLS SNI</li>
+      <li>Create a SOC analysis profile: save custom column layouts (ip.src, ip.dst, protocol, info + custom fields) as a named Wireshark profile for repeatable workflow</li>
+      <li>Use <code>tshark -z io,phs</code> (Protocol Hierarchy Statistics) to generate a full protocol breakdown of any PCAP — immediately reveals unexpected protocols in captured traffic</li>
+      <li>Chain field extraction across protocols to reconstruct attack narratives: DNS query → TLS SNI → HTTP host → SMB filename timestamps form a coherent lateral movement timeline</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 

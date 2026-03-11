@@ -22,7 +22,22 @@
     <a href="psaa.html">PSAA</a>
     <a href="security-onion.html">Security Onion</a>
     <a href="splunk.html">Splunk</a>
-    <a href="nmap.html">Nmap</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
+    <a href="nmap.html" class="active">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
     <a href="log-sources.html">Log Sources</a>
   </div>
 </nav>
@@ -68,6 +83,12 @@ window.NOTEBOOK = {
 <template id="tpl-output-formats">
 <article class="topic">
 <h1>01 · Output Formats</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Output formats capture both L4 port states (open/closed/filtered, TCP reason codes) and L7 service version strings, script results, and application banners — recording the full picture of a scan in structured, reusable files.</span>
+</div>
 <hr class="divider">
 
 <div class="callout"><strong>Best practice:</strong> Always use <code>-oA &lt;basename&gt;</code> on real scans — it saves all three formats simultaneously with no extra overhead, giving you human-readable, machine-parsable, and grep-friendly outputs.</div>
@@ -157,12 +178,57 @@ nmap -sS -sV -p- -oA scans/192.168.1.10/full 192.168.1.10
 
 <span class="cm"># Output to stdout + save to file simultaneously</span>
 nmap -sV -oA scan 192.168.1.10 | tee /dev/tty</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Know the four main formats: <code>-oN</code> (human-readable), <code>-oX</code> (XML), <code>-oG</code> (grepable), <code>-oA</code> (all three)</li>
+      <li>Always use <code>-oA &lt;basename&gt;</code> on real scans — it saves .nmap, .xml, and .gnmap with a single flag</li>
+      <li>Practice: <code>nmap -sS -sV -oA lab_scan 192.168.56.30</code> then inspect all three output files</li>
+      <li>Understand that <code>-oS</code> (script kiddie) output is not useful operationally — never use it</li>
+      <li>Know that the original scan command is embedded in every output file for reproducibility</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Organize output by target: <code>mkdir -p scans/192.168.56.30 &amp;&amp; nmap -sS -sV -oA scans/192.168.56.30/full 192.168.56.30</code></li>
+      <li>Use <code>-oG -</code> (stdout) to pipe live results into grep for real-time host extraction during subnet sweeps</li>
+      <li>Understand the XML structure — <code>&lt;nmaprun&gt;</code>, <code>&lt;host&gt;</code>, <code>&lt;port&gt;</code>, <code>&lt;service&gt;</code> elements — for downstream tool imports</li>
+      <li>Use <code>--webxml</code> or <code>--stylesheet /usr/share/nmap/nmap.xsl</code> to produce HTML reports from XML</li>
+      <li>Use dated basenames for long-term tracking: <code>-oA scans/network_$(date +%Y%m%d)</code></li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Import XML into Metasploit: <code>db_import scan.xml</code> — populates hosts, services, and os tables for exploit targeting</li>
+      <li>Build an engagement output hierarchy: <code>scans/discovery/</code>, <code>scans/ports/</code>, <code>scans/versions/</code>, <code>scans/vuln/</code> with dated basenames per phase</li>
+      <li>Use <code>xsltproc /usr/share/nmap/nmap.xsl scan.xml -o report.html</code> to deliver formatted HTML reports to clients</li>
+      <li>Convert XML to CSV with <code>nmaptocsv</code> for spreadsheet-based risk tracking and stakeholder reporting</li>
+      <li>Write a Python script that reads <code>-oX</code> output and auto-generates per-host finding summaries for pentest reports</li>
+    </ul>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-verbosity">
 <article class="topic">
 <h1>02 · Verbosity &amp; Reason Flags</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-note">--reason exposes the L3 ICMP response codes (admin-prohibited, unreachable) and L4 TCP handshake outcomes (syn-ack, reset, no-response) that determined each port's open/closed/filtered state.</span>
+</div>
 <hr class="divider">
 
 <h2>Verbosity Levels</h2>
@@ -243,12 +309,57 @@ Enter      <span class="cm"># print current status (hosts scanned, ports done)</
 <span class="cm"># Example: press Enter while scan runs to see progress</span>
 # Stats: 0:00:45 elapsed; 0 hosts completed (1 up), 1 undergoing SYN Stealth Scan
 # SYN Stealth Scan Timing: About 23.45% done; ETC: 09:18 (0:02:28 remaining)</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Add <code>-v</code> to any scan to see open ports reported immediately as discovered rather than waiting for summary</li>
+      <li>Use <code>--open</code> to filter output to only open ports — essential for clean subnet scans: <code>nmap -sS --open 192.168.56.0/24</code></li>
+      <li>Add <code>--reason</code> and read the reason column: <code>syn-ack</code> = open, <code>reset</code> = closed, <code>no-response</code> = filtered</li>
+      <li>Know the TTL hints: <code>ttl 64</code> typically Linux/Mac, <code>ttl 128</code> typically Windows</li>
+      <li>Press Enter while a scan runs to print live progress — useful during slow full-port scans (<code>-p-</code>)</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Use <code>--reason</code> to distinguish firewall drop (<code>no-response</code>) from firewall reject (<code>admin-prohibited</code>) — key for rule analysis</li>
+      <li>Interpret <code>admin-prohibited</code>: ICMP type 3 code 9/10/13 — firewall is explicitly rejecting and announcing it</li>
+      <li>Run <code>nmap --iflist</code> before scanning to verify the correct source interface and route will be used</li>
+      <li>Use interactive <code>p/P</code> during a scan to toggle packet trace on-the-fly without restarting</li>
+      <li>Combine <code>-v --reason --open</code> for subnet sweeps: clean live output showing only open ports with state justification</li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Use <code>--packet-trace</code> to see every probe/response — essential for diagnosing why a port shows filtered vs. closed on a specific host</li>
+      <li>Correlate <code>--reason</code> codes with firewall policy audit: <code>admin-prohibited</code> = explicit deny rule, <code>no-response</code> = implicit drop / stealth policy</li>
+      <li>Use <code>-d</code> debug output to inspect RTT calculations and parallelism adjustments — identify when scan timing is throttling due to congestion</li>
+      <li>Combine <code>-dd --packet-trace</code> on a single targeted port to produce evidence-quality documentation of probe behavior</li>
+      <li>Use <code>--reason</code> output to infer OS and firewall vendor — Windows RST vs Linux RST behaviors differ in TTL and timing patterns</li>
+    </ul>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-grep-tips">
 <article class="topic">
 <h1>03 · Grep / AWK Parsing</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Grep/AWK patterns extract L4 port open/closed states and L7 service name and version strings from grepable (.gnmap) and normal (.nmap) scan output files — turning raw scan data into actionable host and service lists.</span>
+</div>
 <hr class="divider">
 
 <p>The grepable format (<code>-oG</code>) is designed for easy parsing with standard Unix text tools. The normal format (<code>-oN</code>) also has predictable enough structure for quick greps.</p>
@@ -340,12 +451,57 @@ grep "/open/tcp" scan.gnmap | grep -oP '//\w+//' | \
 <span class="cm"># Create host:port list for vulnerability scanner import</span>
 grep "/open/tcp" scan.gnmap | \
   awk '{ip=$2; gsub(/\/open.*/, "", $5); print ip ":" $5}'</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Extract all live hosts from grepable output: <code>grep "Status: Up" scan.gnmap | awk '{print $2}'</code></li>
+      <li>Find all hosts with SSH open: <code>grep "22/open" scan.gnmap | awk '{print $2}'</code></li>
+      <li>List all open TCP ports from normal output: <code>grep "/tcp.*open" scan.nmap</code></li>
+      <li>Know that <code>-oG</code> is designed specifically for grep/awk processing — one line per host, structured fields</li>
+      <li>Practice on lab: save <code>-oG lab.gnmap</code>, then grep for hosts with port 445, 3389, and 22 open on <code>192.168.56.30</code></li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Build a comma-delimited port list for follow-up scans: <code>grep "/tcp.*open" scan.nmap | awk -F/ '{printf "%s,", $1}' | sed 's/,$/\n/'</code></li>
+      <li>Find hosts with MySQL or MSSQL exposed: <code>grep -E "3306/open|1433/open" scan.gnmap | awk '{print $2}'</code></li>
+      <li>Run port frequency analysis across a subnet to rank most-common services: sort + uniq -c pipeline on grepable output</li>
+      <li>Extract host:port:service triplets using the shell loop pattern from -oG for custom reporting</li>
+      <li>Chain discovery into full scan: <code>nmap -sn 192.168.56.0/24 -oG - | grep "Up" | awk '{print $2}' | nmap -sV -iL - -oA full</code></li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Build a complete discovery→port scan pipeline that auto-names output files per host using <code>xargs</code> and <code>bash -c</code></li>
+      <li>Use port frequency output (sorted uniq counts) to prioritize which services to investigate first on large subnet scans</li>
+      <li>Write an AWK one-liner that outputs a structured <code>host,port,service,version</code> CSV directly from .gnmap without intermediate scripts</li>
+      <li>Combine grep parsing with <code>--script=smb-vuln-ms17-010</code>: extract all 445-open hosts then immediately vuln-check them in one pipeline</li>
+      <li>Parse <code>-oG -</code> stdout in real time with Python using <code>subprocess.Popen</code> and process each host as it's discovered</li>
+    </ul>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-xml-ndiff">
 <article class="topic">
 <h1>04 · XML Output &amp; ndiff</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">ndiff tracks changes in L4 port states (new/removed open ports) and L7 service versions between scan baselines — automatically flagging new attack surface, disappeared services, and version upgrades.</span>
+</div>
 <hr class="divider">
 
 <h2>XML Output Uses</h2>
@@ -434,12 +590,57 @@ for host in root.findall('host'):
         ver    = svc.get('version', '') if svc is not None else ''
         if state == 'open':
             print(f"  {portid}/{proto}  {name}  {ver}")</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Run <code>ndiff baseline.xml new_scan.xml</code> and interpret <code>+</code> (added) and <code>-</code> (removed) lines in the diff output</li>
+      <li>Understand that a new <code>+Host is up</code> line means a previously-unseen device appeared on the network</li>
+      <li>Know that XML is the preferred format for importing into other tools — Metasploit, vulnerability scanners, custom scripts</li>
+      <li>Convert XML to HTML report: <code>xsltproc /usr/share/nmap/nmap.xsl scan.xml -o report.html</code></li>
+      <li>Understand the XML hierarchy: <code>&lt;nmaprun&gt;</code> → <code>&lt;host&gt;</code> → <code>&lt;ports&gt;</code> → <code>&lt;port&gt;</code> → <code>&lt;service&gt;</code></li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Build a dated baseline workflow: weekly <code>nmap -sS -sV 192.168.56.0/24 -oX baseline_$(date +%Y%m%d).xml</code></li>
+      <li>Run ndiff on consecutive weekly scans to detect new hosts, new open ports, or version changes</li>
+      <li>Write a simple bash wrapper that logs ndiff output to <code>/var/log/nmap_changes.log</code> when changes are found</li>
+      <li>Import XML into Metasploit: <code>msfconsole → db_import scan.xml → hosts → services</code></li>
+      <li>Use Python's <code>xml.etree.ElementTree</code> to extract structured host/port/version data for custom reporting</li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Build an automated change detection pipeline: cron job runs weekly scan → ndiff against last baseline → emails alert on any <code>+</code> lines</li>
+      <li>Use ndiff output to generate a "new attack surface" report: new ports + new hosts flagged for immediate triage</li>
+      <li>Write a Python script that compares two XML files and outputs a structured JSON diff — suitable for SIEM or ticketing system integration</li>
+      <li>Use the Metasploit <code>db_import</code> + <code>vulns</code> + <code>exploit</code> workflow: import scan → run matching exploits → document findings per host</li>
+      <li>Build a long-term scan archive by saving dated XML files, then graph service count / host count over time to detect environment drift</li>
+    </ul>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-scan-management">
 <article class="topic">
 <h1>05 · Scan Management</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Scan management — resuming interrupted runs, appending results, piping to stdout, excluding hosts — governs how L4 port probing and L7 service detection sessions are organized, saved, and chained across large target ranges.</span>
+</div>
 <hr class="divider">
 
 <h2>Resuming Aborted Scans</h2>
@@ -519,6 +720,45 @@ nmap 192.168.1.0/24 --excludefile /etc/nmap/excluded_hosts.txt
 
 <span class="cm"># Extract from XML:</span>
 grep -m1 'args=' scan.xml | sed 's/.*args="\([^"]*\)".*/\1/'</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Always save output to file — never run a real scan without <code>-oA &lt;basename&gt;</code></li>
+      <li>If a long scan is interrupted, resume it: <code>nmap --resume scan_results.gnmap</code> — picks up where it left off</li>
+      <li>Use <code>--exclude</code> to protect critical hosts: <code>nmap 192.168.56.0/24 --exclude 192.168.56.1,192.168.56.20</code></li>
+      <li>Know that <code>--resume</code> reads original scan options from the file — you cannot change parameters when resuming</li>
+      <li>Name output files with date and target: <code>-oA scans/win10_192.168.56.30_$(date +%Y%m%d)</code></li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Use <code>--append-output</code> to consolidate multiple partial scans into one file without overwriting: <code>nmap -sS 192.168.56.30 -oG results.gnmap --append-output</code></li>
+      <li>Pipe grepable output to stdout for live analysis during subnet sweeps: <code>nmap -sS -oG - 192.168.56.0/24 | grep "Status: Up"</code></li>
+      <li>Use <code>--excludefile /etc/nmap/excluded.txt</code> to maintain a persistent exclusion list for production environments</li>
+      <li>Run discovery first, save results, then use <code>-iL</code> for the port scan: keeps phases separated and resumable independently</li>
+      <li>Verify the embedded scan command in output files matches what you intended — catches accidental flag omissions</li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Build a phased scan automation script: discovery → <code>-F</code> top-100 → <code>-p-</code> full port → <code>-sV -sC</code> version → <code>--script=vuln</code>, saving dated XML per phase</li>
+      <li>Use <code>nmap -oX - | tee raw.xml | xsltproc nmap.xsl - &gt; live_report.html</code> to generate an HTML report in real time as the scan runs</li>
+      <li>Maintain a <code>--excludefile</code> that is version-controlled (git) — track which hosts were excluded and why across engagements</li>
+      <li>Combine <code>--append-output</code> with parallel scanning of network segments to consolidate results from multiple <code>nmap</code> instances into a single report file</li>
+      <li>Use scan management patterns from PTES (Penetration Testing Execution Standard) — document every scan command, timing, and output file path in engagement notes</li>
+    </ul>
+  </div>
+</details>
 </article>
 </template>
 

@@ -20,24 +20,45 @@
     <a href="psaa.html">PSAA</a>
     <a href="security-onion.html">Security Onion</a>
     <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
     <a href="nmap.html">Nmap</a>
     <a href="wireshark.html" class="active">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
     <a href="log-sources.html">Log Sources</a>
   </div>
 </nav>
 
 <div class="layout">
-  <aside class="sidebar" id="sidebar">
+  <aside class="sidebar" id="sb">
     <div class="sidebar-header">C2 PCAP Lab</div>
-    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+    <nav class="sidebar-nav" id="sb-nav"></nav>
   </aside>
-  <main class="content" id="content-area"></main>
+  <main class="main" id="content-area"></main>
 </div>
 
 <!-- ════════════════════════ Scenario ══════════════════════════════════════ -->
 <template id="tpl-scenario">
 <article class="topic">
   <h2>Scenario</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">This lab spans the full relevant stack: IP/DNS at L3, TCP session tracking at L4, and HTTP C2 channels + DNS tunneling at L7 — multi-layer investigation workflow.</span>
+  </div>
 
   <div class="callout lab">
     <strong>Lab: C2 PCAP Analysis</strong><br>
@@ -80,6 +101,33 @@
       </tbody>
     </table>
   </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Understand the analyst workflow: EDR alert → PCAP received → Protocol Hierarchy triage → targeted protocol filters → stream following → IOC extraction → report</li>
+      <li>Know the lab environment: 10.0.7.14 is the victim (WORKSTATION-7), 10.0.1.5 is DNS, 10.0.1.10 is web proxy — all web traffic routes through the proxy</li>
+      <li>Recognize the two-channel C2 pattern before starting: HTTP beacon (command/control) + DNS tunneling (data exfiltration) is a common APT TTL</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Map each lab step to a Wireshark tool: Protocol Hierarchy → IO Graphs → HTTP filters → Follow TCP Stream → DNS filters → tshark IOC script</li>
+      <li>Note the proxy architecture: direct web connections bypassing 10.0.1.10 should immediately flag as suspicious (C2 evading proxy logging)</li>
+      <li>Understand the EDR alert context: <code>-EncodedCommand</code> PowerShell at 14:22:11 suggests the implant was installed via encoded PS — the PCAP starts 7 minutes before this, meaning C2 was active before EDR detected anything</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Anticipate the full attack chain: implant delivery (before PCAP window) → C2 beacon established at 14:15 → DNS exfil begins at 14:15:07 → attacker issues recon commands at 14:22 → EDR fires at 14:22:11 → C2 still active at end of PCAP</li>
+      <li>Identify the detection gap: 7 minutes of active C2 and DNS exfiltration before EDR fired — this indicates the malware bypassed initial execution controls</li>
+      <li>Design the IR playbook before starting: isolate host → preserve evidence → block IOCs at perimeter → hunt lateral movement to other hosts on the 10.0.0.0/8 subnet</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -87,6 +135,13 @@
 <template id="tpl-step1">
 <article class="topic">
   <h2>Step 1 — Protocol Hierarchy</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Protocol Hierarchy reveals anomalous L7 application traffic proportions (HTTP at 10%, DNS at 25%) that drive the entire investigation workflow in this lab.</span>
+  </div>
 
   <h3>Open Protocol Hierarchy</h3>
   <pre><code>Statistics → Protocol Hierarchy</code></pre>
@@ -123,6 +178,33 @@ dns
 
 <span class="cm"># tshark equivalent:</span>
 tshark -r workstation7.pcap -q -z io,phs | grep -E "http|dns|smb|tls"</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Read the Protocol Hierarchy output: HTTP at 10.3% on a proxy-enforced segment is immediately suspicious — cleartext web traffic should not be present</li>
+      <li>DNS at 25.4% is the second red flag — this percentage is 25× higher than normal for a single endpoint, warranting immediate investigation</li>
+      <li>Right-click <code>HTTP</code> row → Apply as Filter to jump to all HTTP packets in the main list and begin Step 2</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Know the baselines: normal single-endpoint DNS is &lt;1% of traffic; HTTP should be 0% on HTTPS-enforced corporate networks; SMB &gt;20% on a workstation (not file server) indicates ransomware or lateral movement</li>
+      <li>Absence of expected protocols is also significant: no proxy traffic (10.0.1.10) on web requests = C2 is bypassing the proxy to avoid logging</li>
+      <li>Cross-reference Protocol Hierarchy with the 15-minute window: 2,098 DNS queries in 900 seconds = 2.3 queries/second — this rate is automated, not human-initiated</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Run Protocol Hierarchy at scale with tshark: <code>tshark -r workstation7.pcap -q -z io,phs</code> for headless analysis in IR automation pipelines that process hundreds of PCAPs</li>
+      <li>Compare against baseline: a clean capture from the same network segment should show DNS &lt;1%, HTTP 0%, TLS ~70% — deviations of &gt;5× the baseline threshold trigger automated escalation</li>
+      <li>The combination of high HTTP + high DNS is a dual-channel C2 signature: HTTP = interactive command channel, DNS = passive data exfiltration channel — anticipate both in subsequent steps</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -130,6 +212,12 @@ tshark -r workstation7.pcap -q -z io,phs | grep -E "http|dns|smb|tls"</code></pr
 <template id="tpl-step2">
 <article class="topic">
   <h2>Step 2 — HTTP Beaconing Identification</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Beaconing is identified at L7 (HTTP request pattern, URI, headers, encoded cookie) riding on L4 TCP connections — regular 60-second intervals confirm automated check-in.</span>
+  </div>
 
   <h3>Filter HTTP Traffic</h3>
   <pre><code><span class="cm"># Apply filter to packet list</span>
@@ -185,6 +273,33 @@ tshark -r workstation7.pcap \
 <span class="cm"># 60.00  /jquery.min.js</span>
 <span class="cm"># 60.01  /jquery.min.js</span>
 <span class="cm"># Regular 60-second intervals = confirmed beacon</span></code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Recognize beaconing: same URI (<code>/jquery.min.js</code>), same destination IP, same 60-second interval — three identical GET requests in a row is the tell</li>
+      <li>Expand the HTTP packet in the details pane to read all headers — the suspicious Cookie field stands out because it has a long base64 string where a session token would normally be short and opaque</li>
+      <li>Decode suspicious base64 values immediately: <code>echo "dXNlcj13b3Jrc3RhdGlvbjc..." | base64 -d</code> — decoding is a reflex for any unexpected base64 in network traffic</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>The URI masquerade (<code>/jquery.min.js</code>) is a classic C2 technique: legitimate-looking paths blend into proxy logs; always check if the actual response content matches the claimed content type</li>
+      <li>Zero-jitter beaconing (exactly 60.00s intervals) indicates the implant has no anti-evasion timing features — mature APT implants add ±10-30% jitter to evade beacon detection</li>
+      <li>Cross-reference the beacon destination (198.51.100.23) with the proxy logs — direct HTTP to an external IP bypassing 10.0.1.10 is a proxy bypass indicator</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>The encoded cookie (<code>user=workstation7;id=001234</code>) is victim profiling data sent on every check-in — this allows the C2 operator to manage multiple compromised hosts in a campaign dashboard</li>
+      <li>Analyze beacon jitter mathematically: standard deviation of inter-beacon intervals &lt;1 second = automated/deterministic timer; &gt;5 seconds = jitter applied; irregular large gaps = operator-initiated activity</li>
+      <li>Script beacon interval computation: <code>tshark ... | awk 'NR&gt;1{print $1-prev...}'</code> pipeline from Step 2 is reusable across all C2 PCAP investigations to rapidly profile beaconing malware</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -192,6 +307,12 @@ tshark -r workstation7.pcap \
 <template id="tpl-step3">
 <article class="topic">
   <h2>Step 3 — Follow TCP Stream (C2 Commands)</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">TCP Stream reassembly at L4 reveals the full C2 conversation; the X-Command header and base64-encoded POST body are L7 application-layer command delivery and exfiltration channels.</span>
+  </div>
 
   <h3>Find the Interactive Session</h3>
   <pre><code><span class="cm"># The beaconing GETs get 200 OK with small responses usually</span>
@@ -260,6 +381,33 @@ Windows IP Configuration...
   <div class="callout warn">
     <strong>Confirmed:</strong> The attacker has SYSTEM-level access. Command output confirms the victim is <code>WORKSTATION-7</code> at <code>10.0.7.14</code>. This is an active, bidirectional C2 channel.
   </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Identify the "interesting" response by Content-Length: all normal beacon responses are 42 bytes; the command delivery response is 4,096 bytes — sort by response size to find it</li>
+      <li>Follow TCP Stream on the large-response packet → the <code>X-Command</code> header immediately stands out as non-standard HTTP — any custom X- header deserves investigation</li>
+      <li>Always decode base64 values found in headers: <code>echo "d2hvYW1p..." | base64 -d</code> — in this case reveals the recon command set: whoami, hostname, ipconfig, net user</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>The C2 command cycle is: GET (check-in) → 200 OK with X-Command header (command delivery) → POST 60 seconds later (output exfiltration) — always look for the paired POST after a large GET response</li>
+      <li>The <code>application/javascript</code> Content-Type on the response is intentional misdirection — proxies and IDS may not inspect JS files; verify the response actually contains JavaScript, not just a padding comment</li>
+      <li>SYSTEM-level access (<code>nt authority\system</code>) from command output = the malware runs as the highest privilege — indicates the implant was delivered via a privileged exploit or a SYSTEM-context scheduled task</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Map the full command delivery mechanism: normal GET → minimal 200 OK (42 bytes) = implicit "no command, wait"; large 200 OK with X-Command = operator-triggered task — this is polling-based C2 architecture</li>
+      <li>Correlate the command timing with the EDR alert: X-Command delivered at 14:22:04 → EDR fires at 14:22:11 → 7-second gap = the encoded PowerShell command decoded and executed before EDR behavioral rule triggered</li>
+      <li>The decoded commands (whoami, hostname, ipconfig, net user /domain) are textbook initial recon — cross-reference with Active Directory logs to see if any domain queries were made after the output was returned to the C2</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -267,6 +415,12 @@ Windows IP Configuration...
 <template id="tpl-step4">
 <article class="topic">
   <h2>Step 4 — DNS Tunneling Detection</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">DNS runs over UDP at L4 (port 53); the tunneling content — base64-encoded data chunks embedded in subdomain labels — is an L7 application-layer abuse of DNS resolution.</span>
+  </div>
 
   <h3>Investigate the High DNS Volume</h3>
   <pre><code><span class="cm"># Filter DNS queries only</span>
@@ -344,6 +498,33 @@ dns.qry.type == 16 and dns.qry.name contains "attacker-c2.net"
       </tbody>
     </table>
   </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Filter DNS queries: <code>dns.flags.response == 0</code> — then sort by domain in the packet list and look for one domain that appears hundreds of times</li>
+      <li>Count queries per domain with tshark: any domain with &gt;100 queries in 15 minutes from a single workstation deserves investigation</li>
+      <li>Look at individual subdomain labels: normal subdomains are short readable words; tunneling subdomains look like <code>YW1zaS5kbGw.exfil.attacker-c2.net</code> — random base64 strings</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>The exfiltration rate is calculable: 1,847 queries in 900 seconds = ~2 queries/second, each subdomain ≈28 characters ≈ 21 bytes of decoded data = ~42 bytes/second = ~2.5 KB/minute of exfiltrated data</li>
+      <li>DNS A-record tunneling is stealthier than TXT because A queries are ubiquitous and less monitored — TXT queries from a workstation are immediately suspicious; A queries blend in until volume analysis is done</li>
+      <li>The authoritative DNS server for <code>attacker-c2.net</code> receives and logs every query — all exfiltrated data is reconstructed server-side from the subdomain sequence; no response content is needed</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Reconstruct exfiltrated data: extract subdomains with tshark → strip parent domain → concatenate → base64-decode → the output reveals what data was stolen (files, registry exports, credentials)</li>
+      <li>DNS tunnel tool fingerprinting: query rate, subdomain length distribution, and record type mix are characteristic of specific tunneling tools (iodine, dnscat2, dns2tcp) — cross-reference these signatures against known tool profiles</li>
+      <li>Develop a DNS tunnel detection rule for Security Onion/Zeek: alert on any host generating &gt;100 DNS queries per minute to a single parent domain with subdomain entropy &gt;3.5 bits/character</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -351,6 +532,13 @@ dns.qry.type == 16 and dns.qry.name contains "attacker-c2.net"
 <template id="tpl-step5">
 <article class="topic">
   <h2>Step 5 — tshark IOC Extraction</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">IOC extraction spans all relevant layers: external IPs (L3), TCP connection metadata (L4), and HTTP hosts/URIs/user-agents + DNS query names + TLS SNI (L7 application fields).</span>
+  </div>
   <p>Automate IOC collection from the PCAP using tshark one-liners. These can be added to a script for repeatable analysis.</p>
 
   <h3>Extract All External IPs Contacted</h3>
@@ -453,6 +641,33 @@ tshark -r "$PCAP" -Y "tls.handshake.type==1 and ip.src==10.0.7.14" \
 
 echo "IOCs written to $OUT/"
 ls -lh "$OUT/"</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Run each tshark one-liner in sequence to build the IOC list: external IPs → DNS query names → HTTP hosts → TLS SNI — each output file feeds into the Summary findings table</li>
+      <li>The RFC1918 grep filter (<code>grep -v "^10\.\|^192\.168\.\|^172\...."</code>) is essential — it strips internal IPs so only external C2 destinations remain in your IP IOC list</li>
+      <li>Hash all exported HTTP objects with <code>sha256sum /tmp/http_export/*</code> and submit to VirusTotal — even "jQuery" files may be the implant download disguised with a legitimate name</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Save the full IOC extraction script as a template — adapt it for any future C2 PCAP by changing the victim IP variable (<code>10.0.7.14</code>) and output directory</li>
+      <li>Cross-reference the TLS SNI output against the HTTP host output — any TLS destination without a matching HTTP host (or vice versa) may indicate a secondary C2 channel not yet identified</li>
+      <li>The User-Agent extraction reveals two agents: the generic Mozilla/5.0 (C2 implant) vs Microsoft-CryptoAPI (legitimate Windows update) — this distinction matters for firewall blocking decisions</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Extend the IOC script for multi-host hunts: run the same tshark commands against captures from all hosts on 10.0.0.0/8 and grep the outputs for the identified IOCs to detect lateral spread</li>
+      <li>Integrate with threat intel APIs: pipe the external IP list to AbuseIPDB or Shodan API → any IP with abuse history or unusual ASN (bulletproof hosting) elevates the confidence of C2 attribution</li>
+      <li>Build a MISP event from the IOC table: submit IPs, domains, URIs, hashes, and behavioral indicators (beacon interval, User-Agent, X-Command header) as a structured threat intelligence report</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -460,6 +675,13 @@ ls -lh "$OUT/"</code></pre>
 <template id="tpl-summary">
 <article class="topic">
   <h2>Lab Summary — Findings &amp; IOCs</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">The full investigation covers all layers: IP C2 addresses (L3), TCP sessions and DNS UDP (L4), and HTTP command channel + DNS tunnel + decoded payloads (L7) — complete multi-layer incident documentation.</span>
+  </div>
 
   <h3>Confirmed Findings</h3>
   <div class="table-wrap">
@@ -561,6 +783,33 @@ ls -lh "$OUT/"</code></pre>
       </tbody>
     </table>
   </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Read the Confirmed Findings table as your incident summary — 5 critical findings from one PCAP demonstrates the depth of information available in network captures</li>
+      <li>Use the IOC Table directly as input for firewall blocking rules, DNS blacklist entries, and SIEM detections — structured IOCs accelerate containment</li>
+      <li>Follow the Recommended Immediate Actions in order: isolate first (stops active exfil), block second (prevents reinfection), preserve evidence third (enables legal/IR proceedings)</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>The Attack Timeline reveals the detection gap: DNS exfil started at 14:15:07 and EDR fired at 14:22:11 — 7+ minutes of data already stolen before detection; the PCAP is the only record of what was taken</li>
+      <li>The zero-jitter 60-second beacon interval (no anti-evasion) combined with SYSTEM-level access suggests a purpose-built implant — not a commodity RAT — potentially targeting this organization specifically</li>
+      <li>Cross-reference the Wireshark Skills Demonstrated table against your own checklist — any skills you haven't practiced yet in the lab are areas to target for study</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>The dual-channel architecture (HTTP C2 + DNS exfil) is a classic APT pattern designed for resilience: if HTTP is blocked, DNS exfil continues; if DNS is blocked, the operator retains interactive command access via HTTP</li>
+      <li>The "Hunt laterally" action item is critical: if WORKSTATION-7 was compromised by this actor, other hosts on the same subnet may have been reached via SMB using the SYSTEM credentials obtained from the recon commands</li>
+      <li>Write a detection rule from this lab: alert on <code>X-Command</code> HTTP response header at L7 + alert on &gt;100 queries to a single non-corporate domain at L7/L4 — these two detections would have caught this specific C2 at the network perimeter</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 

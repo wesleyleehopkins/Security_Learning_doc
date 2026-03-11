@@ -20,25 +20,45 @@
     <a href="psaa.html">PSAA</a>
     <a href="security-onion.html">Security Onion</a>
     <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
     <a href="nmap.html">Nmap</a>
     <a href="wireshark.html">Wireshark</a>
     <a href="snort.html" class="active">Snort</a>
+    <a href="ossec.html">OSSEC</a>
     <a href="log-sources.html">Log Sources</a>
   </div>
 </nav>
 
 <div class="layout">
-  <aside class="sidebar" id="sidebar">
+  <aside class="sidebar" id="sb">
     <div class="sidebar-header">Detection Lab</div>
-    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+    <nav class="sidebar-nav" id="sb-nav"></nav>
   </aside>
-  <main class="content" id="content-area"></main>
+  <main class="main" id="content-area"></main>
 </div>
 
 <!-- ════════════════════════ Scenario ══════════════════════════════════════ -->
 <template id="tpl-scenario">
 <article class="topic">
   <h2>Lab Scenario</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">This lab covers L3 IP reconnaissance, L4 TCP SYN scanning, and L7 HTTP SQL injection attack detection — a full kill chain scenario.</span>
+  </div>
 
   <div class="callout lab">
     <strong>Lab: Port Scan + SQL Injection Detection</strong><br>
@@ -82,6 +102,36 @@
     <li>Read and interpret realistic alert output</li>
     <li>Tune the port scan rule to reduce false positives with <code>detection_filter</code></li>
   </ol>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Understand the two-phase attack: reconnaissance (port scan) followed by exploitation (SQL injection)</li>
+      <li>Know the lab network: Snort sensor at 192.168.1.1, web server at 192.168.1.10, attacker at 203.0.113.50</li>
+      <li>Recognize that the SYN scan is preparation — the real damage is the SQL injection at 14:22:45</li>
+      <li>Know that a HTTP 500 SQL error response confirms the injection worked and the application is vulnerable</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Correlate the scan-to-exploit timeline: attacker confirmed port 80 open at 14:20:45, then hit it with SQL injection at 14:22:45</li>
+      <li>Recognize the escalation: error-based injection (confirms vulnerability) → UNION SELECT (extracts data)</li>
+      <li>Understand that a 200 response with 3847 bytes at 14:23:01 means data was successfully exfiltrated</li>
+      <li>Consider what additional rules could add coverage: HTTP recon paths, user-agent anomalies, response size thresholds</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Model this attack as a kill chain: Reconnaissance → Delivery (GET /search.php) → Exploitation (SQL injection) → Exfiltration</li>
+      <li>Design detection rules for each kill chain phase — don't rely only on the final exploitation stage</li>
+      <li>Consider blind SQL injection variants (time-based, boolean-based) that wouldn't trigger the SQL error response rule</li>
+      <li>Design defense-in-depth: WAF → Snort IPS → parameterized queries — no single layer should be the last line of defense</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -89,6 +139,13 @@
 <template id="tpl-write-rules">
 <article class="topic">
   <h2>Step 1 — Write the Rules</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Detection rules match on L3 IP variables, L4 port/flag conditions (TCP flags, flow state), and L7 HTTP URI content patterns.</span>
+  </div>
 
   <h3>Set Environment Variables in snort.conf</h3>
   <pre><code><span class="cm"># snort.conf — network variables for this lab</span>
@@ -201,6 +258,36 @@ alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
       </tbody>
     </table>
   </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Always scope rules to specific variables: use <code>$HTTP_SERVERS $HTTP_PORTS</code> not <code>any any</code> for web attack rules</li>
+      <li>Know the difference: <code>flow:stateless</code> (port scans — no state needed) vs. <code>flow:established,to_server</code> (app attacks)</li>
+      <li>Understand that <code>detection_filter count 20 seconds 10</code> prevents the rule from firing on a single SYN packet</li>
+      <li>SIDs must be unique — start custom rules at 1000001, increment for each new rule, never reuse SIDs</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Use <code>fast_pattern</code> on the least common content keyword to optimize Snort's multi-pattern matching</li>
+      <li>Chain content keywords with <code>distance:0; within:20</code> to require UNION and SELECT close together (reduces false positives)</li>
+      <li>Use <code>http_uri</code> modifier to match only on the URI portion of HTTP requests — not headers or body</li>
+      <li>Use PCRE with the <code>U</code> flag for <code>http_uri</code> and <code>i</code> for case-insensitive matching</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Add <code>reference:url,owasp.org/...</code> to rules — gives analysts immediate context when investigating alerts</li>
+      <li>Use both request rules (1000011/1000012) AND response rules (1000010) — response confirms exploitation success</li>
+      <li>Combine <code>detection_filter</code> (fires after N events) with <code>threshold</code> (limits total alerts) for layered scan detection</li>
+      <li>Test each rule individually against a known-good PCAP to verify no false positives before adding to production</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -208,6 +295,12 @@ alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (
 <template id="tpl-run-snort">
 <article class="topic">
   <h2>Step 2 — Validate &amp; Run Snort</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-note">Running Snort processes captured L3/L4 packet headers against the detection engine, validating rule syntax and startup configuration.</span>
+  </div>
 
   <h3>Validate the Config and Rules</h3>
   <pre><code><span class="cm"># Step 1: Validate snort.conf syntax and all included rule files</span>
@@ -274,6 +367,36 @@ Snort rules read
 Snort successfully loaded all rules and checked all rule chains!
 
         --== Initialization Complete ==--</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Always validate syntax before running: <code>sudo snort -T -c /etc/snort/snort.conf</code></li>
+      <li>Capture traffic first with tcpdump, then replay against Snort: <code>snort -r lab_traffic.pcap</code></li>
+      <li>Use <code>-A console -q</code> for testing — console output plus quiet mode hides the startup banner</li>
+      <li>Validation output shows loaded rule count — verify your custom rules are being read</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Run with <code>-v</code> (verbose) during initial setup to see variable bindings and confirm HOME_NET is parsed correctly</li>
+      <li>Use <code>-A fast -l /tmp/</code> to write alerts to a temp dir during testing — easier cleanup than /var/log/snort/</li>
+      <li>For live capture: <code>sudo snort -c snort.conf -i eth0 -A fast -l /var/log/snort/ -D</code> (daemon mode)</li>
+      <li>After rule changes, reload Snort gracefully: <code>kill -SIGHUP $(cat /var/run/snort_eth0.pid)</code></li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>In Snort 3: <code>snort --daq-list</code> to see available DAQ modules — use <code>afpacket</code> for inline IPS mode</li>
+      <li>Benchmark rule performance: <code>snort --enable-profiling-rules -r large.pcap -c snort.conf</code> to find slowest rules</li>
+      <li>Use Snort 3's <code>--lua 'HOME_NET="10.0.0.0/8"'</code> to override variables from CLI without editing snort.lua</li>
+      <li>Build a CI pipeline: on rule commit, automatically run <code>snort -T</code> to catch syntax errors before deployment</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -281,6 +404,12 @@ Snort successfully loaded all rules and checked all rule chains!
 <template id="tpl-port-scan-alerts">
 <article class="topic">
   <h2>Step 3 — Port Scan Alert Output</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-note">Port scan alerts expose L3 attacker IPs and L4 destination port ranges, with sfportscan summarizing connection counts and scanned port ranges.</span>
+  </div>
   <p>Running Snort against the lab traffic with <code>-A console</code> produces the following alerts during the SYN scan phase (14:20:00 – 14:20:45):</p>
 
   <h3>Console Alert Output — Port Scan Phase</h3>
@@ -314,6 +443,36 @@ Snort successfully loaded all rules and checked all rule chains!
 <span class="cm">#   Scanned IP Range: 192.168.1.10:1 - 192.168.1.10:65535</span>
 <span class="cm">#   Port/Proto Count: 65535</span>
 <span class="cm">#   Port/Proto Range: 1:65535</span></code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Know that port scan alerts don't fire immediately — <code>detection_filter count 20 seconds 10</code> requires 20 SYNs first</li>
+      <li>Recognize GID 106 = sfportscan preprocessor — generates a summary alert separate from the rule-based alerts</li>
+      <li>Understand that ~200 alerts from one scan is expected — each represents another batch of scanned ports</li>
+      <li>The sfportscan "Connection Count: 65535" confirms a full port scan, not a targeted connection</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Add <code>threshold type limit, track by_src, count 1, seconds 300</code> to reduce 200 scan alerts to 1 per 5-minute window</li>
+      <li>Correlate the sfportscan alert's port range with the attacker's found open ports — predict next attack targets</li>
+      <li>Note the 2-minute gap between scan (14:20) and exploitation (14:22) — this is your detection-to-block opportunity</li>
+      <li>Use the scan alert to pre-emptively block 203.0.113.50 before the SQL injection attempt arrives</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>In IPS mode, use <code>drop</code> instead of <code>alert</code> on scan rules — disrupts the attacker's port enumeration results</li>
+      <li>Correlate sfportscan events with threat intel: attacker IPs that scan then exploit within minutes are high-confidence APT indicators</li>
+      <li>Use sfportscan IP range data to generate automatic firewall block rules via a Snort output plugin or external script</li>
+      <li>Detect distributed port scans: same ports, different source IPs, short window — requires SIEM correlation outside Snort</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -321,6 +480,12 @@ Snort successfully loaded all rules and checked all rule chains!
 <template id="tpl-sql-alerts">
 <article class="topic">
   <h2>Step 4 — SQL Injection Alert Output</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">SQL injection alerts correlate L4 TCP established session state with L7 HTTP URI content patterns to confirm exploitation.</span>
+  </div>
   <p>After the port scan, the attacker begins HTTP reconnaissance and SQL injection. The alert stream for the injection phase (14:22:10 – 14:23:15):</p>
 
   <h3>Console Alert Output — SQL Injection Phase</h3>
@@ -369,6 +534,36 @@ grep "203.0.113.50" /var/log/apache2/access.log | grep "14:22\|14:23"
 
 <span class="cm"># The 200 response with 3847 bytes at 14:23:01 confirms data was returned</span>
 <span class="cm"># Follow up: check if the 3847 bytes included user table data</span></code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Recognize the two-alert confirmation pattern: request rule fires (injection attempt) + response rule fires (confirms exploitation)</li>
+      <li>Know that SID 1000010 (SQL error response) is the most critical finding — it confirms the injection succeeded</li>
+      <li>Understand that Priority 1 alerts require immediate response — the database may already be compromised</li>
+      <li>Use Snort alert timestamps to find matching entries in the Apache access.log for cross-validation</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Correlate 1000011 (UNION SELECT) with Apache log response size — 3847 bytes vs. normal page size confirms exfiltration</li>
+      <li>The <code>Xref</code> field in full format alerts provides the OWASP reference — use this in incident report documentation</li>
+      <li>Note that rules 1000011 and 1000013 fire at nearly the same timestamp — the same packet triggered both rules</li>
+      <li>In Snort 3, use the base64 payload field to reconstruct the actual SQL query sent by the attacker</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>In IPS mode: change 1000011/1000012 from <code>alert</code> to <code>drop</code> — Snort actively blocks injection before it reaches the app</li>
+      <li>Build a behavioral indicator: scan → HTTP recon → SQL injection within 5 minutes = automated IOC generation</li>
+      <li>Extract the UNION SELECT query from Snort JSON payload and run against a DB copy to determine exact data exposed</li>
+      <li>Write a rule targeting the server's specific SQL error string format — more precise than generic error message matching</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -376,6 +571,13 @@ grep "203.0.113.50" /var/log/apache2/access.log | grep "14:22\|14:23"
 <template id="tpl-tuning">
 <article class="topic">
   <h2>Step 5 — Tuning Rules</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Rule tuning applies thresholds and suppressions at L3 (IP-based suppression), L4 (flag/flow tightening), and L7 (PCRE refinement) levels.</span>
+  </div>
 
   <h3>Problem: Port Scan Rule Too Noisy</h3>
   <p>Rule 1000003 generated ~200 alerts during the 45-second SYN scan. In production, this would fill the alert file and make it hard to see other events. We need to rate-limit it without missing the scan.</p>
@@ -435,6 +637,36 @@ sudo snort -c /etc/snort/snort.conf -r /tmp/lab_traffic.pcap \
 wc -l /tmp/alert
 <span class="cm"># Before tuning: ~210 alerts</span>
 <span class="cm"># After tuning:   ~7 alerts (1-3 scan + 4 SQL injection)</span></code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Know the two tuning locations: edit the rule itself (local.rules) vs. threshold.conf (preferred — avoids modifying upstream rules)</li>
+      <li>Understand that <code>threshold:type limit, count 1, seconds 300</code> limits a rule to 1 alert per 5 minutes per source</li>
+      <li>Use threshold.conf for suppressions — avoids modifying rule files that may be overwritten on update</li>
+      <li>Always re-validate after changes: <code>snort -T -c snort.conf</code></li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Distinguish <code>event_filter type limit</code> (fire N times then stop per window) from <code>type threshold</code> (fire every Nth occurrence)</li>
+      <li>Tighten broad PCRE rules by adding required surrounding context: <code>(\%27|\').*?(--)</code> is more specific than <code>(--)</code> alone</li>
+      <li>Increment the rule's <code>rev</code> number on every change: <code>rev:1</code> → <code>rev:2</code> — enables version tracking in your SIEM</li>
+      <li>After tuning, re-run the original test PCAP and verify tuned rules still fire on known-bad traffic</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Maintain a tuning log: record every threshold.conf change with date, analyst, original alert count, and post-tuning count</li>
+      <li>Use <code>event_filter type both</code> — fires only after N events, then every Nth occurrence (sliding window approach)</li>
+      <li>Build a regression test suite: known-bad PCAPs that must generate specific alerts after any rule change</li>
+      <li>Periodically review all suppressions — remove entries where the FP source (IP, service) no longer exists in your environment</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -442,6 +674,13 @@ wc -l /tmp/alert
 <template id="tpl-summary">
 <article class="topic">
   <h2>Lab Summary</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Complete detection chain: L3 IP reconnaissance → L4 TCP SYN scanning → L7 HTTP SQL injection exploitation and data exfiltration.</span>
+  </div>
 
   <h3>Complete local.rules File (Final)</h3>
   <pre><code><span class="cm">######################################</span>
@@ -487,6 +726,36 @@ alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"SQL INJECTION Com
     <li><strong>Rotate credentials</strong> — if user table was exposed, assume all passwords compromised</li>
     <li><strong>If Snort is in IPS mode</strong> — change rules 1000011/1000012 from <code>alert</code> to <code>drop</code> to actively block future attempts</li>
   </ol>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Know the 5-alert final detection: SYN scan (1000003) → injection attempt (1000012) → SQL error (1000010) → UNION SELECT (1000011) → comment sequence (1000013)</li>
+      <li>Understand that SID 1000010 (error response) is the highest-priority finding — it confirms application compromise</li>
+      <li>Know immediate actions: block attacker IP → patch search.php → rotate credentials → check database logs</li>
+      <li>Recognize that multiple SIDs firing on the same source IP = correlated campaign, not random noise</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Write an incident timeline from the alerts: T+0 scan, T+2:10 recon, T+2:45 first injection, T+3:01 data extraction</li>
+      <li>Use the Apache log HTTP 200 + 3847 bytes to quantify data exposure in the incident report</li>
+      <li>If in IPS mode: change 1000011/1000012 from <code>alert</code> to <code>drop</code> to prevent future exploitation on this vector</li>
+      <li>Document tuning changes (threshold on 1000003, tightened PCRE on 1000013) for the team knowledge base</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Feed 203.0.113.50 to threat intel platforms (VirusTotal, AbuseIPDB) and create a TIP indicator for team-wide visibility</li>
+      <li>Conduct a post-incident rule review: were there gaps? Could blind SQLi (no error response) have been detected?</li>
+      <li>Write a Zeek or Suricata equivalent rule set for the same scenario — practice multi-tool detection capability</li>
+      <li>Use this lab scenario as a training exercise: have junior analysts identify the attack from raw alerts without the guide</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 

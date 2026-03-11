@@ -20,24 +20,46 @@
     <a href="psaa.html">PSAA</a>
     <a href="security-onion.html">Security Onion</a>
     <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
     <a href="nmap.html">Nmap</a>
     <a href="wireshark.html" class="active">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
     <a href="log-sources.html">Log Sources</a>
   </div>
 </nav>
 
 <div class="layout">
-  <aside class="sidebar" id="sidebar">
+  <aside class="sidebar" id="sb">
     <div class="sidebar-header">Statistics</div>
-    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+    <nav class="sidebar-nav" id="sb-nav"></nav>
   </aside>
-  <main class="content" id="content-area"></main>
+  <main class="main" id="content-area"></main>
 </div>
 
 <!-- ════════════════════════ Protocol Hierarchy ═════════════════════════════ -->
 <template id="tpl-protocol-hierarchy">
 <article class="topic">
   <h2>Protocol Hierarchy Statistics</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l2">L2 Data Link</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">Protocol Hierarchy spans the full stack: Ethernet (L2) → IP (L3) → TCP/UDP (L4) → application protocols like HTTP/DNS/TLS/SMB (L7), showing traffic composition at each layer.</span>
+  </div>
   <p>Protocol Hierarchy gives you an instant overview of every protocol present in the PCAP and what percentage of traffic each represents. Open via <strong>Statistics → Protocol Hierarchy</strong>.</p>
 
   <h3>What It Shows</h3>
@@ -85,6 +107,34 @@ tshark -r capture.pcap -q -z io,phs | grep -E "Protocol|dns|http|smb|tls"</code>
   <div class="callout lab">
     <strong>Triage workflow:</strong> Open Protocol Hierarchy first on every new PCAP. It takes 5 seconds and immediately flags unexpected protocols, unusual volume distributions, or cleartext protocols that should be encrypted.
   </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Open Protocol Hierarchy first on <strong>every new PCAP</strong> — it takes 5 seconds and immediately reveals the traffic landscape</li>
+      <li>Right-click any protocol row → Apply as Filter to jump directly to those packets in the main list</li>
+      <li>Know the baselines: normal endpoint DNS is typically &lt;1% of traffic; HTTP should be 0% if HTTPS is enforced on the segment</li>
+      <li>Look for unexpected protocol rows: IRC, Tor, raw TCP on non-standard ports, or ICMP at unusually high percentage</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Diagnose DNS anomalies: &gt;10% of traffic being DNS on a single endpoint = DGA malware or DNS tunneling — cross-reference with Conversations and DNS display filter</li>
+      <li>Spot missing expected protocols: no DNS at all + direct TCP to external IPs = hardcoded C2 IP addresses bypassing DNS monitoring</li>
+      <li>Identify cleartext protocols that should be encrypted: HTTP alongside TLS on the same segment indicates a downgrade, legacy app, or intentional interception</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Run headless Protocol Hierarchy in automated pipelines: <code>tshark -r capture.pcap -q -z io,phs</code> outputs the full tree for scripted anomaly detection</li>
+      <li>Compare Protocol Hierarchy across PCAPs: establish baseline percentages from clean captures, then flag deviations &gt;2 standard deviations as anomalous</li>
+      <li>Chain findings to targeted analysis: Protocol Hierarchy anomaly → Conversations for top talkers → Stream following → IOC extraction — structured triage in under 10 minutes</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -92,6 +142,13 @@ tshark -r capture.pcap -q -z io,phs | grep -E "Protocol|dns|http|smb|tls"</code>
 <template id="tpl-conversations">
 <article class="topic">
   <h2>Conversations</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l2">L2 Data Link</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-note">Conversations spans L2 (MAC pairs), L3 (IP pairs), and L4 (TCP/UDP port pairs) — each tab aggregates communication at a different layer of the stack.</span>
+  </div>
   <p>The Conversations window shows all unique communication pairs (endpoint A ↔ endpoint B) with packet counts, bytes transferred, and duration. Open via <strong>Statistics → Conversations</strong>.</p>
 
   <h3>Conversation Tabs</h3>
@@ -160,6 +217,33 @@ tshark -r capture.pcap -q -z conv,udp \
 
 <span class="cm"># Filter conversations involving a specific host</span>
 tshark -r capture.pcap -q -z conv,tcp,"ip.addr==10.0.0.99"</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Open Conversations → TCP tab → sort by Duration to find the longest-lived connections — C2 channels often persist for hours</li>
+      <li>Sort IPv4 tab by Bytes to find large data transfers — the top outbound entry is often an exfiltration destination</li>
+      <li>Right-click any conversation → Apply as Filter → A ↔ B to isolate all traffic between those two endpoints in the main packet list</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Distinguish port scans from data exfil: scans = many conversations with very few packets each from one source IP; exfil = few conversations with very high byte counts</li>
+      <li>Sort TCP tab by Bytes B→A to surface large <strong>outbound</strong> transfers from internal hosts (A→B is inbound, B→A is the response going back = outbound from victim perspective)</li>
+      <li>Use tshark for scripted analysis: <code>tshark -q -z conv,tcp | sort -rn -k9 | head -10</code> identifies the 10 highest-volume TCP conversations</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Combined sort strategy: Duration descending first → flag top 10 longest; Bytes B→A descending → flag top 10 outbound — overlap between the two lists = high-confidence C2 + exfil candidate</li>
+      <li>Correlate Conversations with Protocol Hierarchy: high DNS percentage → Conversations → UDP tab → sort by Packets → identify the DNS top talker destination for tunnel investigation</li>
+      <li>Filter conversations by host for targeted analysis: <code>tshark -q -z conv,tcp,"ip.addr==192.168.56.30"</code> shows all TCP conversations involving the Windows 10 target only</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -167,6 +251,12 @@ tshark -r capture.pcap -q -z conv,tcp,"ip.addr==10.0.0.99"</code></pre>
 <template id="tpl-endpoints">
 <article class="topic">
   <h2>Endpoints</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l2">L2 Data Link</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-note">Endpoints aggregates per-host activity at L2 (MAC addresses, rogue device detection) and L3 (IP addresses, GeoIP enrichment) — individual host traffic accounting.</span>
+  </div>
   <p>The Endpoints window lists every unique host observed in the PCAP with total bytes sent and received, plus packet counts. Unlike Conversations (which shows pairs), Endpoints shows individual host activity. Open via <strong>Statistics → Endpoints</strong>.</p>
 
   <h3>Endpoints Window Columns</h3>
@@ -228,6 +318,33 @@ tshark -r capture.pcap \
   | sort -u \
   | head -50
 <span class="cm"># Then submit to VirusTotal, Shodan, or AbuseIPDB</span></code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Sort Endpoints → IPv4 → Tx Bytes descending to find the biggest data <strong>senders</strong> — a workstation sending more than it receives is a strong exfiltration indicator</li>
+      <li>Sort by Packets to find the noisiest hosts — high packet counts from one internal IP often indicate a scanner or beaconing malware</li>
+      <li>Right-click any endpoint → Apply as Filter to isolate all traffic involving that host</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Enable GeoIP (Edit → Preferences → Name Resolution → MaxMind DB path) to see country flags — C2 traffic to unusual countries stands out visually in the Endpoints table</li>
+      <li>Compare the IPv4 Endpoints list against your asset inventory — any IP not in the inventory = rogue device or C2 server</li>
+      <li>Extract all external IPs for bulk threat intel lookup: <code>tshark -r pcap -T fields -e ip.dst | grep -v RFC1918 | sort -u</code> → submit to AbuseIPDB or Shodan</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Correlate Endpoints with Conversations to build a complete host traffic map: Endpoints → Tx Bytes anomaly → Conversations → isolate that host's streams → Follow → confirm exfil content</li>
+      <li>Use Ethernet tab in Endpoints to detect rogue MACs not matching expected OUI prefixes — useful for detecting unauthorized devices or MAC-spoofing attacks</li>
+      <li>Script bulk IP enrichment: extract unique external IPs with tshark → pipe to VirusTotal API or Shodan API → flag any IPs with malicious reputation scores</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -235,6 +352,13 @@ tshark -r capture.pcap \
 <template id="tpl-io-graphs">
 <article class="topic">
   <h2>IO Graphs</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">IO Graphs can visualize traffic rate for any display filter — from raw IP (L3) and TCP/UDP (L4) volume to application-protocol (L7) activity like HTTP beaconing or DNS flooding over time.</span>
+  </div>
   <p>IO Graphs plot packet rate or byte rate over time — essential for identifying traffic spikes, periodic beaconing, DDoS patterns, and data exfiltration bursts. Open via <strong>Statistics → IO Graphs</strong>.</p>
 
   <h3>Graph Configuration</h3>
@@ -310,6 +434,33 @@ tshark -r capture.pcap -q -z "io,stat,10,tcp,udp,dns,http"
 <span class="cm"># Output format:</span>
 <span class="cm"># Duration  |    tcp    |    udp    |    dns    |    http   |</span>
 <span class="cm"># 0 &lt;&gt; 10   | Frames:xx | Frames:xx | Frames:xx | Frames:xx |</span></code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Set up IO Graph with 1-second interval and Y-axis = Packets/s for beaconing detection — regular spikes at fixed intervals confirm C2 check-in timers</li>
+      <li>Add a second line with <code>ip.addr == 192.168.56.10</code> (Kali attacker) to overlay attacker traffic against total traffic in the same graph</li>
+      <li>Click any spike in the IO Graph to jump directly to those packets in the main packet list</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Set up the 5-line SOC triage graph (All / HTTP / DNS / TLS / SMB) to see protocol contributions over time — a sudden DNS spike while SMB is also spiking suggests ransomware lateral spread with C2 communication</li>
+      <li>Detect data exfiltration bursts: switch Y-axis to Bytes/s and filter to <code>ip.src == 192.168.56.30</code> (victim) — a sustained spike in outbound bytes followed by a drop = staged exfil complete</li>
+      <li>Export graph data via Copy button as CSV for timeline documentation in incident reports</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Quantify beacon interval precisely with tshark awk pipeline: extract frame timestamps for the suspect IP, compute deltas, sort by frequency — regular interval with tight variance confirms machine-generated timing</li>
+      <li>Detect jitter-obfuscated C2: beacon interval varies by ±10-30% — IO Graph shows fuzzy peaks instead of sharp spikes; still identifiable vs organic traffic by sustained low-rate periodicity</li>
+      <li>Use <code>tshark -q -z "io,stat,10,tcp,udp,dns,http"</code> for headless multi-protocol time-series analysis without loading the full PCAP in the GUI</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -317,6 +468,12 @@ tshark -r capture.pcap -q -z "io,stat,10,tcp,udp,dns,http"
 <template id="tpl-expert-info">
 <article class="topic">
   <h2>Expert Information</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-note">Expert Information primarily surfaces L4 transport anomalies (TCP retransmissions, zero windows, RST storms) and L3 events — protocol-layer problems that Wireshark's dissectors automatically detect.</span>
+  </div>
   <p>Wireshark's Expert Information panel automatically flags protocol anomalies, retransmissions, malformed packets, and connection issues. Open via <strong>Analyze → Expert Information</strong> or click the circle indicator in the status bar.</p>
 
   <h3>Severity Levels</h3>
@@ -406,6 +563,33 @@ tshark -r capture.pcap \
       </tbody>
     </table>
   </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Check Expert Information on every new PCAP — the status bar circle color (red/yellow/green) gives an instant severity summary without opening the full panel</li>
+      <li>TCP RST storm = port scan in progress or firewall rejecting connections; filter <code>tcp.flags.reset == 1</code> to see all RSTs and identify the source</li>
+      <li>TCP retransmissions indicate packet loss — during a DDoS this appears as the victim's responses failing to reach clients; filter <code>tcp.analysis.retransmission</code></li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Use <code>tcp.analysis.zero_window</code> to detect resource exhaustion — a host with zero window has a full receive buffer, possibly from a slow-read DoS attack or overloaded server</li>
+      <li>TLS alert messages (<code>tls.alert_message</code>) during C2 sessions indicate handshake failures — self-signed cert rejection, version mismatch, or certificate pinning bypass attempts</li>
+      <li>Run <code>tshark -r capture.pcap -q -z expert</code> for a summary count of all Expert Info messages — quickly shows if a PCAP has hundreds of retransmissions (network issue vs attack)</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Correlate Expert Info event sequences with the attack timeline: RST burst marks scan start → TCP SYN success marks exploit delivery → zero window + retransmissions mark lateral movement under network stress</li>
+      <li>Detect C2 connection probing: filter <code>tcp.flags.reset == 1 and ip.src == 192.168.56.30</code> — RSTs sent by victim = ports are closed; no RSTs = firewall silently dropping = stealth scan</li>
+      <li>Use Expert Info severity filters: <code>tshark -Y "expert.severity >= 800000"</code> to suppress Chat/Note and show only Warnings and Errors for fast high-severity triage</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 

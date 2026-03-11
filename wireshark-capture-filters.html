@@ -20,24 +20,45 @@
     <a href="psaa.html">PSAA</a>
     <a href="security-onion.html">Security Onion</a>
     <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
     <a href="nmap.html">Nmap</a>
     <a href="wireshark.html" class="active">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
     <a href="log-sources.html">Log Sources</a>
   </div>
 </nav>
 
 <div class="layout">
-  <aside class="sidebar" id="sidebar">
+  <aside class="sidebar" id="sb">
     <div class="sidebar-header">Capture Filters</div>
-    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+    <nav class="sidebar-nav" id="sb-nav"></nav>
   </aside>
-  <main class="content" id="content-area"></main>
+  <main class="main" id="content-area"></main>
 </div>
 
 <!-- ══════════════════════════════ BPF Syntax ══════════════════════════════ -->
 <template id="tpl-bpf-syntax">
 <article class="topic">
   <h2>BPF Syntax</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l2">L2 Data Link</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-note">BPF executes in-kernel at packet arrival, examining Ethernet (L2) frames, IP (L3) headers, and TCP/UDP (L4) port and flag fields via byte offsets.</span>
+  </div>
   <p>Capture filters use <strong>Berkeley Packet Filter (BPF)</strong> syntax — compiled to bytecode and executed in the kernel before packets reach Wireshark. Non-matching packets are discarded immediately and never written to the PCAP.</p>
 
   <div class="callout warn">
@@ -108,6 +129,37 @@ tcp[((tcp[12:1]&gt;&gt;4)*4):4] == 0x47455420  <span class="cm"># "GET " ASCII</
       </tbody>
     </table>
   </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Know the 3 BPF qualifier types: <strong>type</strong> (host/net/port), <strong>direction</strong> (src/dst), and <strong>protocol</strong> (tcp/udp/icmp/arp)</li>
+      <li>Write simple single-host filters: <code>host 192.168.56.30</code> on Security Onion's eth1 monitoring interface</li>
+      <li>Combine with AND/OR/NOT: <code>host 192.168.56.30 and tcp port 445</code></li>
+      <li>Understand that BPF filters are applied at capture time — excluded packets are permanently gone from the PCAP</li>
+      <li>Know that <code>tcp.flags.syn==1</code> is a display filter, NOT a BPF filter — different languages entirely</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Use TCP flag byte offsets: <code>tcp[13] &amp; 0x02 != 0</code> (SYN), <code>tcp[13] &amp; 0x04 != 0</code> (RST), <code>tcp[13] == 0x02</code> (pure SYN)</li>
+      <li>Access IP header fields directly: <code>ip[9] == 6</code> (protocol = TCP), <code>ip[8]</code> (TTL field)</li>
+      <li>Group expressions with parentheses: <code>(tcp port 80 or tcp port 443) and host 10.0.0.5</code></li>
+      <li>Identify Xmas scan packets with <code>tcp[13] == 41</code> (FIN+PSH+URG = 0x29) and Null scans with <code>tcp[13] == 0</code></li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Use <code>proto[offset:size] &amp; mask op value</code> for arbitrary header byte extraction at any depth</li>
+      <li>Match L7 payload start bytes: <code>tcp[((tcp[12:1]&gt;&gt;4)*4):4] == 0x47455420</code> captures "GET " in TCP data</li>
+      <li>Combine multiple byte-level conditions to detect specific attack patterns (e.g., fragmented IP + specific TTL range)</li>
+      <li>Understand BPF bytecode compilation: minimize branching for high-throughput kernel-level filtering on 10Gbps+ taps</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -115,6 +167,13 @@ tcp[((tcp[12:1]&gt;&gt;4)*4):4] == 0x47455420  <span class="cm"># "GET " ASCII</
 <template id="tpl-display-vs-capture">
 <article class="topic">
   <h2>Display vs. Capture Filters</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l2">L2 Data Link</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-note">Capture filters (BPF) work at L2–L4 in the kernel; display filters add L7 field-level awareness after Wireshark's protocol dissectors run.</span>
+  </div>
 
   <div class="table-wrap">
     <table>
@@ -170,6 +229,35 @@ tshark -i eth0 -f "tcp port 443" -w /tmp/tls.pcap</code></pre>
   <div class="callout note">
     <strong>When to use capture filters:</strong> Use them on high-traffic span/tap ports where capturing everything would fill disk within minutes. Start narrow, then widen the display filter for analysis. Never use a capture filter when you're unsure what you're looking for — you might exclude the malicious traffic.
   </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Know the fundamental difference: BPF = kernel-level, capture-time; Display = post-capture, UI-level, non-destructive</li>
+      <li>Set a BPF filter before starting a capture in Wireshark: Capture → Options → enter BPF in "Capture filter" box</li>
+      <li>Understand you <strong>cannot change</strong> a capture filter mid-capture without restarting — excluded packets are permanently lost</li>
+      <li>Use display filters freely during analysis — they are reversible and don't discard packets from the PCAP</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Use both <code>-f</code> (BPF) and <code>-Y</code> (display) simultaneously in tshark: <code>tshark -i eth0 -f "tcp port 80" -Y "http.request.method == \"POST\""</code></li>
+      <li>Convert between equivalent expressions: <code>tcp port 80</code> (BPF) ↔ <code>tcp.port == 80</code> (display); <code>tcp[13] == 2</code> ↔ <code>tcp.flags.syn==1 and tcp.flags.ack==0</code></li>
+      <li>On Security Onion, apply a BPF to eth1 (monitor interface) to reduce PCAP volume before Zeek/Suricata processing</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Design layered filter strategies for high-volume SPAN ports: broad BPF to discard irrelevant traffic + targeted display filter for analysis</li>
+      <li>Quantify the performance trade-off: BPF drops packets before ring buffer write; display filters consume RAM proportional to total captured volume</li>
+      <li>Avoid over-filtering with BPF in incident response — unknown attack traffic may use unexpected ports; start with minimal BPF and aggressive display filters instead</li>
+      <li>Use <code>tshark -f "host 192.168.56.30" -Y "http or dns or smb2" -T fields</code> to extract only relevant L7 fields while capturing a full host's traffic</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -177,6 +265,13 @@ tshark -i eth0 -f "tcp port 443" -w /tmp/tls.pcap</code></pre>
 <template id="tpl-common-bpf">
 <article class="topic">
   <h2>Common Capture Filters</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l2">L2 Data Link</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-note">ARP primitives target L2 frames; host/net/ICMP filters address L3 IP traffic; port/TCP flag filters inspect L4 transport headers.</span>
+  </div>
 
   <h3>Host and Network</h3>
   <pre><code><span class="cm"># All traffic to/from a specific host</span>
@@ -260,6 +355,36 @@ not (udp port 67 or udp port 68)
 
 <span class="cm"># Production traffic only (remove management protocols)</span>
 not (arp or udp port 5353 or udp port 1900 or broadcast or udp port 67)</code></pre>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Use <code>host 192.168.56.30</code> to isolate the Windows 10 target VM; <code>host 192.168.56.10</code> for Kali attacker traffic</li>
+      <li>Filter by protocol: <code>tcp</code>, <code>udp</code>, <code>icmp</code>, <code>arp</code> — use these alone to triage traffic types on a segment</li>
+      <li>Reduce background noise with <code>not arp and not udp port 5353</code> before investigating specific hosts</li>
+      <li>Use <code>tcp port 445</code> to capture SMB traffic for lateral movement detection between lab hosts</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Combine subnet and port: <code>src net 192.168.56.0/24 and tcp port 445</code> to catch internal SMB connections</li>
+      <li>Apply SOC-specific filter combos: <code>tcp port 4444 or tcp port 1337 or tcp port 8888</code> for common C2 callback ports</li>
+      <li>Strip management noise while keeping threats: <code>not (host 192.168.56.1 or port 22) and tcp</code></li>
+      <li>Capture full AD authentication traffic: <code>tcp port 88 or udp port 88 or tcp port 389 or tcp port 445</code></li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Design production noise-reduction suites for span port captures: strip ARP, mDNS, SSDP, DHCP, broadcast in a single BPF before ring buffer write</li>
+      <li>Use <code>tcp[13] == 2</code> exclusively for SYN-only captures during active scanning detection to minimise PCAP volume</li>
+      <li>Combine C2 port list with non-standard high-port catch-all: <code>(tcp portrange 4000-9999) and not (port 5432 or port 8080)</code> for unknown C2 beacon hunting</li>
+      <li>Integrate BPF filter design with Security Onion's sensor tuning to reduce sensor load while preserving forensic fidelity</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -267,6 +392,13 @@ not (arp or udp port 5353 or udp port 1900 or broadcast or udp port 67)</code></
 <template id="tpl-tshark-capture">
 <article class="topic">
   <h2>tshark Capture Integration</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-chip l7">L7 Application</span>
+    <span class="osi-note">tshark bridges BPF capture filters (L3/L4 kernel-level) with display filter field extraction and protocol dissectors that reach L7 application data.</span>
+  </div>
   <p>tshark is the command-line version of Wireshark. Use <code>-f</code> for BPF capture filters during live capture, and <code>-Y</code> for display filters when reading or live-printing.</p>
 
   <h3>Basic tshark Syntax</h3>
@@ -354,6 +486,36 @@ tshark -i eth0 -f "tcp port 445" -a duration:60 -q -z conv,tcp</code></pre>
       </tbody>
     </table>
   </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>List interfaces on Security Onion with <code>tshark -D</code>; identify eth1 as the monitoring (promiscuous) interface</li>
+      <li>Capture to file: <code>tshark -i eth1 -f "tcp port 445" -w /tmp/smb.pcap</code></li>
+      <li>Read an existing PCAP: <code>tshark -r /tmp/smb.pcap -Y "smb2.cmd == 5"</code></li>
+      <li>Use <code>-n</code> to disable reverse DNS lookups and speed up live captures in the lab</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Rotate captures with ring buffer: <code>tshark -i eth1 -b duration:300 -b files:12 -w /captures/lab.pcap</code> keeps a rolling 1-hour window</li>
+      <li>Extract DNS query names live: <code>tshark -i eth1 -f "udp port 53" -Y "dns.flags.response==0" -T fields -e frame.time_epoch -e ip.src -e dns.qry.name</code></li>
+      <li>Extract TLS SNI for C2 hunting: <code>tshark -i eth1 -f "tcp port 443" -Y "tls.handshake.type==1" -T fields -e ip.src -e tls.handshake.extensions_server_name</code></li>
+      <li>Run stats after capture with <code>-q -z conv,tcp</code> to see top TCP conversations without per-packet output</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Pipeline tshark into grep/awk for real-time alerting: <code>tshark -i eth1 -f "tcp port 53" -Y "dns" -T fields -e dns.qry.name -l | grep -E "\.(tk|pw|cc|ga)$"</code></li>
+      <li>Combine snap length (<code>-s 96</code>) with BPF to capture only headers at wire speed — reduces PCAP size while preserving metadata for flow analysis</li>
+      <li>Use <code>-z http,stat,</code> or <code>-z io,stat,1</code> to produce traffic summary tables from multi-hour PCAPs without loading them in the GUI</li>
+      <li>Integrate tshark ring buffer output paths directly into Security Onion's filebeat/Zeek log pipeline for automated PCAP-to-alert correlation</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 
@@ -361,6 +523,13 @@ tshark -i eth0 -f "tcp port 445" -a duration:60 -q -z conv,tcp</code></pre>
 <template id="tpl-bpf-cheatsheet">
 <article class="topic">
   <h2>BPF Cheat Sheet</h2>
+  <div class="osi-bar">
+    <span class="osi-label">OSI Layers</span>
+    <span class="osi-chip l2">L2 Data Link</span>
+    <span class="osi-chip l3">L3 Network</span>
+    <span class="osi-chip l4">L4 Transport</span>
+    <span class="osi-note">Quick reference spanning all BPF-accessible layers: ARP/broadcast primitives (L2), IP/ICMP/subnet (L3), TCP/UDP ports and flag bytes (L4).</span>
+  </div>
 
   <h3>Core Primitives</h3>
   <div class="table-wrap">
@@ -430,6 +599,36 @@ host 10.0.0.99 and not icmp</code></pre>
   <div class="callout lab">
     <strong>Saving BPF Filters:</strong> In Wireshark, go to <strong>Capture → Capture Filters → +</strong> to save BPF strings with a name. They persist across sessions and appear in the dropdown when starting a new capture.
   </div>
+
+  <hr class="tier-divider">
+  <div class="tier-heading">Skill Tiers</div>
+  <details class="tier beginner" open>
+    <summary>🟢 Beginner — Core Concepts</summary>
+    <div class="tier-body"><ul>
+      <li>Use this sheet as a quick lookup during active captures — bookmark the core primitives table for reference</li>
+      <li>Start with <code>host 192.168.56.30</code> or <code>tcp port 445</code> when you have a specific target or protocol to investigate</li>
+      <li>Use <code>tcp</code>, <code>udp</code>, <code>icmp</code>, <code>arp</code> alone to get a feel for traffic composition on a network segment</li>
+      <li>Save your most-used BPF filters in Wireshark via Capture → Capture Filters so you don't retype them each session</li>
+    </ul></div>
+  </details>
+  <details class="tier intermediate">
+    <summary>🟡 Intermediate — Deeper Skills</summary>
+    <div class="tier-body"><ul>
+      <li>Detect SYN scans in real time with <code>tcp[13] == 2</code>; spot Null scans with <code>tcp[13] == 0</code> and Xmas scans with <code>tcp[13] == 41</code></li>
+      <li>Use compound expressions for SOC workflows: web + DNS = <code>(tcp port 80 or tcp port 443) or udp port 53</code></li>
+      <li>Chain host + protocol + port: <code>host 192.168.56.10 and (tcp port 4444 or tcp port 1337)</code> to monitor Kali C2 listeners in the lab</li>
+      <li>Combine portrange with exclusions: <code>tcp portrange 1024-65535 and not (port 5353 or port 5985)</code> for high-port anomaly hunting</li>
+    </ul></div>
+  </details>
+  <details class="tier advanced">
+    <summary>🔴 Advanced — Expert Techniques</summary>
+    <div class="tier-body"><ul>
+      <li>Detect ICMP tunnelling with size threshold: <code>icmp[icmptype] == icmp-echo and greater 100</code> catches abnormally large echo requests used for data exfiltration</li>
+      <li>Monitor full lateral movement surface: <code>tcp port 445 or tcp port 139 or tcp port 3389 or tcp port 5985 or tcp port 5986</code> covers SMB, RDP, and WinRM in one filter</li>
+      <li>Combine the cheat sheet patterns into tiered PCAP strategies: narrow BPF for collection + broad display filter for hunting, tuned per investigation phase</li>
+      <li>Automate BPF filter deployment across multiple Security Onion sensor nodes using the <code>/etc/sensor.conf</code> BPF override directive</li>
+    </ul></div>
+  </details>
 </article>
 </template>
 

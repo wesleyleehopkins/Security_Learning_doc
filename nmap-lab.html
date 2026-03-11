@@ -22,7 +22,22 @@
     <a href="psaa.html">PSAA</a>
     <a href="security-onion.html">Security Onion</a>
     <a href="splunk.html">Splunk</a>
-    <a href="nmap.html">Nmap</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
+    <a href="nmap.html" class="active">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
     <a href="log-sources.html">Log Sources</a>
   </div>
 </nav>
@@ -70,6 +85,13 @@ window.NOTEBOOK = {
 <template id="tpl-scenario">
 <article class="topic">
 <h1>00 · Scenario &amp; Setup</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">This five-phase recon lab spans all three active layers: L3 (host discovery via ICMP, OS fingerprinting), L4 (SYN port scanning, TCP reason codes), and L7 (version detection, NSE script output, service banner analysis).</span>
+</div>
 <hr class="divider">
 
 <div class="callout lab"><strong>Lab Scenario</strong> — This walkthrough simulates a penetration testing engagement against a single target host. The goal is to map all open ports, identify running services and versions, and check for known vulnerabilities using NSE scripts. Follow each step in order.</div>
@@ -121,12 +143,57 @@ mkdir -p ~/scans/10.10.10.5
 <span class="cm"># e.g. ~/scans/10.10.10.5/discovery.gnmap</span>
 <span class="cm">#      ~/scans/10.10.10.5/fullports.xml</span>
 <span class="cm">#      ~/scans/10.10.10.5/services.nmap</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Read through the 5-phase methodology and understand why the phases are ordered: discovery → ports → services → vulns → OS</li>
+      <li>Create the output directory before starting: <code>mkdir -p ~/scans/10.10.10.5</code></li>
+      <li>Understand that saving output (<code>-oA</code>) at every phase means you never lose results if a scan is interrupted</li>
+      <li>Know the convention: one subdirectory per target IP, one basename per phase</li>
+      <li>Apply this same setup to the home lab: <code>mkdir -p ~/scans/192.168.56.30</code></li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Understand why phases are sequential — running <code>-sV</code> on all 65535 ports wastes time; do port scan first, then version on discovered ports only</li>
+      <li>Know when to skip or modify phases: skip discovery (-Pn) if the host blocks ICMP, skip UDP if scope is TCP-only</li>
+      <li>Recognize that the 5-phase structure matches real penetration testing methodologies (PTES, OWASP)</li>
+      <li>Add a pre-scan step: run <code>whois</code> and <code>dig</code> against the target before touching Nmap</li>
+      <li>Document which commands produced which findings — embed phase notes in the output directory as a README</li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Script the full phase sequence into a bash recon automation: accepts a target IP, runs all 5 phases, saves timestamped output</li>
+      <li>Adapt the methodology for internal network assessments vs. external perimeter vs. single-host CTF — each requires different timing, exclusions, and UDP depth</li>
+      <li>Integrate Nmap phases with other tools: Masscan for speed on large ranges, then Nmap for depth on discovered hosts</li>
+      <li>Build a findings aggregator: parse all phase XML outputs and merge into a single structured report</li>
+      <li>Practice the full lab against the home lab Windows 10 target: <code>sudo nmap -sS -p- -T4 192.168.56.30 -oA ~/scans/192.168.56.30/fullports</code></li>
+    </ul>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-step1">
 <article class="topic">
 <h1>01 · Step 1 — Host Discovery</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-note">Host discovery uses L3 ICMP echo request/reply (ping, -PE) and L4 TCP SYN probes (-PS) to confirm a target is reachable before committing to a full port scan.</span>
+</div>
 <hr class="divider">
 
 <div class="callout note">Before spending time on a full port scan, confirm the target is reachable. A routed lab target may not respond to ICMP — use -Pn if all probes time out.</div>
@@ -170,12 +237,56 @@ Nmap done: 1 IP address (1 host up) scanned in 0.28 seconds
   </tbody>
 </table>
 </div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Run <code>sudo nmap -sn 10.10.10.5</code> and confirm the host is up before proceeding</li>
+      <li>If you see "Host seems down", re-run with <code>-Pn</code> to skip discovery — the host may block ICMP</li>
+      <li>Understand what the MAC OUI tells you: VMware = virtual machine, Dell/Cisco = physical hardware</li>
+      <li>Practice on lab: <code>sudo nmap -sn 192.168.56.30</code> — confirm Windows 10 responds before port scanning</li>
+      <li>Note the latency: low ms = same LAN, higher ms = routed/VPN connection</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Use TCP probes when ICMP is blocked: <code>sudo nmap -sn -PS22,80,443 10.10.10.5</code> — sends SYN to specific ports</li>
+      <li>Sweep the full lab subnet: <code>sudo nmap -sn 192.168.56.0/24</code> — see all 3 VMs respond (Kali, Security Onion, Windows 10)</li>
+      <li>Add UDP probe for hosts that block TCP too: <code>sudo nmap -sn -PU53,161 10.10.10.5</code></li>
+      <li>Understand that -Pn skips discovery entirely and assumes the host is up — wastes time on dead IPs but works for stealthy hosts</li>
+      <li>Know ARP discovery works only on the same L2 segment — routed hosts require ICMP or TCP probes</li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Correlate MAC OUI (first 3 octets) with vendor database to identify device type before scanning a single port</li>
+      <li>Use discovery timing: <code>sudo nmap -sn --min-rtt-timeout 50ms --max-retries 1 192.168.56.0/24</code> for fast sweeps on local LAN</li>
+      <li>Build a host inventory script: discovery sweep → extract live IPs → resolve hostnames → save to target list</li>
+      <li>Detect discovery scans on the defender side: watch for ICMP type 8 bursts + TCP SYN probes to common ports in Security Onion alerts from <code>192.168.56.10</code></li>
+      <li>Understand passive host discovery alternatives (ARP monitoring, DNS query logs, NetFlow) for stealthier reconnaissance</li>
+    </ul>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-step2">
 <article class="topic">
 <h1>02 · Step 2 — Full Port Scan</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-note">-sS -p- probes all 65,535 L4 TCP ports with half-open SYN packets. Each response (SYN-ACK, RST, or silence) maps to an open/closed/filtered port state without completing a full three-way handshake.</span>
+</div>
 <hr class="divider">
 
 <div class="callout note">Always scan all 65535 ports on a single target — services on non-standard ports are commonly missed by default top-1000 scans and are a major source of initial access in CTFs and real engagements.</div>
@@ -229,12 +340,57 @@ grep "/open" ~/scans/10.10.10.5/fullports.gnmap | \
 
 <span class="cm"># Output: 22,80,139,445,8080,8443</span>
 <span class="cm"># Use this list in Step 3 with -p for targeted version detection</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Run the full-port SYN scan: <code>sudo nmap -sS -p- --open -T4 10.10.10.5 -oA ~/scans/10.10.10.5/fullports</code></li>
+      <li>Understand <code>-p-</code> = all 65,535 ports vs default top 1000 — services on non-standard ports are frequently missed</li>
+      <li>Note the 6 open ports found and what each likely represents: 22=SSH, 80=HTTP, 139/445=SMB, 8080/8443=Tomcat</li>
+      <li>Practice on lab: <code>sudo nmap -sS -p- --open -T4 192.168.56.30 -oA ~/scans/192.168.56.30/fullports</code></li>
+      <li>Understand why <code>--open</code> is used: cleaner output showing only relevant ports on large subnet scans</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Run the port-list extraction pipeline and verify the output matches expected ports before moving to Step 3</li>
+      <li>Understand T4 timing: aggressive but appropriate for LAN/VPN lab — use T3 for production to reduce impact</li>
+      <li>Add UDP scan for common services: <code>sudo nmap -sU --top-ports 20 10.10.10.5</code> — catches DNS (53), SNMP (161), TFTP (69)</li>
+      <li>Know when to use <code>-sT</code> (TCP connect) instead of <code>-sS</code>: if you don't have root access, or need full connections for accurate state</li>
+      <li>Add <code>--min-rate 1000</code> to speed up <code>-p-</code> scans on reliable lab networks without risking dropped packets</li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Use Masscan for the initial <code>-p-</code> sweep (10x faster), then pass discovered ports to Nmap for accurate state verification</li>
+      <li>Detect port scan traffic in Security Onion: SYN scan from <code>192.168.56.10</code> to <code>192.168.56.30</code> generates distinctive half-open connection bursts</li>
+      <li>Tune <code>--scan-delay</code> to evade IDS rate-based detection: 100ms between probes slips under most threshold rules</li>
+      <li>Use <code>--source-port 53</code> or <code>--source-port 443</code> to probe through stateless ACLs that allow DNS/HTTPS source ports</li>
+      <li>Compare <code>-sS</code> vs <code>-sF</code> (FIN scan) vs <code>-sN</code> (NULL scan) results — differences reveal firewall ruleset behavior</li>
+    </ul>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-step3">
 <article class="topic">
 <h1>03 · Step 3 — Service &amp; Version Detection</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">-sV completes a full L4 TCP connection then sends L7 application-layer probe strings and reads version banners. -sC then runs default NSE scripts — SSH hostkey, HTTP title, SMB OS discovery — all at L7.</span>
+</div>
 <hr class="divider">
 
 <div class="callout note">Run version detection only against known open ports — much faster than rescanning all 65535. Use the port list extracted from Step 2.</div>
@@ -309,12 +465,57 @@ PORT     STATE SERVICE     VERSION
   </tbody>
 </table>
 </div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Run <code>sudo nmap -sV -sC -p 22,80,139,445,8080,8443 10.10.10.5 -oA ~/scans/10.10.10.5/services</code></li>
+      <li>Identify the versions shown in the output: OpenSSH 7.2p2, Apache 2.4.18, Samba 4.3.11, Tomcat 5.5</li>
+      <li>Recognize that Tomcat 5.5 is end-of-life and Apache 2.4.18 is outdated — both are high-value targets</li>
+      <li>Note the <code>smb-security-mode: message_signing: disabled</code> finding — this enables relay attacks</li>
+      <li>Understand that running <code>-sC</code> alongside <code>-sV</code> extracts extra recon data at no additional scan time cost</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Run <code>searchsploit "Samba 4.3"</code> and <code>searchsploit "Apache Tomcat 5.5"</code> on Kali to find known exploits for each version</li>
+      <li>Understand why SMB signing disabled is critical: Responder + ntlmrelayx can relay captured auth without cracking hashes</li>
+      <li>Cross-reference Samba 4.3.11 against CVE-2017-7494 (SambaCry) — this version is in the vulnerable range</li>
+      <li>Note the computer name <code>lame</code> and FQDN <code>lame.hack.local</code> — this is the HackTheBox "Lame" machine</li>
+      <li>Use <code>--script=banner</code> separately for raw banner grabs beyond what <code>-sV</code> provides</li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Map each version to a CVSS score: SambaCry (9.8), Shellshock (9.8), Tomcat 5.5 EoL (multiple 9.x) — build a risk-ranked finding list</li>
+      <li>Use Nmap version output to build a targeted exploit selection matrix before running any exploit tools</li>
+      <li>Query NVD API programmatically: <code>curl "https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=Samba+4.3"</code></li>
+      <li>Recognize that <code>-sC</code> revealing robots.txt and http-methods can uncover additional attack vectors before any manual browsing</li>
+      <li>Correlate service fingerprints with threat intel: Samba on old Ubuntu + Tomcat 5.5 is a common CTF/lab profile — pattern-match against known targets</li>
+    </ul>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-step4">
 <article class="topic">
 <h1>04 · Step 4 — NSE Vulnerability Scan</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">NSE vuln scripts transmit crafted L7 payloads — malformed SMB frames for SambaCry, Bash environment strings for Shellshock — over L4 TCP connections to detect exploitable conditions on specific services.</span>
+</div>
 <hr class="divider">
 
 <div class="callout warn"><strong>Vuln scripts may trigger IDS alerts</strong> and generate unusual traffic. In a production assessment, coordinate timing with the client's SOC team.</div>
@@ -401,12 +602,58 @@ PORT   STATE SERVICE
 |   LAME\root (RID: 1000)
 
 <span class="cm"># msfadmin and makis are unusual — target accounts for further testing</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Run <code>sudo nmap --script=vuln -p 22,80,139,445,8080,8443 10.10.10.5 -oA ~/scans/10.10.10.5/vulnscan</code></li>
+      <li>Read the <code>VULNERABLE</code> state lines in output — each one is an actionable finding</li>
+      <li>Understand that SambaCry (CVE-2017-7494) requires a writable share — the smb-enum-shares output showing <code>\\tmp: READ WRITE</code> confirms the prerequisite</li>
+      <li>Know that Shellshock requires a CGI script on the web server to be exploitable</li>
+      <li>Look up any CVE numbers in the output at nvd.nist.gov to understand severity and impact</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Run targeted checks after the full vuln scan: <code>sudo nmap --script=smb-vuln-cve-2017-7494,smb-enum-shares,smb-enum-users -p 139,445 10.10.10.5</code></li>
+      <li>Correlate the <code>msfadmin</code> username (RID 3000) with Metasploit's default admin account — this is a major hint</li>
+      <li>Understand the SambaCry attack vector: upload a malicious .so shared library to the writable /tmp share → Samba loads and executes it</li>
+      <li>Understand the NTLM relay chain: SMB signing disabled + writable share → Responder captures hash → ntlmrelayx forwards auth to other services</li>
+      <li>Test Shellshock with the CGI path found: <code>sudo nmap --script=http-shellshock --script-args uri=/cgi-bin/status.cgi -p 80 10.10.10.5</code></li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Chain the NSE findings into a Metasploit exploitation path: <code>use exploit/multi/samba/usermap_script → set RHOSTS 10.10.10.5 → run</code></li>
+      <li>Map all VULNERABLE findings to MITRE ATT&CK: SambaCry → T1210 (Exploit Public-Facing Application), SMB relay → T1557.001</li>
+      <li>Use the enumerated username list (<code>msfadmin</code>, <code>makis</code>) to build a targeted SSH spray: <code>hydra -L users.txt -P /usr/share/wordlists/rockyou.txt 10.10.10.5 ssh</code></li>
+      <li>Detect NSE vuln scans from the defender side: Shellshock probes show distinctive User-Agent headers; SMB vuln scripts generate unusual NTLM negotiation sequences</li>
+      <li>Document each VULNERABLE finding with: CVE, CVSS score, affected version, proof-of-concept NSE output, and recommended remediation for a formal pentest report</li>
+    </ul>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-step5">
 <article class="topic">
 <h1>05 · Step 5 — OS Detection &amp; Aggressive Scan</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">-O sends 16 targeted L3 ICMP and L4 TCP/UDP probe packets to build a TCP/IP fingerprint. -A adds L7 service version detection, default NSE scripts, and traceroute for a complete single-pass enumeration.</span>
+</div>
 <hr class="divider">
 
 <h2>OS Detection</h2>
@@ -472,12 +719,58 @@ HOP RTT     ADDRESS
 <span class="cm"># robots.txt reveals /joomla/ → check for default credentials, Joomla CVEs</span>
 <span class="cm"># Tomcat allows PUT and DELETE methods → file upload / WebDAV risk</span>
 <span class="cm"># OS is ancient Linux 2.6.x → kernel exploit candidates</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Run <code>sudo nmap -O 10.10.10.5</code> and identify the OS detection output — Linux 2.6.24-2.6.28 = very old kernel</li>
+      <li>Run <code>sudo nmap -A -p 22,80,139,445,8080,8443 10.10.10.5 -oA ~/scans/10.10.10.5/aggressive</code></li>
+      <li>Note that <code>-A</code> is shorthand for <code>-sV -sC -O --traceroute</code> — one flag for comprehensive enumeration</li>
+      <li>Recognize the robots.txt finding (<code>/joomla/</code>) — this came from <code>-sC</code>'s <code>http-robots.txt</code> script running automatically</li>
+      <li>Note the PUT and DELETE HTTP methods enabled on Tomcat — these allow file upload and deletion without authentication</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Correlate OS version (Linux 2.6.24-2.6.28 = Ubuntu 8.04-9.10) with kernel exploit candidates — run <code>searchsploit "linux kernel 2.6"</code></li>
+      <li>Understand what Joomla at <code>/joomla/</code> means: another web application attack surface — check version, try default credentials, look for Joomla CVEs</li>
+      <li>Explain the Tomcat PUT/DELETE risk: an unauthenticated attacker can upload a malicious JSP shell or WAR file via HTTP PUT</li>
+      <li>Use the traceroute to confirm network topology: 2 hops (your host → VPN gateway → target) means routed VPN connection</li>
+      <li>Understand why OS detection accuracy is ~97%: it's a statistical match against Nmap's fingerprint database, not a definitive identification</li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Upload a JSP shell via Tomcat PUT: <code>curl -T shell.jsp http://10.10.10.5:8080/shell.jsp</code> → access at <code>/shell.jsp?cmd=id</code></li>
+      <li>Search for kernel exploits: <code>searchsploit "Linux 2.6.24"</code> — Dirty COW (CVE-2016-5195) affects kernels up to 4.8.3</li>
+      <li>Build the full exploitation decision tree: SambaCry (quickest RCE), Shellshock (requires CGI), Tomcat PUT (requires 8080 access), kernel exploit (local escalation after initial access)</li>
+      <li>Add <code>--script=vuln</code> to the <code>-A</code> command for a single comprehensive scan: <code>sudo nmap -A --script=vuln -p 22,80,139,445,8080,8443 10.10.10.5</code></li>
+      <li>Detect aggressive scans in Security Onion: <code>-A</code> generates OS fingerprint probes (unusual TCP flag combinations), version probes, and script traffic — all within seconds from the same source</li>
+    </ul>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-summary">
 <article class="topic">
 <h1>→ · Findings Summary</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">The consolidated findings table aggregates results from all five phases — L3 OS fingerprint, L4 port state map, and L7 service/vulnerability data — into a prioritized attack surface assessment.</span>
+</div>
 <hr class="divider">
 
 <div class="callout lab"><strong>Engagement Complete</strong> — All five recon phases completed. Below is the consolidated findings table and recommended next steps.</div>
@@ -566,6 +859,45 @@ ndiff ~/scans/baselines/10.10.10.5_20240307.xml \
       ~/scans/10.10.10.5/rescan.xml
 
 <span class="cm"># ndiff will highlight any new ports, changed versions, or new hosts</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Review the "Open Ports &amp; Services" table and confirm all 6 ports were found in your own scan output</li>
+      <li>Read the Vulnerabilities Found table top-to-bottom: Critical → High → Medium is your priority order</li>
+      <li>Understand that CVE-2017-7494 (SambaCry) and CVE-2014-6271 (Shellshock) are both Critical RCE — either one gives shell access</li>
+      <li>Use the "Full Nmap Command Sequence" as a reference checklist — run each command and compare your output</li>
+      <li>Save the services.xml as a baseline for future ndiff comparisons</li>
+    </ul>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Build your own attack plan from the Recommended Next Steps table — sequence exploits from highest-confidence to riskiest</li>
+      <li>Understand why SambaCry is Priority 1: it's confirmed VULNERABLE + EXPLOITABLE, a writable share exists, and a Metasploit module is available</li>
+      <li>Understand the SMB relay chain: disabled signing → Responder captures NTLMv2 hash → ntlmrelayx relays to other 445 hosts → possible domain compromise</li>
+      <li>Set up ndiff baselines and run weekly comparisons — detect when patching occurs or new services appear</li>
+      <li>Write up the findings in structured format: finding name, CVE, affected asset, evidence (NSE output), CVSS score, recommendation</li>
+    </ul>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <ul>
+      <li>Map every finding to a MITRE ATT&CK technique: SambaCry → T1210, Shellshock → T1190, SMB relay → T1557.001, user enumeration → T1087.002</li>
+      <li>Build a complete pentest report section from this lab: executive summary, technical findings, evidence screenshots, remediation recommendations</li>
+      <li>Automate the entire 5-phase sequence with a bash script that accepts a target IP and produces a dated findings directory</li>
+      <li>Use the enumerated usernames (<code>msfadmin</code>, <code>makis</code>) to demonstrate attack chaining: NSE recon → credential spray → authenticated access → privilege escalation</li>
+      <li>Compare this lab's findings against the actual HackTheBox "Lame" writeup to validate your methodology and identify any missed attack paths</li>
+    </ul>
+  </div>
+</details>
 </article>
 </template>
 

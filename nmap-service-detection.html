@@ -22,7 +22,22 @@
     <a href="psaa.html">PSAA</a>
     <a href="security-onion.html">Security Onion</a>
     <a href="splunk.html">Splunk</a>
-    <a href="nmap.html">Nmap</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
+    <a href="nmap.html" class="active">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
     <a href="log-sources.html">Log Sources</a>
   </div>
 </nav>
@@ -68,6 +83,12 @@ window.NOTEBOOK = {
 <template id="tpl-sv-overview">
 <article class="topic">
 <h1>01 · How -sV Works — Service Version Detection</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Service version detection first opens a L4 TCP connection to each open port, then sends and reads L7 application-layer probe strings — matching banner responses against the nmap-service-probes database to identify product name and version.</span>
+</div>
 <hr class="divider">
 
 <div class="callout"><code>-sV</code> probes open ports to determine the service name, version number, and sometimes additional metadata (hostname, device type, OS). This information is used to identify vulnerable software versions without running a separate vulnerability scanner.</div>
@@ -141,12 +162,59 @@ match ssh m|^SSH-([\d.]+)-(.+)\n|  ← regex against response banner
 <span class="cm">#  - Encrypted protocol (SSL without standard handshake)</span>
 <span class="cm">#  - Service rate-limits or closes connection too fast</span>
 <span class="cm"># Fix: try --version-intensity 9 or use NSE scripts</span></code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Understanding what -sV actually does</h4>
+    <ul>
+      <li>-sV completes a port scan at L4 first, then connects to each open port and sends L7 application-layer probe strings from the nmap-service-probes database</li>
+      <li>Nmap matches each L7 response against regex patterns — a match returns product name, version, and CPE identifier</li>
+      <li>CPE URIs (e.g., <code>cpe:/a:openbsd:openssh:8.9p1</code>) are directly searchable in the NVD and Vulners to find matching CVEs</li>
+    </ul>
+    <pre><code>nmap -sS -sV -p 22,80,443,3306 192.168.56.30  <span class="cm"># SYN scan + version detection on Windows victim</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Combining -sV with scan flags for practical recon</h4>
+    <ul>
+      <li>Pair <code>-sS -sV</code> together — SYN discovers open L4 ports, -sV then probes each for L7 service identity in one Nmap run</li>
+      <li>Add <code>--open</code> to suppress closed/filtered output — essential when scanning large port ranges or subnets</li>
+      <li>Use <code>-oA scan_name</code> to save in all three formats (normal, XML, grepable) for later vulnerability correlation</li>
+    </ul>
+    <pre><code>nmap -sS -sV -p 1-1000 --open -oA initial_scan 192.168.56.30
+<span class="cm"># Port scan + version on top 1000 ports, save all output formats</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Diagnosing missed detections and automating CVE correlation</h4>
+    <ul>
+      <li>When -sV returns <code>?</code>, use <code>--version-intensity 9</code> to exhaust all L7 probes — custom/non-standard services need full probe coverage</li>
+      <li>Use <code>--version-trace</code> to see every probe/response pair in real time — diagnose exactly why a service isn't matching</li>
+      <li>Pipe <code>-oX</code> XML output into <code>--script=vulners</code> or OpenVAS for automated CVE lookups against every identified version</li>
+    </ul>
+    <pre><code>nmap -sV --version-trace -p 8443 192.168.56.30 2>&amp;1 | head -30
+<span class="cm"># Trace all L7 probe/response pairs — debug why a custom port isn't matching</span></code></pre>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-sv-intensity">
 <article class="topic">
 <h1>02 · Version Intensity Levels</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Version intensity controls how many L7 application-layer probe strings Nmap sends against each open L4 TCP port — higher intensity exhausts more probe variants to identify unusual or non-standard services that common probes would miss.</span>
+</div>
 <hr class="divider">
 
 <p>Version intensity controls how many probe strings Nmap tries against each open port. Higher intensity = more probes = better accuracy but slower scans. The nmap-service-probes file assigns each probe a rarity value (0-9); intensity sets the threshold.</p>
@@ -203,12 +271,58 @@ NSOCK INFO: READ [IOD #1 #2] SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.6
   </tbody>
 </table>
 </div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Choosing the right intensity for your situation</h4>
+    <ul>
+      <li>Default intensity 7 covers 90%+ of standard services — use this for everyday scans; no flag needed</li>
+      <li><code>--version-light</code> (intensity 2) sends only the most common L7 probes — use for large subnet sweeps where speed matters more than completeness</li>
+      <li><code>--version-all</code> (intensity 9) tries every probe in the database — use only on individual hosts when you need maximum accuracy</li>
+    </ul>
+    <pre><code>nmap -sV --version-light -T4 192.168.56.0/24  <span class="cm"># Quick version sweep of the whole lab subnet</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Two-pass intensity strategy for efficient recon</h4>
+    <ul>
+      <li>Use <code>--version-light</code> on a full subnet first, then <code>--version-all</code> on interesting individual hosts — best speed/accuracy trade-off</li>
+      <li>Use intensity 9 on non-standard ports (8080, 8443, 9000+) where the default often misses custom or internal services</li>
+      <li>Save results with <code>-oX</code> and compare against previous baseline scans to detect version changes and newly exposed services</li>
+    </ul>
+    <pre><code>nmap -sS -sV --version-intensity 9 -p- 192.168.56.20  <span class="cm"># Max intensity all ports on Security Onion</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Probe trace analysis and automated vulnerability pipeline</h4>
+    <ul>
+      <li>Use <code>--version-trace</code> with high intensity to identify exactly which L7 probe string triggered the match — useful for writing custom probes for proprietary internal services</li>
+      <li>Pair <code>--version-all -oX</code> with CVE scanning tools that consume Nmap XML (OpenVAS, Metasploit db_import, Vulners)</li>
+      <li>Keep <code>/usr/share/nmap/nmap-service-probes</code> updated — outdated probe files miss version strings for modern service releases</li>
+    </ul>
+    <pre><code>nmap -sV --version-all --version-trace 192.168.56.30 2>&amp;1 | grep "Matched\|NSOCK"
+<span class="cm"># Show matched probe strings — identifies which L7 probe triggered each version match</span></code></pre>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-os-detection">
 <article class="topic">
 <h1>03 · OS Detection (-O)</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-note">OS detection sends 16 targeted L3 ICMP and L4 TCP probe packets — analyzing TCP/IP stack behavior including ISN generation patterns, window sizes, options ordering, and ICMP response formatting to build a fingerprint matched against nmap-os-db.</span>
+</div>
 <hr class="divider">
 
 <div class="callout note"><strong>OS detection requires:</strong> root/admin privileges AND at least one open TCP port AND at least one closed TCP port on the target. Without both states, Nmap cannot generate the full fingerprint.</div>
@@ -304,12 +418,59 @@ No exact OS matches for host (If you know what OS it is,
   </tbody>
 </table>
 </div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Requirements and reading OS detection output</h4>
+    <ul>
+      <li>-O requires root/admin, at least one open TCP port, AND at least one closed TCP port — missing either means an incomplete L3/L4 fingerprint</li>
+      <li>Confidence percentage matters: 95%+ is reliable; 85–95% is a reasonable guess; below 85% treat as an estimate only</li>
+      <li>OS detection analyzes how the L3/L4 TCP/IP stack responds to unusual probes — each OS has a unique combination of ISN patterns, window behavior, and ICMP responses</li>
+    </ul>
+    <pre><code>sudo nmap -O 192.168.56.30  <span class="cm"># OS fingerprint the Windows 10 victim</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>Combining -O with version detection for full host profiling</h4>
+    <ul>
+      <li>Pair <code>-sS -sV -O</code> for the most complete host profile: open ports + service versions + OS in a single scan</li>
+      <li>Use <code>--osscan-limit</code> on subnets to skip hosts where OS detection conditions aren't met — saves significant scan time</li>
+      <li>OS + service versions together reveal patch level: "Windows 10 1803 + SMBv1 open = potential EternalBlue exposure"</li>
+    </ul>
+    <pre><code>sudo nmap -sS -sV -O --osscan-limit 192.168.56.0/24
+<span class="cm"># Full host profile on the lab subnet — skip hosts where OS detection won't work</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>NAT handling, low-confidence results, and topology inference</h4>
+    <ul>
+      <li>NAT devices and load balancers return their own OS fingerprint — always verify backend host OS through another channel (banner, SMB signing)</li>
+      <li>Use <code>--osscan-guess</code> behind firewalls that alter TCP options — forces the best-available match even with a degraded fingerprint</li>
+      <li>Combine with <code>--traceroute</code> to infer OS at each network hop — useful for mapping infrastructure topology from a single scan</li>
+    </ul>
+    <pre><code>sudo nmap -sS -sV -O --osscan-guess --traceroute -oA host_profile 192.168.56.30
+<span class="cm"># Full host profile: ports + versions + best-effort OS + traceroute hops</span></code></pre>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-banner-grab">
 <article class="topic">
 <h1>04 · Banner Grabbing</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">Banner grabbing establishes a L4 TCP connection then reads the initial L7 application-layer greeting string — this response text often contains product name, version number, and OS details without requiring authentication or further interaction.</span>
+</div>
 <hr class="divider">
 
 <p>Service banners are text strings that many services send immediately upon connection, containing version information, hostname, and other identifying data. Banner grabbing is a quick way to confirm service identity and version without full version detection probes.</p>
@@ -396,12 +557,61 @@ nmap --script=http-title,http-server-header -p 80,443 192.168.1.10
 </div>
 
 <div class="callout note">Always cross-reference identified versions against the NVD (nvd.nist.gov), Exploit-DB (exploit-db.com), and the vendor's security advisories. Banner versions may be modified/suppressed by security-hardened deployments.</div>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>Reading service banners with Nmap and nc</h4>
+    <ul>
+      <li>Many services send a L7 greeting banner on connect — FTP, SSH, SMTP, POP3, and IMAP all do this automatically without authentication</li>
+      <li><code>--script=banner</code> captures these L7 greetings and displays them next to the port — often faster than full -sV for quick version identification</li>
+      <li>Match banner version strings directly against CVE databases — specific version numbers in banners map to searchable CVE entries</li>
+    </ul>
+    <pre><code>nmap --script=banner -p 21,22,25,80 192.168.56.20  <span class="cm"># Grab banners from Security Onion services</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>HTTP headers and interactive L7 protocol probing</h4>
+    <ul>
+      <li>HTTP HEAD via nc retrieves L7 server headers without a full page request — reveals Server, X-Powered-By, and framework version headers</li>
+      <li>SMTP EHLO response lists all supported extensions — reveals auth methods, relay config, and size limits for email security assessment</li>
+      <li>Pair <code>--script=http-title,http-server-header,banner</code> for complete L7 web server profiling in one pass</li>
+    </ul>
+    <pre><code>echo -e "HEAD / HTTP/1.0\r\n\r\n" | nc 192.168.56.20 80
+<span class="cm"># Manual L7 HTTP probe — reveals Server header and X-Powered-By</span>
+nmap --script=http-title,http-server-header,banner -p 80,443 192.168.56.20</code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>TLS certificate analysis and automated CVE correlation</h4>
+    <ul>
+      <li>openssl s_client reveals the full TLS certificate chain at L7 — CN and SAN fields often expose internal hostnames and service architecture</li>
+      <li>Combine <code>--script=banner,vulners</code> to auto-lookup CVEs for every version string identified in a single Nmap pass</li>
+      <li>Non-standard port banners are often unmodified — internal tools and custom apps frequently expose exact framework and library versions</li>
+    </ul>
+    <pre><code>openssl s_client -connect 192.168.56.20:443 2>/dev/null | openssl x509 -noout -text | grep -E "Subject:|DNS:"
+nmap -sV --script=banner,vulners -p 22,80,443 192.168.56.20  <span class="cm"># Banner grab + auto CVE lookup</span></code></pre>
+  </div>
+</details>
 </article>
 </template>
 
 <template id="tpl-aggressive">
 <article class="topic">
 <h1>05 · Aggressive Flag (-A)</h1>
+<div class="osi-bar">
+  <span class="osi-label">OSI Layers</span>
+  <span class="osi-chip l3">L3 Network</span>
+  <span class="osi-chip l4">L4 Transport</span>
+  <span class="osi-chip l7">L7 Application</span>
+  <span class="osi-note">-A spans all three layers simultaneously: L3 OS fingerprinting via ICMP/TCP stack probes, L4 SYN port scanning, and L7 NSE script execution plus version banner reading — the most comprehensive single-flag option Nmap provides.</span>
+</div>
 <hr class="divider">
 
 <div class="callout warn"><strong>-A is loud</strong> — it runs multiple scan types simultaneously and generates significantly more traffic than a simple port scan. Use only on networks/hosts where you have authorization and where IDS noise is acceptable.</div>
@@ -500,6 +710,47 @@ nmap -sV --version-light -sC 192.168.1.10
 
 <span class="cm"># Run only specific default scripts instead of all</span>
 nmap -sV --script=http-title,ssh-hostkey,banner 192.168.1.10</code></pre>
+
+<hr class="tier-divider">
+<div class="tier-heading">Skill Tiers</div>
+<details class="tier beginner" open>
+  <summary>🟢 Beginner — Core Concepts</summary>
+  <div class="tier-body">
+    <h4>When to use -A and when to avoid it</h4>
+    <ul>
+      <li>-A enables four scan types at once: <code>-sV</code> (version), <code>-sC</code> (default scripts), <code>-O</code> (OS fingerprint), <code>--traceroute</code></li>
+      <li>Perfect for CTF and lab environments — gives a complete L3/L4/L7 picture of a single target in one command</li>
+      <li>Never use on production networks without authorization — NSE scripts actively interact with services and generate significant additional traffic</li>
+    </ul>
+    <pre><code>sudo nmap -A 192.168.56.30  <span class="cm"># Full aggressive scan on Windows victim — lab use only</span></code></pre>
+  </div>
+</details>
+<details class="tier intermediate">
+  <summary>🟡 Intermediate — Deeper Skills</summary>
+  <div class="tier-body">
+    <h4>-A vs explicit flags — knowing when to separate components</h4>
+    <ul>
+      <li>-A doesn't expose individual tuning options — use explicit <code>-sV --version-intensity 9</code> when default version coverage misses a service</li>
+      <li>Add <code>-T4</code> with -A on lab or fast local networks — speeds timing without missing results on low-latency segments</li>
+      <li>Run -A on confirmed interesting hosts after an initial sweep — never run -A across an entire subnet</li>
+    </ul>
+    <pre><code>sudo nmap -A -T4 -p 22,80,443,3389,445 192.168.56.30  <span class="cm"># Aggressive on key Windows ports</span>
+sudo nmap -sV --version-intensity 9 -sC -O --osscan-guess 192.168.56.30  <span class="cm"># Same but fully tunable</span></code></pre>
+  </div>
+</details>
+<details class="tier advanced">
+  <summary>🔴 Advanced — Expert Techniques</summary>
+  <div class="tier-body">
+    <h4>Extending -A with vulnerability scripts and output integration</h4>
+    <ul>
+      <li>Extend -A with <code>--script=vuln</code> to run all vulnerability-checking NSE scripts alongside the default set — adds active CVE probing per service</li>
+      <li>For quiet authorized engagements: split -A into components — run <code>-sV</code> first to identify services, then only relevant named scripts</li>
+      <li>Combine with <code>-oX</code> for import into vulnerability management platforms — Metasploit db_import, OpenVAS, and Nessus all accept Nmap XML</li>
+    </ul>
+    <pre><code>sudo nmap -A --script=vuln -p 80,443,445,3389 -oA aggressive_vuln 192.168.56.30
+<span class="cm"># -A + all vuln scripts on key Windows attack surface — active CVE checks per service</span></code></pre>
+  </div>
+</details>
 </article>
 </template>
 

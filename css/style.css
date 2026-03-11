@@ -207,6 +207,7 @@ body {
   margin-left: var(--sidebar-w);
   transition: margin-left var(--ease);
   min-width: 0;
+  padding: 2rem 2.5rem;
 }
 .main.expanded { margin-left: 0; }
 
