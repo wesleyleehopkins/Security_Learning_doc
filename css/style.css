@@ -602,6 +602,86 @@ details.tier.advanced > summary:hover { background: rgba(248,81,73,0.13); }
 
 
 /* ════════════════════════════════════════
+   NOTES PANEL
+   ════════════════════════════════════════ */
+.notes-fab {
+  position: fixed;
+  bottom: 1.25rem; right: 1.25rem;
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  font-size: 1.35rem;
+  cursor: pointer;
+  z-index: 300;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+  transition: background var(--ease), transform var(--ease);
+}
+.notes-fab:hover { background: var(--accent-h); transform: scale(1.08); }
+.notes-fab.has-notes { box-shadow: 0 0 0 3px var(--green), 0 2px 12px rgba(0,0,0,0.4); }
+
+.notes-panel {
+  position: fixed;
+  bottom: 4.5rem; right: 1.25rem;
+  width: 380px;
+  max-height: 50vh;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  z-index: 300;
+  display: flex; flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  opacity: 0; pointer-events: none;
+  transform: translateY(12px);
+  transition: opacity var(--ease), transform var(--ease);
+}
+.notes-panel.open { opacity: 1; pointer-events: auto; transform: translateY(0); }
+
+.notes-panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem; font-weight: 600; color: var(--text2);
+}
+.notes-panel-header span { color: var(--text3); font-weight: 400; font-size: 0.72rem; }
+
+.notes-panel textarea {
+  flex: 1;
+  resize: none;
+  background: var(--bg);
+  color: var(--text);
+  border: none;
+  padding: 0.75rem;
+  font-family: 'Consolas', 'Fira Code', monospace;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  min-height: 180px;
+  outline: none;
+}
+.notes-panel textarea::placeholder { color: var(--text3); }
+
+.notes-toolbar {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--border);
+}
+.notes-toolbar button {
+  background: var(--bg3);
+  color: var(--text2);
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.6rem;
+  border-radius: 5px;
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: all var(--ease);
+}
+.notes-toolbar button:hover { background: var(--bg4); color: var(--text); border-color: var(--accent); }
+.notes-toolbar .notes-count { margin-left: auto; font-size: 0.7rem; color: var(--text3); }
+
+
+/* ════════════════════════════════════════
    RESPONSIVE
    ════════════════════════════════════════ */
 @media (max-width: 720px) {
@@ -617,4 +697,5 @@ details.tier.advanced > summary:hover { background: rgba(248,81,73,0.13); }
   .content-wrap { padding: 1.25rem 1rem; }
   .notebooks { grid-template-columns: 1fr; }
   .topic h1 { font-size: 1.35rem; }
+  .notes-panel { width: calc(100vw - 2.5rem); right: 1.25rem; }
 }

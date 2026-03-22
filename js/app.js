@@ -11,6 +11,7 @@
   function init() {
     markActiveNavLink();
     if (window.NOTEBOOK) initNotebook();
+    initNotes();
   }
 
   /* ── Mark active top nav link ── */
@@ -169,5 +170,151 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  /* ── Per-page notes with localStorage ── */
+  function initNotes() {
+    // Derive a safe storage key from the current filename
+    var raw = location.pathname.split('/').pop() || 'index.html';
+    var pageKey = raw.replace(/\.html?$/i, '').replace(/[^a-zA-Z0-9_-]/g, '') || 'index';
+    var storageKey = 'soc-notes-' + pageKey;
+
+    // Build FAB button
+    var fab = document.createElement('button');
+    fab.className = 'notes-fab';
+    fab.setAttribute('aria-label', 'Toggle notes');
+    fab.title = 'Page notes';
+    fab.textContent = '\u270E'; // ✎ pencil
+    document.body.appendChild(fab);
+
+    // Build panel
+    var panel = document.createElement('div');
+    panel.className = 'notes-panel';
+
+    var header = document.createElement('div');
+    header.className = 'notes-panel-header';
+    var titleSpan = document.createElement('strong');
+    titleSpan.textContent = 'Notes';
+    var countSpan = document.createElement('span');
+    countSpan.className = 'notes-count';
+    header.appendChild(titleSpan);
+    header.appendChild(countSpan);
+
+    var textarea = document.createElement('textarea');
+    textarea.placeholder = 'Type your notes here\u2026';
+    textarea.setAttribute('spellcheck', 'true');
+
+    var toolbar = document.createElement('div');
+    toolbar.className = 'notes-toolbar';
+
+    var btnCopy = document.createElement('button');
+    btnCopy.textContent = 'Copy';
+    var btnDownload = document.createElement('button');
+    btnDownload.textContent = 'Download';
+    var btnClear = document.createElement('button');
+    btnClear.textContent = 'Clear';
+
+    toolbar.appendChild(btnCopy);
+    toolbar.appendChild(btnDownload);
+    toolbar.appendChild(btnClear);
+
+    panel.appendChild(header);
+    panel.appendChild(textarea);
+    panel.appendChild(toolbar);
+    document.body.appendChild(panel);
+
+    // ── Helpers ──
+    function updateCount() {
+      var len = textarea.value.length;
+      countSpan.textContent = len > 0 ? len + ' chars' : '';
+    }
+
+    function updateFabIndicator() {
+      var saved = '';
+      try { saved = localStorage.getItem(storageKey) || ''; } catch (_) {}
+      fab.classList.toggle('has-notes', saved.length > 0);
+    }
+
+    // ── Load saved notes ──
+    try {
+      var saved = localStorage.getItem(storageKey);
+      if (saved) textarea.value = saved;
+    } catch (_) {}
+    updateCount();
+    updateFabIndicator();
+
+    // ── Debounced save ──
+    var saveTimer = null;
+    textarea.addEventListener('input', function () {
+      updateCount();
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(function () {
+        try {
+          if (textarea.value) {
+            localStorage.setItem(storageKey, textarea.value);
+          } else {
+            localStorage.removeItem(storageKey);
+          }
+        } catch (_) {}
+        updateFabIndicator();
+      }, 300);
+    });
+
+    // ── Toggle panel ──
+    fab.addEventListener('click', function (e) {
+      e.stopPropagation();
+      panel.classList.toggle('open');
+      if (panel.classList.contains('open')) textarea.focus();
+    });
+
+    // Close panel when clicking outside
+    document.addEventListener('click', function (e) {
+      if (panel.classList.contains('open') &&
+          !panel.contains(e.target) && e.target !== fab) {
+        panel.classList.remove('open');
+      }
+    });
+
+    // ── Copy ──
+    btnCopy.addEventListener('click', function () {
+      if (!textarea.value) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(textarea.value).then(function () {
+          btnCopy.textContent = 'Copied!';
+          setTimeout(function () { btnCopy.textContent = 'Copy'; }, 1500);
+        });
+      } else {
+        // Fallback for file:// protocol where clipboard API may not work
+        textarea.select();
+        document.execCommand('copy');
+        btnCopy.textContent = 'Copied!';
+        setTimeout(function () { btnCopy.textContent = 'Copy'; }, 1500);
+      }
+    });
+
+    // ── Download ──
+    btnDownload.addEventListener('click', function () {
+      if (!textarea.value) return;
+      var safeName = pageKey.replace(/[^a-zA-Z0-9_-]/g, '') + '-notes.txt';
+      var blob = new Blob([textarea.value], { type: 'text/plain' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = safeName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    // ── Clear ──
+    btnClear.addEventListener('click', function () {
+      if (!textarea.value) return;
+      if (!confirm('Clear all notes for this page?')) return;
+      textarea.value = '';
+      try { localStorage.removeItem(storageKey); } catch (_) {}
+      updateCount();
+      updateFabIndicator();
+    });
   }
 })();
