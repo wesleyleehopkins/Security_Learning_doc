@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Playbook — Persistence Detection — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="investigation-flow.html">Playbook</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Notebook</div>
+      <div class="sidebar-title">Playbook &mdash; Persistence</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">&#x1FA9D;</div>
+          <h2>Playbook &mdash; Persistence Detection</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     01 · Alert Recognition
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-alert-recognition">
+<article class="topic">
+<h1>01 &middot; Alert Recognition</h1>
+<hr class="divider">
+
+<p>Persistence is how attackers survive reboots, logoffs, and remediation attempts. Unlike initial access (which generates noisy IDS alerts), persistence is often <strong>silent</strong> &mdash; it modifies the OS configuration so malware re-executes automatically. Detection relies heavily on <strong>Sysmon endpoint telemetry</strong> rather than network-based IDS.</p>
+
+<h3>Sysmon Events for Persistence Detection</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Sysmon EID</th><th>Event Name</th><th>Persistence Relevance</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>EID 1</strong></td>
+      <td>Process Creation</td>
+      <td>Detects <code>schtasks.exe /create</code> (scheduled task creation), <code>sc.exe create</code> (service installation), and LOLBins spawning persistence commands</td>
+    </tr>
+    <tr>
+      <td><strong>EID 12</strong></td>
+      <td>Registry Object Create/Delete</td>
+      <td>Fires when a new registry key is created &mdash; detects creation of Run keys, service keys, and other autostart locations</td>
+    </tr>
+    <tr>
+      <td><strong>EID 13</strong></td>
+      <td>Registry Value Set</td>
+      <td>Fires when a registry value is written &mdash; detects the actual payload path being set in Run keys or service ImagePath values</td>
+    </tr>
+    <tr>
+      <td><strong>EID 8</strong></td>
+      <td>CreateRemoteThread</td>
+      <td>Detects process injection &mdash; one process creating a thread in another process's memory space</td>
+    </tr>
+    <tr>
+      <td><strong>EID 11</strong></td>
+      <td>File Create</td>
+      <td>Detects malware dropping persistence payloads to disk (DLLs, scripts, executables in startup folders)</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<h3>Sigma Rules for Persistence</h3>
+<p>The Sigma rule repository contains pre-built detection logic for common persistence techniques:</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Sigma Rule</th><th>Detects</th><th>Data Source</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Sysmon Registry Run Key Modification</strong></td>
+      <td>Values added to <code>HKLM\...\Run</code> or <code>HKCU\...\Run</code></td>
+      <td>Sysmon EID12/13</td>
+    </tr>
+    <tr>
+      <td><strong>Scheduled Task Created via schtasks.exe</strong></td>
+      <td><code>schtasks /create</code> with suspicious arguments</td>
+      <td>Sysmon EID1</td>
+    </tr>
+    <tr>
+      <td><strong>New Service Installed via sc.exe</strong></td>
+      <td><code>sc create</code> or <code>sc config</code> with a new service binary</td>
+      <td>Sysmon EID1, EID12/13</td>
+    </tr>
+    <tr>
+      <td><strong>Startup Folder File Drop</strong></td>
+      <td>Files created in <code>%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\</code></td>
+      <td>Sysmon EID11</td>
+    </tr>
+    <tr>
+      <td><strong>CreateRemoteThread to Unusual Target</strong></td>
+      <td>Thread injection into system processes (dwm.exe, explorer.exe, lsass.exe)</td>
+      <td>Sysmon EID8</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<h3>Why Persistence Is Often Silent</h3>
+<p>Unlike initial access (which involves network traffic that triggers Suricata alerts), persistence mechanisms are <strong>local OS configuration changes</strong>:</p>
+<ul>
+  <li><strong>Registry modifications</strong> &mdash; no network traffic, only visible in Sysmon EID12/13</li>
+  <li><strong>Scheduled task creation</strong> &mdash; only visible in Sysmon EID1 or Windows Event Log 4698</li>
+  <li><strong>Service installation</strong> &mdash; only visible in Sysmon EID12/13 or Windows Event Log 7045</li>
+  <li><strong>Startup folder drops</strong> &mdash; only visible in Sysmon EID11</li>
+</ul>
+
+<div class="callout warn">
+  <strong>Critical:</strong> If your environment does not have Sysmon deployed with proper configuration, you will be <em>blind</em> to most persistence techniques. Sysmon with a well-tuned config (SwiftOnSecurity or Olaf Hartong baseline) is essential for persistence detection.
+</div>
+
+<h3>Hunt Queries &mdash; Persistence Overview</h3>
+<pre><code><span class="cm"># All registry Run key modifications</span>
+event.code:(12 OR 13) AND registry.path:*\\CurrentVersion\\Run*
+
+<span class="cm"># All scheduled task creation events</span>
+event.code:1 AND process.name:schtasks.exe AND process.command_line:*/create*
+
+<span class="cm"># All service installation events (Windows Security Log)</span>
+event.code:7045
+
+<span class="cm"># All CreateRemoteThread events (process injection)</span>
+event.code:8
+
+<span class="cm"># Files dropped into Startup folder</span>
+event.code:11 AND file.path:*\\Start\ Menu\\Programs\\Startup\\*</code></pre>
+
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     02 · PICERL Investigation Steps
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-picerl-steps">
+<article class="topic">
+<h1>02 &middot; PICERL Investigation Steps</h1>
+<hr class="divider">
+
+<p>Persistence is the phase where <strong>eradication order matters most</strong>. If you reboot a system before removing all persistence mechanisms, the malware will re-install itself and you are back to square one. The Eradication phase is the most critical step in the persistence playbook.</p>
+
+<h3>PICERL Applied to Persistence</h3>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Phase</th><th>Persistence Actions</th><th>Key Questions</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>P &mdash; Preparation</strong></td>
+      <td>Confirm Sysmon is deployed with EID1, EID8, EID11, EID12, EID13 enabled. Ensure registry auditing is enabled via Group Policy. Verify scheduled task logging is active (Windows 4698/4699).</td>
+      <td>Do we have visibility into all persistence vectors?</td>
+    </tr>
+    <tr>
+      <td><strong>I &mdash; Identification</strong></td>
+      <td>Search for ALL persistence mechanisms the attacker installed. Check: registry Run keys, scheduled tasks, services, startup folder, WMI event subscriptions, DLL search order hijacking, COM hijacking. Do not stop at the first one you find &mdash; attackers often layer multiple mechanisms.</td>
+      <td>How many persistence mechanisms exist? Did I find them ALL?</td>
+    </tr>
+    <tr>
+      <td><strong>C &mdash; Containment</strong></td>
+      <td>Isolate the endpoint. Do NOT reboot yet. Disable scheduled tasks (<code>schtasks /change /disable</code>). Do not delete them yet &mdash; preserve evidence first. Block any C2 IPs at the firewall to prevent the persistence mechanism from re-downloading payloads.</td>
+      <td>Is the persistence mechanism currently active? Can it re-arm?</td>
+    </tr>
+    <tr>
+      <td><strong>E &mdash; Eradication</strong></td>
+      <td><strong>CRITICAL ORDER:</strong><br>
+        1. Remove ALL persistence mechanisms (scheduled tasks, registry keys, services, startup entries)<br>
+        2. Delete the malware payload files<br>
+        3. THEN reboot to clear memory-only artifacts (process injection)<br>
+        4. After reboot, verify no persistence mechanisms re-appeared<br>
+        <br>If you reboot BEFORE removing persistence &rarr; the malware re-installs itself.</td>
+      <td>Have I removed EVERY persistence mechanism before rebooting?</td>
+    </tr>
+    <tr>
+      <td><strong>R &mdash; Recovery</strong></td>
+      <td>After reboot: check that no malicious scheduled tasks re-appeared, no Run keys were re-created, no suspicious services re-installed. Monitor for 48+ hours. Check for C2 callbacks post-reboot.</td>
+      <td>Did anything come back after reboot? Is the endpoint truly clean?</td>
+    </tr>
+    <tr>
+      <td><strong>L &mdash; Lessons Learned</strong></td>
+      <td>Document every persistence mechanism found and its exact location (registry path, task name, service name). Add the persistence payload hashes to blocklists. Create detection rules for any novel persistence techniques observed.</td>
+      <td>What persistence techniques did the attacker use? Do our detections cover them?</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<div class="callout warn">
+  <strong>THE GOLDEN RULE OF PERSISTENCE ERADICATION:</strong> Never reboot before removing all persistence mechanisms. If you reboot first, the scheduled task fires, the Run key executes, the service starts &mdash; and the malware is back. You MUST remove persistence first, THEN reboot to clear memory artifacts.
+</div>
+
+<h3>Eradication Checklist</h3>
+<p>Before rebooting the compromised endpoint, confirm you have addressed every item:</p>
+<ol>
+  <li>All malicious scheduled tasks deleted (<code>schtasks /delete /tn "TaskName" /f</code>)</li>
+  <li>All malicious registry Run key values removed (<code>reg delete "HKLM\...\Run" /v "ValueName" /f</code>)</li>
+  <li>All malicious services stopped and deleted (<code>sc stop ServiceName &amp;&amp; sc delete ServiceName</code>)</li>
+  <li>All malicious files in Startup folders deleted</li>
+  <li>All malicious WMI event subscriptions removed</li>
+  <li>All dropped payload files deleted from disk</li>
+  <li>C2 IPs blocked at the firewall</li>
+  <li><strong>THEN</strong> reboot to clear process injection from memory</li>
+  <li>Post-reboot: verify no persistence returned, no C2 callbacks</li>
+</ol>
+
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     03 · Scheduled Task Persistence
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-scheduled-tasks">
+<article class="topic">
+<h1>03 &middot; Scheduled Task Persistence</h1>
+<hr class="divider">
+
+<p>Scheduled tasks (T1053.005) are one of the most common persistence mechanisms. Attackers create tasks that execute their malware at system startup, user logon, or on a recurring schedule. Detection relies on Sysmon EID1 for <code>schtasks.exe</code> process creation and understanding the Task Scheduler's execution chain.</p>
+
+<h3>Sysmon EID1 &mdash; Detecting Task Creation</h3>
+<p>When a scheduled task is created, Sysmon logs the <code>schtasks.exe /create</code> command with full command-line arguments:</p>
+
+<pre><code><span class="cm"># Malicious scheduled task creation example</span>
+<span class="cm"># Sysmon Event ID 1 — Process Create</span>
+
+Image:          C:\Windows\System32\schtasks.exe
+CommandLine:    schtasks /create /tn "WindowsUpdate" /tr "C:\Users\Public\malware.exe" /sc onlogon /ru SYSTEM
+ParentImage:    C:\Windows\System32\cmd.exe
+User:           NT AUTHORITY\SYSTEM
+
+<span class="cm"># Key arguments:</span>
+<span class="cm"># /tn "WindowsUpdate"     — task name (masquerading as Windows Update)</span>
+<span class="cm"># /tr "..."               — the command that will execute (the malware payload)</span>
+<span class="cm"># /sc onlogon             — trigger: runs every time ANY user logs on</span>
+<span class="cm"># /ru SYSTEM              — runs as SYSTEM (highest privilege)</span></code></pre>
+
+<h3>Task Scheduler Execution Chain</h3>
+<p>When a scheduled task fires, the process tree looks like this in Sysmon EID1:</p>
+
+<pre><code><span class="cm"># The Task Scheduler's execution chain:</span>
+svchost.exe -k netsvcs                <span class="cm"># 1. Service Host for Task Scheduler</span>
+  └─ Schedule                          <span class="cm"># 2. Task Scheduler service (-k netsvcs includes Schedule)</span>
+       └─ [task payload]               <span class="cm"># 3. The actual task runs as a child</span>
+
+<span class="cm"># In Sysmon EID1, the ParentImage will be:</span>
+ParentImage:    C:\Windows\System32\svchost.exe
+ParentCommandLine: C:\Windows\System32\svchost.exe -k netsvcs
+
+<span class="cm"># CRITICAL: if ParentCommandLine contains "-k netsvcs" and the child</span>
+<span class="cm"># has the /onlogon argument or a suspicious payload path → persistence</span></code></pre>
+
+<h3>Common schtasks Arguments</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Argument</th><th>Meaning</th><th>Suspicious?</th></tr></thead>
+  <tbody>
+    <tr><td><code>/sc onlogon</code></td><td>Run at user logon</td><td>High &mdash; common persistence trigger</td></tr>
+    <tr><td><code>/sc onstart</code></td><td>Run at system startup</td><td>High &mdash; common persistence trigger</td></tr>
+    <tr><td><code>/sc minute /mo 5</code></td><td>Run every 5 minutes</td><td>High &mdash; beaconing / polling pattern</td></tr>
+    <tr><td><code>/sc onidle</code></td><td>Run when system is idle</td><td>Medium &mdash; used by some malware to avoid detection during active use</td></tr>
+    <tr><td><code>/sc daily /st 02:00</code></td><td>Run daily at 2 AM</td><td>Medium &mdash; could be maintenance or could be attacker avoiding business hours</td></tr>
+    <tr><td><code>/ru SYSTEM</code></td><td>Run as SYSTEM account</td><td>High &mdash; escalated privileges</td></tr>
+    <tr><td><code>/f</code></td><td>Force create (overwrite existing)</td><td>Medium &mdash; attacker replacing existing task</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Enumerating Scheduled Tasks</h3>
+<pre><code><span class="cm"># List ALL scheduled tasks with full detail</span>
+schtasks /query /fo LIST /v
+
+<span class="cm"># Filter for non-Microsoft tasks (PowerShell — useful on live endpoint)</span>
+Get-ScheduledTask | Where-Object { $_.Author -notlike "Microsoft*" -and $_.Author -ne $null } | Format-Table TaskName, Author, State, @{N='Action';E={$_.Actions.Execute}}
+
+<span class="cm"># Check a specific task</span>
+schtasks /query /tn "TaskName" /fo LIST /v
+
+<span class="cm"># Task XML files on disk (alternative inspection method)</span>
+<span class="cm"># Located at: C:\Windows\System32\Tasks\</span>
+dir C:\Windows\System32\Tasks\ /s</code></pre>
+
+<h3>Distinguishing Legitimate from Malicious Tasks</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Indicator</th><th>Legitimate</th><th>Malicious</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Task name</strong></td><td>Descriptive, in Microsoft\Windows\ subfolder</td><td>Generic name ("Update", "System"), or in root Task folder</td></tr>
+    <tr><td><strong>Author</strong></td><td>Microsoft Corporation, or known vendor</td><td>Missing, generic, or non-existent publisher</td></tr>
+    <tr><td><strong>Action (payload)</strong></td><td>System binary in Program Files or System32</td><td>Binary in Users\, Temp\, ProgramData\, or a raw URL/IP path</td></tr>
+    <tr><td><strong>Trigger</strong></td><td>Specific schedule (daily at noon, weekly)</td><td>/onlogon or /onstart with suspicious payload</td></tr>
+    <tr><td><strong>Run as</strong></td><td>Specific service account or user</td><td>SYSTEM with a non-system payload</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Hunt Queries for Scheduled Task Creation</h3>
+<pre><code><span class="cm"># All schtasks /create events</span>
+event.code:1 AND process.name:schtasks.exe AND process.command_line:*/create*
+
+<span class="cm"># Scheduled tasks with /onlogon trigger</span>
+event.code:1 AND process.name:schtasks.exe AND process.command_line:*/onlogon*
+
+<span class="cm"># Scheduled tasks running as SYSTEM</span>
+event.code:1 AND process.name:schtasks.exe AND process.command_line:(*SYSTEM* AND */create*)
+
+<span class="cm"># Scheduled tasks with payload in suspicious directories</span>
+event.code:1 AND process.name:schtasks.exe AND process.command_line:(*\\Users\\* OR *\\Temp\\* OR *\\ProgramData\\* OR *\\AppData\\*)
+
+<span class="cm"># Windows Event Log: scheduled task creation</span>
+event.code:4698
+
+<span class="cm"># Processes launched BY Task Scheduler (children of svchost -k netsvcs Schedule)</span>
+event.code:1 AND process.parent.command_line:*netsvcs*</code></pre>
+
+<div class="callout note">
+  <strong>Analyst Tip:</strong> When you find a malicious scheduled task, don't just look at the task itself &mdash; pivot to the process that <em>created</em> the task. The ParentImage in the schtasks EID1 event tells you which process installed the persistence. This traces back to the malware or LOLBin chain that established the foothold.
+</div>
+
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     04 · Registry Persistence
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-registry-persistence">
+<article class="topic">
+<h1>04 &middot; Registry Persistence</h1>
+<hr class="divider">
+
+<p>The Windows Registry is a hierarchical database of configuration settings. Attackers write values to specific registry keys so that their malware auto-executes at boot or logon. Sysmon Event IDs 12 (Create Key) and 13 (Set Value) are the primary detection sources.</p>
+
+<h3>Sysmon EID12 vs. EID13</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Event ID</th><th>Name</th><th>What It Detects</th><th>Forensic Meaning</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>EID 12</strong></td>
+      <td>Registry Key Create/Delete</td>
+      <td>A new registry <em>key</em> (folder) was created or deleted</td>
+      <td>Attacker creating the container for their persistence entry</td>
+    </tr>
+    <tr>
+      <td><strong>EID 13</strong></td>
+      <td>Registry Value Set</td>
+      <td>A registry <em>value</em> (name=data pair) was created or modified</td>
+      <td>Attacker writing the actual payload path into the persistence key</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<p>In practice, you will most often see <strong>EID13</strong> for persistence detection &mdash; the attacker is setting a value (the malware path) inside an existing Run key. EID12 fires when the key itself is new.</p>
+
+<h3>Registry Persistence Locations</h3>
+<p>These are the most commonly abused registry locations for persistence. Every SOC analyst should monitor all of them:</p>
+
+<h4>Run / RunOnce Keys (Auto-Execute at Logon)</h4>
+<div class="table-wrap"><table>
+  <thead><tr><th>Registry Path</th><th>Scope</th><th>When It Runs</th></tr></thead>
+  <tbody>
+    <tr><td><code>HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run</code></td><td>All users (machine-level)</td><td>Every user logon</td></tr>
+    <tr><td><code>HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce</code></td><td>All users (machine-level)</td><td>Next logon only, then deleted</td></tr>
+    <tr><td><code>HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run</code></td><td>Current user only</td><td>This user's logon</td></tr>
+    <tr><td><code>HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce</code></td><td>Current user only</td><td>This user's next logon only</td></tr>
+    <tr><td><code>HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run</code></td><td>All users (32-bit on 64-bit OS)</td><td>Every logon (32-bit redirect)</td></tr>
+  </tbody>
+</table></div>
+
+<h4>Service Keys (Auto-Start Services)</h4>
+<pre><code><span class="cm"># Services are defined in the registry under:</span>
+HKLM\SYSTEM\CurrentControlSet\Services\[ServiceName]
+
+<span class="cm"># Key values:</span>
+ImagePath    = path to the service binary (or DLL)
+Start        = 2 (auto-start at boot), 3 (manual), 4 (disabled)
+Type         = 0x10 (own process), 0x20 (share process)
+ObjectName   = LocalSystem, LocalService, or specific account
+
+<span class="cm"># Malicious indicator: ImagePath pointing to a non-standard location</span>
+<span class="cm"># e.g., C:\Users\Public\svc.exe instead of C:\Windows\System32\</span></code></pre>
+
+<h4>Additional Persistence Locations</h4>
+<div class="table-wrap"><table>
+  <thead><tr><th>Registry Path</th><th>Technique</th></tr></thead>
+  <tbody>
+    <tr><td><code>HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\Shell</code></td><td>Replaces the default shell (explorer.exe) with malware</td></tr>
+    <tr><td><code>HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\Userinit</code></td><td>Adds a binary to the user initialization chain</td></tr>
+    <tr><td><code>HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders</code></td><td>Redirects startup folder path</td></tr>
+    <tr><td><code>HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\[binary]\Debugger</code></td><td>IFEO &mdash; hijacks any binary by setting a "debugger" that runs instead</td></tr>
+    <tr><td><code>HKCU\SOFTWARE\Classes\CLSID\{GUID}\InprocServer32</code></td><td>COM object hijacking &mdash; replaces a legitimate COM DLL with malware</td></tr>
+    <tr><td><code>HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SilentProcessExit\[binary]</code></td><td>Silent process exit monitoring &mdash; triggers when a process exits</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Sysmon EID13 Analysis Example</h3>
+<pre><code><span class="cm"># Sysmon Event ID 13 — Registry Value Set</span>
+<span class="cm"># This is what a malicious Run key entry looks like:</span>
+
+EventType:      SetValue
+TargetObject:   HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\WindowsDefenderUpdate
+Details:        C:\Users\Public\defender-update.exe
+Image:          C:\Users\Public\malware.exe
+User:           NT AUTHORITY\SYSTEM
+
+<span class="cm"># Analysis:</span>
+<span class="cm"># - TargetObject: adding to the HKLM Run key = machine-level persistence</span>
+<span class="cm"># - Value name "WindowsDefenderUpdate" = masquerading as a Windows Defender component</span>
+<span class="cm"># - Details (payload path): C:\Users\Public\ is a user-writable location — NOT where</span>
+<span class="cm">#   legitimate Windows Defender files live (C:\ProgramData\Microsoft\Windows Defender\)</span>
+<span class="cm"># - Image: the process that wrote this value is itself in C:\Users\Public\ — malware</span>
+<span class="cm">#   installing its own persistence</span></code></pre>
+
+<h3>Hunt Queries for Registry Persistence</h3>
+<pre><code><span class="cm"># All Run key modifications</span>
+event.code:13 AND registry.path:*\\CurrentVersion\\Run\\*
+
+<span class="cm"># HKLM Run key modifications (machine-level — higher impact)</span>
+event.code:13 AND registry.path:HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\\*
+
+<span class="cm"># New service installations</span>
+event.code:13 AND registry.path:*\\CurrentControlSet\\Services\\* AND registry.value:ImagePath
+
+<span class="cm"># Winlogon shell or Userinit modifications</span>
+event.code:13 AND registry.path:*\\Winlogon\\* AND (registry.value:Shell OR registry.value:Userinit)
+
+<span class="cm"># Image File Execution Options (IFEO) debugger hijacking</span>
+event.code:13 AND registry.path:*\\Image\ File\ Execution\ Options\\* AND registry.value:Debugger
+
+<span class="cm"># COM object hijacking</span>
+event.code:13 AND registry.path:*\\Classes\\CLSID\\*\\InprocServer32\\*</code></pre>
+
+<div class="callout lab">
+  <strong>Forensic Tip:</strong> When you find a malicious registry value, record the exact <code>TargetObject</code> path, the <code>Details</code> (payload path), and the <code>Image</code> (process that wrote it). The Image field tells you which malware binary installed the persistence &mdash; this traces back to the initial access payload or a LOLBin used during the attack chain.
+</div>
+
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     05 · Process Injection
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-process-injection">
+<article class="topic">
+<h1>05 &middot; Process Injection</h1>
+<hr class="divider">
+
+<p><strong>Process injection (T1055)</strong> is a technique where an attacker inserts malicious code into the address space of another running process. The injected code executes within the context of the target process, inheriting its privileges and evading detection tools that monitor process names rather than in-memory behavior.</p>
+
+<h3>Sysmon EID8 &mdash; CreateRemoteThread</h3>
+<p>Sysmon Event ID 8 fires when one process creates a thread in another process's memory space. This is the primary detection for process injection:</p>
+
+<pre><code><span class="cm"># Sysmon Event ID 8 — CreateRemoteThread detected</span>
+
+SourceImage:    C:\Users\Public\malware.exe      <span class="cm"># The injecting process (attacker)</span>
+SourceProcessId: 5544
+TargetImage:    C:\Windows\System32\dwm.exe       <span class="cm"># The target process (victim)</span>
+TargetProcessId: 1024
+NewThreadId:    7892
+StartAddress:   0x00007FF6A1230000
+StartModule:    (empty)                            <span class="cm"># No module = injected shellcode</span>
+StartFunction:  (empty)
+
+<span class="cm"># Analysis:</span>
+<span class="cm"># - Source: malware.exe is injecting code into dwm.exe</span>
+<span class="cm"># - Target: dwm.exe (Desktop Window Manager) is a SYSTEM-level process</span>
+<span class="cm"># - Empty StartModule/StartFunction = the injected code is raw shellcode,</span>
+<span class="cm">#   not a legitimate DLL function call</span></code></pre>
+
+<h3>Why Attackers Target dwm.exe</h3>
+<p>Desktop Window Manager (<code>dwm.exe</code>) is a popular injection target for several reasons:</p>
+<ul>
+  <li><strong>Runs as SYSTEM</strong> &mdash; injected code inherits SYSTEM privileges</li>
+  <li><strong>Always running</strong> &mdash; DWM is essential for the Windows desktop and cannot be terminated without logging off</li>
+  <li><strong>High noise</strong> &mdash; DWM generates a lot of legitimate activity, making injected behavior harder to spot</li>
+  <li><strong>Graphics subsystem</strong> &mdash; security tools often exclude graphics processes from deep inspection to avoid performance impact</li>
+</ul>
+
+<h3>Memory-Only Artifact</h3>
+<div class="callout warn">
+  <strong>CRITICAL CONCEPT:</strong> Process injection is a <strong>memory-only</strong> artifact. The injected code exists only in the target process's memory space. It does NOT survive a reboot by itself.
+  <br><br>
+  <strong>However:</strong> If the attacker also installed a persistence mechanism (scheduled task, registry Run key, service), the persistence mechanism will re-launch the malware after reboot, which will then re-inject into the target process.
+  <br><br>
+  <strong>This is why you MUST remove persistence BEFORE rebooting.</strong> If you reboot without removing persistence:
+  <ol>
+    <li>Reboot clears the injected code from dwm.exe memory (good)</li>
+    <li>Persistence mechanism fires and re-launches the malware (bad)</li>
+    <li>Malware re-injects into dwm.exe (back to square one)</li>
+  </ol>
+</div>
+
+<h3>Common Injection Targets</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Target Process</th><th>Why Attackers Target It</th><th>Expected Sysmon EID8 Source</th></tr></thead>
+  <tbody>
+    <tr><td><code>dwm.exe</code></td><td>SYSTEM privileges, always running, high noise</td><td>Source should NEVER be a user-space binary</td></tr>
+    <tr><td><code>explorer.exe</code></td><td>User context, network access, trusted by firewalls</td><td>Source should NEVER be from Temp/Downloads/ProgramData</td></tr>
+    <tr><td><code>svchost.exe</code></td><td>SYSTEM privileges, many instances, hard to monitor all</td><td>Legitimate sources: services.exe only at startup</td></tr>
+    <tr><td><code>lsass.exe</code></td><td>Credential access (Mimikatz-style attacks)</td><td>Almost never legitimate &mdash; always investigate</td></tr>
+    <tr><td><code>spoolsv.exe</code></td><td>SYSTEM privileges, often overlooked by analysts</td><td>Legitimate CreateRemoteThread to spoolsv is rare</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Process Injection Techniques</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Technique</th><th>ATT&amp;CK Sub-technique</th><th>How It Works</th><th>Detection</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Classic DLL Injection</strong></td>
+      <td>T1055.001</td>
+      <td>VirtualAllocEx + WriteProcessMemory + CreateRemoteThread with LoadLibrary</td>
+      <td>Sysmon EID8 + EID7 (DLL loaded by target)</td>
+    </tr>
+    <tr>
+      <td><strong>Process Hollowing</strong></td>
+      <td>T1055.012</td>
+      <td>Create suspended process, hollow out its memory, replace with malicious code, resume</td>
+      <td>Sysmon EID1 (suspended), EID8, memory forensics</td>
+    </tr>
+    <tr>
+      <td><strong>Thread Execution Hijacking</strong></td>
+      <td>T1055.003</td>
+      <td>Suspend existing thread, modify its context to point to shellcode, resume</td>
+      <td>Sysmon EID8 if CreateRemoteThread used; otherwise memory forensics</td>
+    </tr>
+    <tr>
+      <td><strong>APC Injection</strong></td>
+      <td>T1055.004</td>
+      <td>Queue an Asynchronous Procedure Call (APC) to a thread in the target process</td>
+      <td>Difficult &mdash; may not trigger EID8; requires memory forensics or ETW tracing</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<h3>Hunt Queries for Process Injection</h3>
+<pre><code><span class="cm"># All CreateRemoteThread events</span>
+event.code:8
+
+<span class="cm"># CreateRemoteThread targeting system processes</span>
+event.code:8 AND process.executable:(dwm.exe OR explorer.exe OR svchost.exe OR lsass.exe OR spoolsv.exe)
+
+<span class="cm"># CreateRemoteThread from non-system source processes</span>
+event.code:8 AND NOT winlog.event_data.SourceImage:(C\\:\\\\Windows\\\\System32\\\\* OR C\\:\\\\Windows\\\\SysWOW64\\\\* OR C\\:\\\\Program\ Files\\\\*)
+
+<span class="cm"># CreateRemoteThread from user-writable directories (high confidence malicious)</span>
+event.code:8 AND winlog.event_data.SourceImage:(*\\Users\\* OR *\\Temp\\* OR *\\ProgramData\\* OR *\\AppData\\*)
+
+<span class="cm"># CreateRemoteThread into dwm.exe specifically</span>
+event.code:8 AND winlog.event_data.TargetImage:*\\dwm.exe</code></pre>
+
+<div class="callout note">
+  <strong>False Positive Note:</strong> Some legitimate software uses CreateRemoteThread for inter-process communication. Common legitimate sources include: antivirus/EDR agents injecting monitoring DLLs, accessibility tools, and some game anti-cheat engines. The key differentiator is the <strong>source path</strong> &mdash; legitimate sources are in Program Files or System32, not user-writable directories.
+</div>
+
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     06 · False Positive Patterns
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-false-positives">
+<article class="topic">
+<h1>06 &middot; False Positive Patterns</h1>
+<hr class="divider">
+
+<p>Persistence detection generates significant false positives because legitimate Windows operations constantly create scheduled tasks, modify registry keys, and spawn processes from the Task Scheduler. Learning to recognize these patterns is essential for efficient triage.</p>
+
+<h3>Legitimate Scheduled Tasks</h3>
+<p>The following scheduled task executions are <strong>normal Windows behavior</strong>. When you see these in Sysmon EID1 logs with <code>svchost.exe -k netsvcs</code> as the parent, they are safe to close:</p>
+
+<h4>SDXHelper.exe /onlogon</h4>
+<pre><code><span class="cm"># LEGITIMATE — Microsoft Office Shared Data Layer Helper</span>
+ParentImage:        C:\Windows\System32\svchost.exe
+ParentCommandLine:  C:\Windows\System32\svchost.exe -k netsvcs
+Image:              C:\Program Files\Common Files\microsoft shared\OFFICE16\SDXHelper.exe
+CommandLine:        "C:\Program Files\Common Files\microsoft shared\OFFICE16\SDXHelper.exe" /onlogon
+User:               DOMAIN\username
+
+<span class="cm"># Why it's safe:</span>
+<span class="cm"># - SDXHelper.exe is a Microsoft Office component that manages shared data extensions</span>
+<span class="cm"># - It runs at logon via a scheduled task created during Office installation</span>
+<span class="cm"># - The binary is in Program Files\Common Files\microsoft shared\ (legitimate Office path)</span>
+<span class="cm"># - It's signed by Microsoft Corporation</span>
+<span class="cm"># - The /onlogon flag indicates it was triggered by the Task Scheduler at user logon</span></code></pre>
+
+<h4>DismHost.exe from cleanmgr.exe /autoclean</h4>
+<pre><code><span class="cm"># LEGITIMATE — Windows Disk Cleanup (DISM hosting)</span>
+ParentImage:        C:\Windows\System32\svchost.exe
+ParentCommandLine:  C:\Windows\System32\svchost.exe -k netsvcs
+Image:              C:\Windows\System32\cleanmgr.exe
+CommandLine:        C:\Windows\System32\cleanmgr.exe /autoclean /d C:
+
+<span class="cm"># Child process:</span>
+ParentImage:        C:\Windows\System32\cleanmgr.exe
+Image:              C:\Windows\System32\DismHost.exe
+
+<span class="cm"># Why it's safe:</span>
+<span class="cm"># - Disk Cleanup runs as a scheduled maintenance task</span>
+<span class="cm"># - DismHost.exe is the DISM (Deployment Image Servicing) hosting process</span>
+<span class="cm"># - Both binaries are in System32 and signed by Microsoft</span>
+<span class="cm"># - /autoclean flag is normal for automated disk cleanup</span></code></pre>
+
+<h4>rundll32.exe AppXDeploymentExtensions.OneCore.dll,ShellRefresh</h4>
+<pre><code><span class="cm"># LEGITIMATE — Windows Store App maintenance</span>
+ParentImage:        C:\Windows\System32\svchost.exe
+ParentCommandLine:  C:\Windows\System32\svchost.exe -k netsvcs
+Image:              C:\Windows\System32\rundll32.exe
+CommandLine:        C:\Windows\System32\rundll32.exe C:\Windows\System32\AppXDeploymentExtensions.OneCore.dll,ShellRefresh
+
+<span class="cm"># Why it's safe:</span>
+<span class="cm"># - AppX is the Windows Store application packaging system</span>
+<span class="cm"># - ShellRefresh updates shell integration for Store apps</span>
+<span class="cm"># - DLL is in System32 (legitimate path)</span>
+<span class="cm"># - This is a scheduled maintenance task that runs periodically</span></code></pre>
+
+<h4>rundll32.exe shell32.dll,SHCreateLocalServerRunDll -Embedding</h4>
+<pre><code><span class="cm"># LEGITIMATE — Windows COM/Shell infrastructure</span>
+ParentImage:        C:\Windows\System32\svchost.exe
+ParentCommandLine:  C:\Windows\System32\svchost.exe -k DcomLaunch
+Image:              C:\Windows\System32\rundll32.exe
+CommandLine:        C:\Windows\System32\rundll32.exe C:\Windows\System32\shell32.dll,SHCreateLocalServerRunDll {GUID} -Embedding
+
+<span class="cm"># Why it's safe:</span>
+<span class="cm"># - SHCreateLocalServerRunDll is a Windows shell COM activation function</span>
+<span class="cm"># - The -Embedding flag indicates COM activation (standard Windows behavior)</span>
+<span class="cm"># - This fires when Explorer or other shell components need COM objects</span>
+<span class="cm"># - DLL is shell32.dll in System32 (core Windows component)</span></code></pre>
+
+<h4>rundll32.exe Windows.StateRepositoryClient.dll,StateRepositoryDoMaintenanceTasks</h4>
+<pre><code><span class="cm"># LEGITIMATE — Windows State Repository maintenance</span>
+ParentImage:        C:\Windows\System32\svchost.exe
+ParentCommandLine:  C:\Windows\System32\svchost.exe -k netsvcs
+Image:              C:\Windows\System32\rundll32.exe
+CommandLine:        C:\Windows\System32\rundll32.exe C:\Windows\System32\Windows.StateRepositoryClient.dll,StateRepositoryDoMaintenanceTasks
+
+<span class="cm"># Why it's safe:</span>
+<span class="cm"># - State Repository tracks installed application state (UWP/Store apps)</span>
+<span class="cm"># - This is a scheduled maintenance task for database optimization</span>
+<span class="cm"># - DLL is in System32, signed by Microsoft</span>
+<span class="cm"># - Runs periodically as part of Windows maintenance</span></code></pre>
+
+<h3>Quick Reference &mdash; Legitimate vs. Malicious Decision Tree</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Check</th><th>Legitimate</th><th>Malicious</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Binary path</strong></td>
+      <td><code>C:\Windows\System32\</code>, <code>C:\Program Files\</code></td>
+      <td><code>C:\Users\</code>, <code>C:\Temp\</code>, <code>C:\ProgramData\</code>, network shares</td>
+    </tr>
+    <tr>
+      <td><strong>Digital signature</strong></td>
+      <td>Valid Microsoft or known vendor signature</td>
+      <td>Unsigned, self-signed, or expired certificate</td>
+    </tr>
+    <tr>
+      <td><strong>Parent process</strong></td>
+      <td><code>svchost.exe -k netsvcs</code> for Task Scheduler, <code>services.exe</code> for services</td>
+      <td>cmd.exe spawned by LOLBin chain, PowerShell, or unknown binary</td>
+    </tr>
+    <tr>
+      <td><strong>DLL name</strong></td>
+      <td>Known Windows DLL in System32</td>
+      <td>Unknown DLL, DLL from user-writable path</td>
+    </tr>
+    <tr>
+      <td><strong>Timing</strong></td>
+      <td>Regular intervals, business hours, post-update</td>
+      <td>Immediately after initial access alert, odd hours</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<div class="callout lab">
+  <strong>Practical Rule:</strong> If the binary is in System32 or Program Files, the DLL is a known Windows component, and the parent is svchost.exe &mdash; it's almost certainly legitimate. If ANY of those conditions fail, investigate further.
+</div>
+
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     07 · Worked Example
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-worked-example">
+<article class="topic">
+<h1>07 &middot; Worked Example &mdash; ACMEONIONS Persistence</h1>
+<hr class="divider">
+
+<p>This is a complete walkthrough of the persistence phase in the ACMEONIONS investigation. Following the initial access (payload delivery of <code>Windows-Endpoint-Pro_ver_89_003.exe</code> from <code>8.253.135.120</code>), we now investigate how the attacker maintained access on the compromised endpoint.</p>
+
+<h3>Step 1 &mdash; Reviewing Scheduled Tasks from Task Scheduler</h3>
+<p>We begin by searching Sysmon EID1 for any processes launched by the Task Scheduler (svchost -k netsvcs) on the compromised endpoint around the time of the initial access:</p>
+
+<pre><code><span class="cm"># Search: processes launched by Task Scheduler on 192.168.56.30</span>
+<span class="cm"># Time window: T-zero through T+1 hour</span>
+
+event.code:1 AND host.ip:192.168.56.30 AND process.parent.command_line:*netsvcs*
+
+<span class="cm"># Result 1: SDXHelper.exe /onlogon</span>
+ParentImage:        C:\Windows\System32\svchost.exe
+ParentCommandLine:  C:\Windows\System32\svchost.exe -k netsvcs
+Image:              C:\Program Files\Common Files\microsoft shared\OFFICE16\SDXHelper.exe
+CommandLine:        "C:\Program Files\Common Files\microsoft shared\OFFICE16\SDXHelper.exe" /onlogon</code></pre>
+
+<h3>Step 2 &mdash; SDXHelper.exe Analysis (Cleared as Legitimate)</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Check</th><th>Finding</th><th>Verdict</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Binary path</strong></td>
+      <td><code>C:\Program Files\Common Files\microsoft shared\OFFICE16\</code></td>
+      <td>Legitimate Microsoft Office installation path</td>
+    </tr>
+    <tr>
+      <td><strong>Parent process</strong></td>
+      <td><code>svchost.exe -k netsvcs</code> (Task Scheduler)</td>
+      <td>Expected parent for a scheduled task</td>
+    </tr>
+    <tr>
+      <td><strong>Arguments</strong></td>
+      <td><code>/onlogon</code></td>
+      <td>Normal flag &mdash; this task runs at every user logon</td>
+    </tr>
+    <tr>
+      <td><strong>Digital signature</strong></td>
+      <td>Signed by Microsoft Corporation</td>
+      <td>Valid, trusted signature</td>
+    </tr>
+    <tr>
+      <td><strong>Conclusion</strong></td>
+      <td colspan="2"><strong>LEGITIMATE</strong> &mdash; Microsoft Office Shared Data Layer Helper. This is a known false positive. Cleared.</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<h3>Step 3 &mdash; What Malicious Would Look Like (Contrast)</h3>
+<p>For comparison, here is what a <em>malicious</em> scheduled task would look like in the same logs:</p>
+
+<pre><code><span class="cm"># MALICIOUS scheduled task example (contrast with SDXHelper above)</span>
+ParentImage:        C:\Windows\System32\svchost.exe
+ParentCommandLine:  C:\Windows\System32\svchost.exe -k netsvcs
+Image:              C:\Users\Public\defender-update.exe          <span class="cm"># ← User-writable path!</span>
+CommandLine:        C:\Users\Public\defender-update.exe /onlogon
+
+<span class="cm"># Red flags:</span>
+<span class="cm"># 1. Binary in C:\Users\Public\ — NOT a legitimate software installation path</span>
+<span class="cm"># 2. Name "defender-update" is masquerading as Windows Defender</span>
+<span class="cm"># 3. If hash lookup returns unknown or known-bad → confirmed malicious</span>
+<span class="cm"># 4. Cross-reference: was this file downloaded during the initial access phase?</span></code></pre>
+
+<h3>Step 4 &mdash; CreateRemoteThread into dwm.exe</h3>
+<p>Reviewing Sysmon EID8 events on the compromised endpoint reveals process injection:</p>
+
+<pre><code><span class="cm"># Sysmon Event ID 8 — CreateRemoteThread detected</span>
+<span class="cm"># Found on 192.168.56.30 at approximately T+12 minutes</span>
+
+SourceImage:        C:\...\Windows-Endpoint-Pro_ver_89_003.exe  <span class="cm"># The Revenge-RAT payload!</span>
+SourceProcessId:    6128
+TargetImage:        C:\Windows\System32\dwm.exe                  <span class="cm"># Desktop Window Manager</span>
+TargetProcessId:    1024
+NewThreadId:        7892
+StartModule:        (empty)                                       <span class="cm"># Raw shellcode injection</span>
+StartFunction:      (empty)
+
+<span class="cm"># Analysis:</span>
+<span class="cm"># - The initial access payload (Revenge-RAT) is injecting code into dwm.exe</span>
+<span class="cm"># - dwm.exe runs as SYSTEM — the injected code now has SYSTEM privileges</span>
+<span class="cm"># - Empty StartModule/StartFunction = raw shellcode, not a DLL function</span>
+<span class="cm"># - T1055 Process Injection — CONFIRMED</span></code></pre>
+
+<div class="callout warn">
+  <strong>T1055 Process Injection Confirmed:</strong>
+  <ul>
+    <li><strong>Source:</strong> Windows-Endpoint-Pro_ver_89_003.exe (the Revenge-RAT from initial access)</li>
+    <li><strong>Target:</strong> dwm.exe (Desktop Window Manager, runs as SYSTEM)</li>
+    <li><strong>Impact:</strong> Attacker code now executing within a trusted system process with SYSTEM privileges</li>
+    <li><strong>Artifact type:</strong> Memory-only &mdash; exists only in dwm.exe's address space until reboot</li>
+  </ul>
+</div>
+
+<h3>Step 5 &mdash; Memory-Only vs. Persistent Artifacts</h3>
+<p>Understanding which artifacts are memory-only versus persistent is critical for eradication planning:</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Artifact</th><th>Type</th><th>Survives Reboot?</th><th>Eradication Method</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Injected code in dwm.exe</td>
+      <td><strong>Memory-only</strong></td>
+      <td>No &mdash; cleared when dwm.exe restarts (reboot)</td>
+      <td>Reboot will clear it (but only AFTER removing persistence)</td>
+    </tr>
+    <tr>
+      <td>Windows-Endpoint-Pro_ver_89_003.exe on disk</td>
+      <td><strong>Disk artifact</strong></td>
+      <td>Yes &mdash; file persists on disk</td>
+      <td>Delete the file from disk</td>
+    </tr>
+    <tr>
+      <td>Scheduled task (if present)</td>
+      <td><strong>Persistent</strong></td>
+      <td>Yes &mdash; re-executes at next trigger</td>
+      <td><code>schtasks /delete /tn "TaskName" /f</code></td>
+    </tr>
+    <tr>
+      <td>Registry Run key (if present)</td>
+      <td><strong>Persistent</strong></td>
+      <td>Yes &mdash; re-executes at next logon</td>
+      <td><code>reg delete "HKLM\...\Run" /v "ValueName" /f</code></td>
+    </tr>
+    <tr>
+      <td>PowerShell C2 beacon (PID 10072)</td>
+      <td><strong>Memory-only</strong></td>
+      <td>No &mdash; process terminates on reboot</td>
+      <td>Reboot will clear it (but only AFTER removing persistence)</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<h3>Step 6 &mdash; The Reboot Trap</h3>
+<p>This is the most important concept in persistence eradication:</p>
+
+<pre><code><span class="cm"># WRONG ORDER (common analyst mistake):</span>
+1. See injection in dwm.exe
+2. Think: "reboot will clear the injected code"
+3. Reboot the endpoint
+4. Scheduled task fires → re-launches Windows-Endpoint-Pro_ver_89_003.exe
+5. Malware re-injects into dwm.exe
+6. You're back to square one
+
+<span class="cm"># CORRECT ORDER:</span>
+1. Identify ALL persistence mechanisms (scheduled tasks, Run keys, services)
+2. Remove/delete every persistence mechanism
+3. Delete the malware payload files from disk
+4. Block C2 IPs at firewall (8.253.135.120, 13.214.220.108)
+5. THEN reboot to clear memory-only artifacts (injection, running processes)
+6. Post-reboot: verify no persistence re-appeared, monitor for C2 callbacks</code></pre>
+
+<h3>Step 7 &mdash; Network Share Self-Propagation Risk</h3>
+<pre><code><span class="cm"># ADDITIONAL FINDING: the malware payload was also found on a network share</span>
+Z:\Windows-Endpoint-Pro_ver_89_003.exe
+
+<span class="cm"># Analysis:</span>
+<span class="cm"># - Z: drive is a mapped network share</span>
+<span class="cm"># - The malware copied itself to a network-accessible location</span>
+<span class="cm"># - ANY other host that accesses this share and executes the file will be compromised</span>
+<span class="cm"># - This is a SELF-PROPAGATION risk — the attack can spread laterally via file shares</span>
+
+<span class="cm"># Eradication MUST include:</span>
+<span class="cm"># - Delete the copy on Z:\ (network share)</span>
+<span class="cm"># - Check access logs for the share — did any other host access the file?</span>
+<span class="cm"># - Scan all hosts that accessed the share for compromise indicators</span>
+<span class="cm"># - Consider temporarily disabling the share until investigation is complete</span></code></pre>
+
+<div class="callout warn">
+  <strong>Self-Propagation Alert:</strong> Finding the malware on a network share (Z:\) means this is not just a single-endpoint compromise. The investigation scope must expand to include all hosts with access to that share. Check file server access logs and scan for the malware hash across the entire environment.
+</div>
+
+<h3>Step 8 &mdash; Complete Eradication Order</h3>
+<p>Based on all findings from both the Initial Access and Persistence phases, here is the complete eradication plan:</p>
+
+<ol>
+  <li><strong>Remove all persistence mechanisms</strong>
+    <ul>
+      <li>Delete any malicious scheduled tasks: <code>schtasks /delete /tn "[TaskName]" /f</code></li>
+      <li>Remove any malicious registry Run key values: <code>reg delete "HKLM\...\Run" /v "[ValueName]" /f</code></li>
+      <li>Stop and delete any malicious services: <code>sc stop [ServiceName] &amp;&amp; sc delete [ServiceName]</code></li>
+    </ul>
+  </li>
+  <li><strong>Delete malware files from disk</strong>
+    <ul>
+      <li>Delete <code>Windows-Endpoint-Pro_ver_89_003.exe</code> from the compromised endpoint</li>
+      <li>Delete <code>Z:\Windows-Endpoint-Pro_ver_89_003.exe</code> from the network share</li>
+      <li>Check for any additional copies in Temp, Downloads, AppData directories</li>
+    </ul>
+  </li>
+  <li><strong>Block C2 infrastructure at the firewall</strong>
+    <ul>
+      <li>Block <code>8.253.135.120</code> (payload staging server)</li>
+      <li>Block <code>13.214.220.108</code> (C2 server)</li>
+    </ul>
+  </li>
+  <li><strong>Reboot the endpoint</strong> to clear memory-only artifacts
+    <ul>
+      <li>Clears the injected code from dwm.exe</li>
+      <li>Terminates the PowerShell C2 beacon (PID 10072)</li>
+    </ul>
+  </li>
+  <li><strong>Post-reboot verification</strong>
+    <ul>
+      <li>Confirm no persistence mechanisms re-appeared</li>
+      <li>Monitor for C2 callback attempts (should be blocked by firewall)</li>
+      <li>Verify no new scheduled tasks, Run keys, or services were created</li>
+      <li>Monitor for 48+ hours before declaring the endpoint clean</li>
+    </ul>
+  </li>
+  <li><strong>Expand investigation scope</strong>
+    <ul>
+      <li>Check all hosts with access to the Z: network share</li>
+      <li>Search environment-wide for the malware hash</li>
+      <li>Check for the same C2 IPs in firewall/proxy logs across all endpoints</li>
+    </ul>
+  </li>
+</ol>
+
+<div class="callout lab">
+  <strong>Investigation Summary:</strong> The persistence phase revealed process injection into dwm.exe (T1055), confirmed SDXHelper.exe as a false positive, identified the network share propagation risk, and established the correct eradication order. The key lesson: always remove persistence before rebooting, and always check for lateral spread via network shares.
+</div>
+
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Playbook — Persistence',
+  topics: [
+    { id: 'alert-recognition',    badge: '01', label: 'Alert Recognition'            },
+    { id: 'picerl-steps',         badge: '02', label: 'PICERL Investigation Steps'   },
+    { id: 'scheduled-tasks',      badge: '03', label: 'Scheduled Task Persistence'   },
+    { id: 'registry-persistence', badge: '04', label: 'Registry Persistence'         },
+    { id: 'process-injection',    badge: '05', label: 'Process Injection'            },
+    { id: 'false-positives',      badge: '06', label: 'False Positive Patterns'      },
+    { id: 'worked-example',       badge: '07', label: 'Worked Example'               },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

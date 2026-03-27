@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Playbook — Lateral Movement Detection — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="investigation-flow.html">Playbook</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Notebook</div>
+      <div class="sidebar-title">Lateral Movement Detection</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">&#8596;&#65039;</div>
+          <h2>Playbook &mdash; Lateral Movement Detection</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<!-- ══════════════════════════ TOPIC 1: Alert Recognition ══════════════════════════ -->
+<template id="tpl-alert-recognition">
+<article class="topic">
+  <h1>01 &middot; Alert Recognition</h1>
+  <hr class="divider">
+
+  <p>Lateral movement is one of the hardest attack phases to detect because it often <strong>produces no Suricata alert at all</strong>. Attackers use legitimate protocols (RDP, SMB, WinRM) over standard ports between internal hosts. IDS signatures are primarily designed to catch inbound/outbound malicious traffic &mdash; not east-west movement using built-in Windows tools.</p>
+
+  <div class="callout warn">
+    <strong>Most lateral movement has NO IDS alert.</strong> Unlike C2 beaconing or initial exploitation, lateral movement uses legitimate protocols. You must proactively hunt for it using Zeek metadata and Sysmon host logs rather than waiting for an alert to fire.
+  </div>
+
+  <h3>Suricata Alerts That May Fire</h3>
+  <p>In rare cases, certain lateral movement techniques do trigger Suricata signatures. Watch for these:</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Alert Signature</th><th>What It Detects</th><th>Lateral Movement Relevance</th></tr></thead>
+      <tbody>
+        <tr><td><strong>ET USER_AGENTS WinRM</strong></td><td>Windows Remote Management HTTP user-agent string</td><td>WinRM used for remote command execution between hosts</td></tr>
+        <tr><td><strong>ET POLICY SMB2 NT Create AndX Request For an Executable File</strong></td><td>Executable file access over SMB</td><td>Attacker staging malware via file shares (PsExec, manual copy)</td></tr>
+        <tr><td><strong>ET RPC DCERPC SVCCTL - Remote Service Control Manager Access</strong></td><td>Remote service creation via RPC</td><td>PsExec and similar tools create remote services to execute payloads</td></tr>
+        <tr><td><strong>ET POLICY RDP connection confirm</strong></td><td>RDP session establishment</td><td>Internal-to-internal RDP may indicate pivot</td></tr>
+        <tr><td><strong>ET EXPLOIT MS17-010 SMB</strong></td><td>EternalBlue exploitation attempt</td><td>Worm-style lateral movement via SMB vulnerability</td></tr>
+        <tr><td><strong>GPL NETBIOS SMB-DS IPC$ access</strong></td><td>IPC$ share access</td><td>Reconnaissance and named pipe communication for PsExec</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Sigma Rules for Lateral Movement</h3>
+  <p>Sigma detection rules provide host-based detection that complements network-level alerts:</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Sigma Rule</th><th>Log Source</th><th>Detection Logic</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Remote Service Creation via SVCCTL</strong></td><td>Sysmon EID1 / Security 4697</td><td>services.exe spawning unexpected child process on remote host</td></tr>
+        <tr><td><strong>Pass-the-Hash Activity</strong></td><td>Security 4624</td><td>Type 9 (NewCredentials) logon with NTLM authentication</td></tr>
+        <tr><td><strong>Suspicious RDP Connection</strong></td><td>Security 4624/4625</td><td>Type 10 (RemoteInteractive) from non-admin workstation</td></tr>
+        <tr><td><strong>WMI Remote Execution</strong></td><td>Sysmon EID1</td><td>WmiPrvSE.exe spawning cmd.exe or powershell.exe</td></tr>
+        <tr><td><strong>PsExec Service Installation</strong></td><td>System 7045</td><td>Service named PSEXESVC installed on remote host</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Where Lateral Movement Evidence Actually Lives</h3>
+  <p>Since alerts are unreliable for lateral movement, you must hunt across multiple data sources:</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Data Source</th><th>What to Look For</th><th>Security Onion Dataset</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Zeek RDP logs</strong></td><td>Internal &rarr; internal RDP connections, security protocols, cookie fields</td><td><code>event.dataset: "zeek.rdp"</code></td></tr>
+        <tr><td><strong>Zeek SMB logs</strong></td><td>Executable file access, share enumeration, ADMIN$ access</td><td><code>event.dataset: "zeek.smb_files"</code></td></tr>
+        <tr><td><strong>Zeek DCE/RPC</strong></td><td>Remote service creation, WMI calls, scheduled task creation</td><td><code>event.dataset: "zeek.dce_rpc"</code></td></tr>
+        <tr><td><strong>Zeek Kerberos</strong></td><td>TGS requests for TERMSRV (RDP) or CIFS (SMB) service principals</td><td><code>event.dataset: "zeek.kerberos"</code></td></tr>
+        <tr><td><strong>Sysmon EID1</strong></td><td>mstsc.exe (source), rdpclip.exe / services.exe children (destination)</td><td><code>event.module: "sysmon" AND event.code: "1"</code></td></tr>
+        <tr><td><strong>Sysmon EID3</strong></td><td>Network connections between internal hosts on RDP/SMB/WinRM ports</td><td><code>event.module: "sysmon" AND event.code: "3"</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout note">
+    <strong>Key Analyst Mindset:</strong> When you confirm C2 on a host, your next question is always: "Did this host move laterally?" Check for outbound RDP, SMB, and WinRM connections FROM the compromised host TO other internal hosts. Every confirmed C2 host is a potential pivot point.
+  </div>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 2: PICERL Investigation Steps ══════════════════════════ -->
+<template id="tpl-picerl-steps">
+<article class="topic">
+  <h1>02 &middot; PICERL Investigation Steps</h1>
+  <hr class="divider">
+
+  <p>Lateral movement investigations are fundamentally different from single-host incidents because <strong>each new compromised host restarts the identification phase</strong>. The investigation expands outward like ripples in a pond &mdash; every pivot host must be investigated as thoroughly as the first.</p>
+
+  <div class="callout warn">
+    <strong>Lateral movement means your scope is growing.</strong> Every newly discovered compromised host adds another full investigation cycle. Build a host inventory from the start and track the status of each host (confirmed compromised, suspected, cleared).
+  </div>
+
+  <h3>PICERL Applied to Lateral Movement</h3>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Phase</th><th>Standard Approach</th><th>Lateral Movement Adaptation</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>P &mdash; Preparation</strong></td>
+          <td>Ensure logging and tools are ready</td>
+          <td>Verify Sysmon is deployed on ALL endpoints (not just servers). Confirm Zeek is capturing east-west traffic. Ensure RDP, SMB, and Kerberos logs are being collected from domain controllers.</td>
+        </tr>
+        <tr>
+          <td><strong>I &mdash; Identification</strong></td>
+          <td>Confirm the incident</td>
+          <td>For EACH new host: What connections did it make? What processes spawned? Did it contact external C2? Did it authenticate to other internal hosts? Build a timeline per host.</td>
+        </tr>
+        <tr>
+          <td><strong>C &mdash; Containment</strong></td>
+          <td>Isolate the affected system</td>
+          <td><strong>Must happen on ALL compromised hosts simultaneously.</strong> If you isolate Host A but Host B is still active, the attacker re-enters through Host B. Coordinate containment across the full host inventory before taking action.</td>
+        </tr>
+        <tr>
+          <td><strong>E &mdash; Eradication</strong></td>
+          <td>Remove the threat</td>
+          <td>Remove persistence, malware, and backdoors from every compromised host. Reset compromised credentials. If domain admin credentials were used, assume the domain is compromised &mdash; KRBTGT double-reset may be required.</td>
+        </tr>
+        <tr>
+          <td><strong>R &mdash; Recovery</strong></td>
+          <td>Restore systems</td>
+          <td>Rebuild from known-good images if possible. Restore in reverse order (domain controllers first, then servers, then workstations). Monitor closely for re-compromise after restoration.</td>
+        </tr>
+        <tr>
+          <td><strong>L &mdash; Lessons Learned</strong></td>
+          <td>Document findings</td>
+          <td>Map the full attack chain across all hosts. Document the pivot path. Identify detection gaps (what should have alerted but did not?). Recommend network segmentation improvements.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Building the Host Inventory</h3>
+  <p>As you investigate lateral movement, maintain a running inventory of every host involved:</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Hostname / IP</th><th>Status</th><th>Evidence</th><th>Pivot Direction</th><th>Credentials Used</th></tr></thead>
+      <tbody>
+        <tr><td>10.0.7.129</td><td>Confirmed Compromised</td><td>C2 beacon to 166.184.36.101:4334</td><td>Source &rarr; .130 via RDP</td><td>jaya.kearney (domain)</td></tr>
+        <tr><td>10.0.7.130</td><td>Confirmed Compromised</td><td>Malware staged, C2 beacon confirmed</td><td>Destination from .129</td><td>Same TGT</td></tr>
+        <tr><td>10.0.7.131</td><td>Under Investigation</td><td>TGS-REQ for CIFS from .129</td><td>Possible target</td><td>Unknown</td></tr>
+        <tr><td>DC01 (10.0.7.10)</td><td>Under Investigation</td><td>LDAP queries from .129</td><td>Enumeration target</td><td>N/A</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout lab">
+    <strong>Investigation Loop Pattern:</strong> For every newly discovered compromised host, run this checklist:
+    <ol>
+      <li>Check for C2 beaconing (outbound connections to known-bad IPs or suspicious ports)</li>
+      <li>Check for outbound RDP, SMB, WinRM to other internal hosts</li>
+      <li>Check for Kerberos TGS requests (what services did this host request access to?)</li>
+      <li>Check for credential access (Sysmon EID10 targeting lsass.exe)</li>
+      <li>Check for persistence mechanisms (scheduled tasks, services, registry run keys)</li>
+      <li>Check for data staging or exfiltration activity</li>
+    </ol>
+    If any of items 2-4 are positive, add the target hosts to your inventory and repeat.
+  </div>
+
+  <h3>Containment Timing Is Critical</h3>
+  <p>The biggest mistake in lateral movement response is <strong>containing hosts one at a time</strong>. If you isolate the first compromised host while the attacker has already pivoted to a second, the attacker:</p>
+  <ul>
+    <li>Detects your response on Host A</li>
+    <li>Accelerates activity on Host B (deploys additional persistence, exfiltrates faster)</li>
+    <li>May pivot to Host C before you can react</li>
+  </ul>
+  <p><strong>Best practice:</strong> Identify ALL compromised hosts before containment. Then isolate them all simultaneously during a coordinated containment window.</p>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 3: RDP Lateral Movement ══════════════════════════ -->
+<template id="tpl-rdp-lateral">
+<article class="topic">
+  <h1>03 &middot; RDP Lateral Movement</h1>
+  <hr class="divider">
+
+  <p>Remote Desktop Protocol (RDP) is the most common lateral movement technique in enterprise environments because it is <strong>a legitimate built-in Windows tool</strong>. Every Windows machine has the RDP client (mstsc.exe) pre-installed, and many servers and workstations have RDP enabled for administration. Attackers use stolen credentials to RDP between hosts, blending in with normal administrative traffic.</p>
+
+  <h3>Zeek RDP Log Analysis</h3>
+  <p>Zeek captures RDP connection metadata in <code>zeek.rdp</code> logs. Key fields to examine:</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Zeek Field</th><th>What It Contains</th><th>What to Look For</th></tr></thead>
+      <tbody>
+        <tr><td><strong>id.orig_h / source.ip</strong></td><td>Source IP initiating RDP</td><td>Internal IP connecting to another internal IP = potential lateral movement</td></tr>
+        <tr><td><strong>id.resp_h / destination.ip</strong></td><td>Destination IP (RDP server)</td><td>Internal host accepting RDP = potential pivot target</td></tr>
+        <tr><td><strong>id.resp_p / destination.port</strong></td><td>Destination port</td><td>Standard 3389, but check for non-standard ports too</td></tr>
+        <tr><td><strong>security_protocol</strong></td><td>RDP security negotiation result</td><td><strong>HYBRID_EX</strong> = NLA (Network Level Authentication) &mdash; most common in modern domains. Standard RDP = older/misconfigured</td></tr>
+        <tr><td><strong>cookie</strong></td><td>RDP cookie / domain hint</td><td>Contains domain name (e.g., "ACMEONION") &mdash; confirms domain-authenticated RDP session</td></tr>
+        <tr><td><strong>cert_count</strong></td><td>Number of certificates exchanged</td><td>Presence of certificates confirms TLS-wrapped RDP session</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout note">
+    <strong>HYBRID_EX means NLA is enabled.</strong> Network Level Authentication requires the user to authenticate BEFORE the RDP session is established. This means valid credentials were used &mdash; the attacker has working domain credentials. If you see HYBRID_EX on a lateral movement connection, credential theft has already occurred.
+  </div>
+
+  <h3>Source Host Indicators (Where the Attacker RDPs FROM)</h3>
+  <p>On the machine initiating the RDP connection, look for:</p>
+
+  <pre><code><span class="cm"># Sysmon EID1 — mstsc.exe process creation (RDP client launch)</span>
+event.module: "sysmon" AND event.code: "1" AND process.name: "mstsc.exe"
+
+<span class="cm"># Key fields to examine:</span>
+<span class="cm"># - process.command_line: may contain target hostname/IP</span>
+<span class="cm">#   Example: mstsc.exe /v:10.0.7.130</span>
+<span class="cm"># - user.name: which account launched the RDP client</span>
+<span class="cm"># - @timestamp: correlate with Zeek RDP connection time</span>
+
+<span class="cm"># Sysmon EID3 — Network connection from mstsc.exe</span>
+event.module: "sysmon" AND event.code: "3" AND process.name: "mstsc.exe"
+<span class="cm"># Shows the exact destination IP and port the RDP client connected to</span></code></pre>
+
+  <h3>Destination Host Indicators (Where the Attacker RDPs TO)</h3>
+  <p>On the target machine receiving the RDP connection, specific processes spawn that confirm an <strong>active interactive RDP session</strong>:</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Process</th><th>Sysmon EID</th><th>What It Confirms</th></tr></thead>
+      <tbody>
+        <tr><td><strong>rdpclip.exe</strong></td><td>EID1 (Process Create)</td><td>RDP clipboard sharing is active &mdash; confirms interactive session (not just connection attempt)</td></tr>
+        <tr><td><strong>rdpinput.exe</strong></td><td>EID1 (Process Create)</td><td>RDP input redirection &mdash; user is actively interacting with the remote desktop</td></tr>
+        <tr><td><strong>TSTheme.exe</strong></td><td>EID1 (Process Create)</td><td>Terminal Services theme engine &mdash; desktop UI is rendering for the remote user</td></tr>
+        <tr><td><strong>svchost.exe -k termsvcs</strong></td><td>EID1 (Process Create)</td><td>Terminal Services host process &mdash; RDP service handling the session</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <pre><code><span class="cm"># Hunt for RDP session establishment on destination host</span>
+event.module: "sysmon" AND event.code: "1" AND (
+  process.name: "rdpclip.exe" OR
+  process.name: "rdpinput.exe" OR
+  process.name: "TSTheme.exe"
+)
+
+<span class="cm"># If rdpclip.exe spawned, the session is ACTIVE — not just attempted</span>
+<span class="cm"># Correlate the timestamp with the Zeek RDP connection log</span></code></pre>
+
+  <div class="callout lab">
+    <strong>Key Distinction:</strong> A Zeek RDP log entry alone only proves a connection was made. It does NOT prove an interactive session was established. To confirm the attacker actually logged in and interacted with the desktop, you need <strong>rdpclip.exe</strong> on the destination host. Without rdpclip.exe, the connection may have failed authentication.
+  </div>
+
+  <h3>Kerberos Evidence for RDP</h3>
+  <p>When RDP uses domain credentials with NLA, Kerberos TGS requests are generated:</p>
+
+  <pre><code><span class="cm"># Kerberos TGS-REQ for RDP service (TERMSRV)</span>
+event.dataset: "zeek.kerberos" AND kerberos.service: "TERMSRV*"
+
+<span class="cm"># Example TGS-REQ fields:</span>
+<span class="cm"># kerberos.client: jaya.kearney/ACMEONIONS.COM</span>
+<span class="cm"># kerberos.service: TERMSRV/windows10-ws3</span>
+<span class="cm"># kerberos.success: true</span>
+<span class="cm"># → Attacker requested a Kerberos service ticket for RDP to windows10-ws3</span>
+<span class="cm"># → This proves domain authentication was used for this specific RDP hop</span></code></pre>
+
+  <h3>RDP Lateral Movement Hunt Queries</h3>
+
+  <pre><code><span class="cm"># === Security Onion Hunt ===</span>
+
+<span class="cm"># All internal-to-internal RDP connections</span>
+event.dataset: "zeek.rdp" AND source.ip: 10.0.0.0/8 AND destination.ip: 10.0.0.0/8
+
+<span class="cm"># RDP from a specific compromised host</span>
+event.dataset: "zeek.rdp" AND source.ip: "10.0.7.129"
+
+<span class="cm"># RDP with NLA (confirms valid credentials used)</span>
+event.dataset: "zeek.rdp" AND rdp.security_protocol: "HYBRID_EX"
+
+<span class="cm"># === Splunk SPL Equivalents ===</span>
+
+<span class="cm"># Internal-to-internal RDP</span>
+index=zeek sourcetype=zeek:rdp src_ip=10.* dest_ip=10.*
+| table _time src_ip dest_ip dest_port security_protocol cookie
+
+<span class="cm"># RDP from compromised host with process correlation</span>
+index=sysmon EventCode=1 Image="*\\mstsc.exe" SourceIP="10.0.7.129"
+| table _time ComputerName User CommandLine</code></pre>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 4: SMB Lateral Movement ══════════════════════════ -->
+<template id="tpl-smb-lateral">
+<article class="topic">
+  <h1>04 &middot; SMB Lateral Movement</h1>
+  <hr class="divider">
+
+  <p>Server Message Block (SMB) is the second most common lateral movement vector. Attackers use SMB to <strong>transfer malware to target hosts</strong>, execute commands remotely via PsExec, and enumerate file shares for sensitive data. Unlike RDP (which gives interactive desktop access), SMB lateral movement is often used for automated payload deployment.</p>
+
+  <h3>Zeek SMB File Access Analysis</h3>
+  <p>Zeek logs every SMB file operation in <code>zeek.smb_files</code>. This is your primary detection surface for SMB lateral movement:</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Zeek Field</th><th>What It Contains</th><th>Lateral Movement Indicators</th></tr></thead>
+      <tbody>
+        <tr><td><strong>source.ip / destination.ip</strong></td><td>Client and server IPs</td><td>Internal &rarr; internal file access</td></tr>
+        <tr><td><strong>file.name</strong></td><td>Name of file accessed</td><td>Executable names (.exe, .dll, .ps1, .bat) = payload staging</td></tr>
+        <tr><td><strong>smb.action</strong></td><td>SMB operation type</td><td><strong>SMB::FILE_OPEN</strong> on executables = file being read/written</td></tr>
+        <tr><td><strong>smb.share_type</strong></td><td>Type of share accessed</td><td>DISK share for file staging; PIPE for named pipe communication</td></tr>
+        <tr><td><strong>file.path</strong></td><td>Full UNC path to file</td><td>\\hostname\ADMIN$ or \\hostname\C$ = administrative share access</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Share Enumeration Patterns</h3>
+  <p>Before staging malware, attackers often enumerate available shares:</p>
+
+  <pre><code><span class="cm"># Zeek SMB share enumeration — mapping/tree connect events</span>
+event.dataset: "zeek.smb_mapping" AND source.ip: "10.0.7.129"
+
+<span class="cm"># Common share paths seen during lateral movement:</span>
+<span class="cm"># \\target\ADMIN$     → Maps to C:\Windows — administrative share (PsExec)</span>
+<span class="cm"># \\target\C$         → Maps to C:\ root — full disk access</span>
+<span class="cm"># \\target\IPC$       → Named pipe communication — PsExec control channel</span>
+<span class="cm"># \\target\SYSVOL     → Domain policy share — credential harvesting</span>
+<span class="cm"># \\target\NETLOGON   → Domain logon scripts — potential persistence</span></code></pre>
+
+  <h3>PsExec Lateral Movement Pattern</h3>
+  <p>PsExec is the most well-known SMB lateral movement tool. It follows a distinctive pattern that is detectable across multiple log sources:</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Step</th><th>What Happens</th><th>Log Evidence</th></tr></thead>
+      <tbody>
+        <tr><td><strong>1. Connect to ADMIN$</strong></td><td>PsExec copies its service binary to \\target\ADMIN$\PSEXESVC.exe</td><td>zeek.smb_files: SMB::FILE_OPEN on PSEXESVC.exe in ADMIN$ share</td></tr>
+        <tr><td><strong>2. Connect to IPC$</strong></td><td>PsExec opens a named pipe for communication</td><td>zeek.smb_mapping: IPC$ tree connect</td></tr>
+        <tr><td><strong>3. Create remote service</strong></td><td>PsExec uses DCE/RPC SVCCTL to create and start PSEXESVC</td><td>zeek.dce_rpc: svcctl operation; Security 7045: new service installed</td></tr>
+        <tr><td><strong>4. Execute command</strong></td><td>PSEXESVC.exe runs the attacker's command</td><td>Sysmon EID1: services.exe &rarr; PSEXESVC.exe &rarr; attacker command</td></tr>
+        <tr><td><strong>5. Cleanup (optional)</strong></td><td>PsExec removes the service and binary</td><td>Security 7045: service deleted; SMB file delete operation</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <pre><code><span class="cm"># Detect PsExec on destination host via Sysmon</span>
+<span class="cm"># Pattern: services.exe spawning unexpected child processes</span>
+event.module: "sysmon" AND event.code: "1" AND process.parent.name: "services.exe"
+AND NOT process.name: "svchost.exe"
+AND NOT process.name: "spoolsv.exe"
+AND NOT process.name: "msdtc.exe"
+
+<span class="cm"># If services.exe spawns cmd.exe, powershell.exe, or an unknown .exe,</span>
+<span class="cm"># this is a STRONG indicator of remote service execution (PsExec pattern)</span></code></pre>
+
+  <div class="callout warn">
+    <strong>services.exe should NOT spawn random executables.</strong> In normal operation, services.exe only launches registered Windows services (svchost.exe, spoolsv.exe, etc.). If you see services.exe &rarr; cmd.exe or services.exe &rarr; unknown.exe, this is almost certainly remote execution via PsExec, SC, or similar tools.
+  </div>
+
+  <h3>Executable File Staging via SMB</h3>
+  <p>Even without PsExec, attackers frequently stage malware by copying executables over SMB:</p>
+
+  <pre><code><span class="cm"># Zeek — executable files accessed over SMB</span>
+event.dataset: "zeek.smb_files" AND file.name: (*.exe OR *.dll OR *.ps1 OR *.bat OR *.vbs)
+
+<span class="cm"># Filter for suspicious source hosts</span>
+event.dataset: "zeek.smb_files" AND source.ip: "10.0.7.129" AND smb.action: "SMB::FILE_OPEN"
+
+<span class="cm"># Look for files written to administrative shares</span>
+event.dataset: "zeek.smb_files" AND file.path: (*ADMIN$* OR *C$*) AND file.name: *.exe</code></pre>
+
+  <h3>Drive Mapping for File Staging</h3>
+  <p>Attackers often map network drives to stage and access files. The <strong>Z:\ drive</strong> is a common indicator:</p>
+
+  <pre><code><span class="cm"># Sysmon EID11 (FileCreate) — files created on mapped drives</span>
+event.module: "sysmon" AND event.code: "11" AND file.path: "Z:\\*"
+
+<span class="cm"># Look for executable creation on the mapped drive</span>
+<span class="cm"># Example: Z:\Windows-Endpoint-Pro_ver_89_003.exe</span>
+<span class="cm"># This indicates malware was staged via a mapped network share</span>
+
+<span class="cm"># Correlate with SMB file access to identify the source</span>
+event.dataset: "zeek.smb_files" AND file.name: "Windows-Endpoint-Pro_ver_89_003.exe"</code></pre>
+
+  <div class="callout note">
+    <strong>Z:\ drive mapping is suspicious.</strong> While legitimate mapped drives exist (H:\ for home directories, S:\ for shared drives), the Z:\ drive is commonly used by penetration testing tools and malware for temporary file staging. Always investigate Z:\ drive file creation events.
+  </div>
+
+  <h3>SMB Lateral Movement Hunt Queries</h3>
+
+  <pre><code><span class="cm"># === Security Onion Hunt ===</span>
+
+<span class="cm"># All executable files accessed via SMB</span>
+event.dataset: "zeek.smb_files" AND file.name: *.exe
+
+<span class="cm"># ADMIN$ share access (PsExec indicator)</span>
+event.dataset: "zeek.smb_files" AND file.path: *ADMIN$*
+
+<span class="cm"># SMB file access from compromised host</span>
+event.dataset: "zeek.smb_files" AND source.ip: "10.0.7.129"
+
+<span class="cm"># DCE/RPC service control (remote service creation)</span>
+event.dataset: "zeek.dce_rpc" AND dce_rpc.operation: "OpenSCManagerW" OR dce_rpc.operation: "CreateServiceW"
+
+<span class="cm"># === Splunk SPL Equivalents ===</span>
+
+<span class="cm"># Executable files over SMB</span>
+index=zeek sourcetype=zeek:smb_files name=*.exe
+| table _time src_ip dest_ip name path action
+
+<span class="cm"># PsExec pattern on destination host</span>
+index=sysmon EventCode=1 ParentImage="*\\services.exe"
+  NOT Image="*\\svchost.exe"
+| table _time ComputerName ParentImage Image CommandLine User</code></pre>
+
+  <h3>Kerberos Evidence for SMB</h3>
+
+  <pre><code><span class="cm"># TGS request for CIFS service (SMB file access)</span>
+event.dataset: "zeek.kerberos" AND kerberos.service: "CIFS*"
+
+<span class="cm"># Example:</span>
+<span class="cm"># kerberos.client: jaya.kearney/ACMEONIONS.COM</span>
+<span class="cm"># kerberos.service: CIFS/fileserver01</span>
+<span class="cm"># → Attacker requested Kerberos ticket for SMB access to fileserver01</span></code></pre>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 5: Hunt Queries ══════════════════════════ -->
+<template id="tpl-hunt-queries">
+<article class="topic">
+  <h1>05 &middot; Hunt Queries</h1>
+  <hr class="divider">
+
+  <p>Comprehensive hunt query reference for lateral movement detection. Organized by protocol and data source, with both Security Onion Hunt syntax and Splunk SPL equivalents.</p>
+
+  <h3>RDP Lateral Movement Queries</h3>
+
+  <pre><code><span class="cm"># ═══ Security Onion Hunt ═══</span>
+
+<span class="cm"># Internal-to-internal RDP connections (primary lateral movement indicator)</span>
+event.dataset: "zeek.rdp" AND source.ip: (10.0.0.0/8 OR 172.16.0.0/12 OR 192.168.0.0/16) AND destination.ip: (10.0.0.0/8 OR 172.16.0.0/12 OR 192.168.0.0/16)
+
+<span class="cm"># RDP from specific compromised host</span>
+event.dataset: "zeek.rdp" AND source.ip: "10.0.7.129"
+
+<span class="cm"># RDP sessions using NLA (valid domain credentials confirmed)</span>
+event.dataset: "zeek.rdp" AND rdp.security_protocol: "HYBRID_EX"
+
+<span class="cm"># RDP client process creation on source host</span>
+event.module: "sysmon" AND event.code: "1" AND process.name: "mstsc.exe"
+
+<span class="cm"># RDP session confirmation on destination host</span>
+event.module: "sysmon" AND event.code: "1" AND (process.name: "rdpclip.exe" OR process.name: "rdpinput.exe")
+
+<span class="cm"># Kerberos TGS for RDP service</span>
+event.dataset: "zeek.kerberos" AND kerberos.service: "TERMSRV*"
+
+<span class="cm"># ═══ Splunk SPL ═══</span>
+
+<span class="cm"># Internal-to-internal RDP</span>
+index=zeek sourcetype=zeek:rdp src_ip=10.* dest_ip=10.*
+| table _time src_ip dest_ip security_protocol cookie
+| sort _time
+
+<span class="cm"># RDP with Sysmon correlation</span>
+index=sysmon EventCode=1 (Image="*\\mstsc.exe" OR Image="*\\rdpclip.exe")
+| eval direction=if(Image LIKE "%mstsc%", "outbound", "inbound")
+| table _time ComputerName Image User direction CommandLine</code></pre>
+
+  <h3>SMB Lateral Movement Queries</h3>
+
+  <pre><code><span class="cm"># ═══ Security Onion Hunt ═══</span>
+
+<span class="cm"># Executable files accessed via SMB (payload staging)</span>
+event.dataset: "zeek.smb_files" AND file.name: (*.exe OR *.dll OR *.ps1 OR *.bat)
+
+<span class="cm"># ADMIN$ or C$ share access (administrative shares)</span>
+event.dataset: "zeek.smb_files" AND file.path: (*ADMIN$* OR *C$*)
+
+<span class="cm"># SMB file operations from compromised host</span>
+event.dataset: "zeek.smb_files" AND source.ip: "10.0.7.129"
+
+<span class="cm"># IPC$ named pipe access (PsExec control channel)</span>
+event.dataset: "zeek.smb_mapping" AND smb.share_type: "PIPE"
+
+<span class="cm"># Kerberos TGS for SMB service</span>
+event.dataset: "zeek.kerberos" AND kerberos.service: "CIFS*"
+
+<span class="cm"># ═══ Splunk SPL ═══</span>
+
+<span class="cm"># SMB executable access</span>
+index=zeek sourcetype=zeek:smb_files (name=*.exe OR name=*.dll OR name=*.ps1)
+| table _time src_ip dest_ip name path action
+| sort _time
+
+<span class="cm"># PsExec service installation</span>
+index=wineventlog EventCode=7045
+| search ServiceName="PSEXESVC" OR ServiceFileName="*PSEXESVC*"
+| table _time ComputerName ServiceName ServiceFileName ServiceType</code></pre>
+
+  <h3>DCE/RPC Lateral Movement Queries</h3>
+
+  <pre><code><span class="cm"># ═══ Security Onion Hunt ═══</span>
+
+<span class="cm"># Remote service creation (PsExec, SC.exe)</span>
+event.dataset: "zeek.dce_rpc" AND dce_rpc.operation: ("OpenSCManagerW" OR "CreateServiceW" OR "StartServiceW")
+
+<span class="cm"># Remote scheduled task creation</span>
+event.dataset: "zeek.dce_rpc" AND dce_rpc.operation: ("SchRpcRegisterTask" OR "NetrJobAdd")
+
+<span class="cm"># WMI remote execution</span>
+event.dataset: "zeek.dce_rpc" AND dce_rpc.endpoint: "IWbemServices"
+
+<span class="cm"># All DCE/RPC from compromised host</span>
+event.dataset: "zeek.dce_rpc" AND source.ip: "10.0.7.129"
+
+<span class="cm"># ═══ Splunk SPL ═══</span>
+
+<span class="cm"># Remote service creation</span>
+index=zeek sourcetype=zeek:dce_rpc operation IN ("OpenSCManagerW","CreateServiceW","StartServiceW")
+| table _time src_ip dest_ip operation endpoint</code></pre>
+
+  <h3>Sysmon Network Connection Queries</h3>
+
+  <pre><code><span class="cm"># ═══ Security Onion Hunt ═══</span>
+
+<span class="cm"># Sysmon EID3 — network connections between internal hosts on lateral movement ports</span>
+event.module: "sysmon" AND event.code: "3" AND destination.port: (3389 OR 445 OR 135 OR 5985 OR 5986)
+AND source.ip: 10.0.0.0/8 AND destination.ip: 10.0.0.0/8
+
+<span class="cm"># Network connections from a specific compromised host</span>
+event.module: "sysmon" AND event.code: "3" AND source.ip: "10.0.7.129"
+AND destination.ip: 10.0.0.0/8
+
+<span class="cm"># WinRM connections (PowerShell remoting)</span>
+event.module: "sysmon" AND event.code: "3" AND destination.port: (5985 OR 5986)
+
+<span class="cm"># ═══ Splunk SPL ═══</span>
+
+<span class="cm"># Lateral movement port connections</span>
+index=sysmon EventCode=3 (DestinationPort=3389 OR DestinationPort=445 OR DestinationPort=5985)
+  SourceIP=10.* DestinationIP=10.*
+| stats count by SourceIP DestinationIP DestinationPort Image
+| sort -count</code></pre>
+
+  <h3>WinRM Detection Queries</h3>
+
+  <pre><code><span class="cm"># ═══ Security Onion Hunt ═══</span>
+
+<span class="cm"># WinRM HTTP connections (port 5985 unencrypted, 5986 HTTPS)</span>
+event.dataset: "zeek.http" AND destination.port: (5985 OR 5986) AND url.path: "/wsman"
+
+<span class="cm"># WinRM user-agent detection</span>
+event.dataset: "zeek.http" AND http.user_agent: "*WinRM*"
+
+<span class="cm"># PowerShell remoting on destination host</span>
+event.module: "sysmon" AND event.code: "1" AND process.name: "wsmprovhost.exe"
+<span class="cm"># wsmprovhost.exe = WinRM plugin host process (remote PowerShell session)</span>
+
+<span class="cm"># Kerberos TGS for HTTP service (WinRM uses HTTP SPN)</span>
+event.dataset: "zeek.kerberos" AND kerberos.service: "HTTP*" AND source.ip: 10.0.0.0/8
+
+<span class="cm"># ═══ Splunk SPL ═══</span>
+
+<span class="cm"># WinRM connections</span>
+index=zeek sourcetype=zeek:http dest_port IN (5985, 5986) uri="/wsman*"
+| table _time src_ip dest_ip uri user_agent</code></pre>
+
+  <h3>Kerberos Service Ticket Reference</h3>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Service Principal</th><th>Protocol</th><th>Lateral Movement Technique</th></tr></thead>
+      <tbody>
+        <tr><td><strong>TERMSRV/hostname</strong></td><td>RDP (port 3389)</td><td>Remote Desktop session to hostname</td></tr>
+        <tr><td><strong>CIFS/hostname</strong></td><td>SMB (port 445)</td><td>File share access or PsExec to hostname</td></tr>
+        <tr><td><strong>HTTP/hostname</strong></td><td>WinRM (port 5985/5986)</td><td>PowerShell remoting to hostname</td></tr>
+        <tr><td><strong>HOST/hostname</strong></td><td>Multiple services</td><td>General host access (scheduled tasks, WMI)</td></tr>
+        <tr><td><strong>RPCSS/hostname</strong></td><td>RPC (port 135)</td><td>Remote procedure calls (WMI, DCOM)</td></tr>
+        <tr><td><strong>LDAP/hostname</strong></td><td>LDAP (port 389/636)</td><td>Directory queries (enumeration, not lateral movement)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 6: False Positive Patterns ══════════════════════════ -->
+<template id="tpl-false-positives">
+<article class="topic">
+  <h1>06 &middot; False Positive Patterns</h1>
+  <hr class="divider">
+
+  <p>Lateral movement detection relies on monitoring legitimate protocols used in abnormal ways. Understanding what <strong>normal</strong> looks like is critical to avoid chasing false positives and wasting investigation time.</p>
+
+  <div class="callout warn">
+    <strong>Context is everything.</strong> The same RDP connection can be legitimate IT support or malicious lateral movement. Differentiate by examining: WHO is connecting (user account), WHEN (business hours vs. 3 AM), FROM WHERE (IT workstation vs. compromised endpoint), and WHAT HAPPENS NEXT (normal admin tasks vs. malware execution).
+  </div>
+
+  <h3>Legitimate RDP Patterns</h3>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Pattern</th><th>Why It Looks Suspicious</th><th>Why It's Legitimate</th><th>How to Differentiate</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>IT help desk RDP to user workstations</strong></td>
+          <td>Internal-to-internal RDP, multiple targets</td>
+          <td>Help desk routinely RDPs to troubleshoot user issues</td>
+          <td>Source IP is known IT workstation; connections during business hours; user account is in IT OU; help desk ticket exists</td>
+        </tr>
+        <tr>
+          <td><strong>Server admin RDP to servers</strong></td>
+          <td>RDP to critical servers with admin credentials</td>
+          <td>Server administrators need RDP for management</td>
+          <td>Source is admin jump box; account is authorized server admin; change window documented</td>
+        </tr>
+        <tr>
+          <td><strong>Remote access via RDP gateway</strong></td>
+          <td>External RDP connections through gateway</td>
+          <td>Employees connecting via RD Gateway for remote work</td>
+          <td>Connection goes through RD Gateway (not direct); MFA required at gateway; VPN + RDP is normal WFH pattern</td>
+        </tr>
+        <tr>
+          <td><strong>Automated patching/monitoring tools</strong></td>
+          <td>Single source RDP to many hosts rapidly</td>
+          <td>SCCM, WSUS, or monitoring tools checking endpoints</td>
+          <td>Source IP is known management server; consistent schedule; service account (not user account)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Legitimate SMB Patterns</h3>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Pattern</th><th>Why It Looks Suspicious</th><th>Why It's Legitimate</th><th>How to Differentiate</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>File server access</strong></td>
+          <td>Many hosts connecting to SMB shares, accessing many files</td>
+          <td>Users accessing shared files on file servers is normal business activity</td>
+          <td>Destination is known file server; users access their own department shares; file types are documents (not .exe)</td>
+        </tr>
+        <tr>
+          <td><strong>Printer sharing</strong></td>
+          <td>SMB connections to print servers on port 445</td>
+          <td>Windows printing uses SMB for print spooler communication</td>
+          <td>Destination is known print server; SMB share is PRINT$; consistent across all workstations</td>
+        </tr>
+        <tr>
+          <td><strong>Group Policy updates</strong></td>
+          <td>All workstations accessing SYSVOL and NETLOGON shares on DC</td>
+          <td>Windows domain members regularly pull Group Policy from domain controllers</td>
+          <td>Destination is domain controller; shares are SYSVOL/NETLOGON; happens at consistent intervals</td>
+        </tr>
+        <tr>
+          <td><strong>Backup software</strong></td>
+          <td>Single server accessing ADMIN$ or C$ on many hosts</td>
+          <td>Enterprise backup solutions use admin shares to pull data</td>
+          <td>Source is known backup server; service account; runs on backup schedule; configuration matches backup policy</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Legitimate WinRM Patterns</h3>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Pattern</th><th>Why It Looks Suspicious</th><th>Why It's Legitimate</th><th>How to Differentiate</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>SCCM / Configuration Manager</strong></td>
+          <td>WinRM connections from management server to many endpoints</td>
+          <td>SCCM uses WinRM for remote configuration and inventory</td>
+          <td>Source is SCCM server; consistent schedule; service account</td>
+        </tr>
+        <tr>
+          <td><strong>Ansible / Chef / Puppet</strong></td>
+          <td>WinRM connections to many hosts in rapid succession</td>
+          <td>Configuration management tools use WinRM for Windows automation</td>
+          <td>Source is CM server; runs on deployment schedule; well-documented playbooks</td>
+        </tr>
+        <tr>
+          <td><strong>PowerShell DSC</strong></td>
+          <td>WinRM connections with PowerShell remoting</td>
+          <td>Desired State Configuration uses WinRM to enforce configuration</td>
+          <td>Source is pull server or known admin workstation; consistent 15-30 min intervals</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Domain Admin Normal Activity</h3>
+  <p>Domain administrator accounts legitimately perform actions that look identical to attacker lateral movement:</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Activity</th><th>Looks Like Attack</th><th>Legitimate Context</th></tr></thead>
+      <tbody>
+        <tr><td>RDP to multiple servers</td><td>Pivot chain</td><td>Server maintenance window (documented change ticket)</td></tr>
+        <tr><td>ADMIN$ share access on many hosts</td><td>PsExec deployment</td><td>GPO troubleshooting, emergency patch deployment</td></tr>
+        <tr><td>Kerberos TGS for many services</td><td>Kerberoasting</td><td>Normal admin operations touching many services</td></tr>
+        <tr><td>LDAP queries for all computers</td><td>AD enumeration</td><td>AD management tools (RSAT, ADManager) running reports</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout lab">
+    <strong>False Positive Elimination Checklist:</strong>
+    <ol>
+      <li>Is the source IP a known management/admin workstation or server?</li>
+      <li>Is the user account an authorized admin for the target systems?</li>
+      <li>Does the timing align with business hours or a documented change window?</li>
+      <li>Is there a corresponding ticket, change request, or scheduled maintenance?</li>
+      <li>Does the target host show post-compromise indicators (C2, malware, persistence)?</li>
+      <li>Is this a pattern that occurs regularly (baseline) or is it a first-time occurrence?</li>
+    </ol>
+    If you answer "no" to multiple items, escalate as a true positive.
+  </div>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 7: Worked Example ══════════════════════════ -->
+<template id="tpl-worked-example">
+<article class="topic">
+  <h1>07 &middot; Worked Example &mdash; ACMEONIONS Lateral Movement</h1>
+  <hr class="divider">
+
+  <p>This worked example traces the complete lateral movement chain in the ACMEONIONS investigation. The attacker pivoted from 10.0.7.129 to 10.0.7.130 using RDP, staged malware via SMB, and established a second C2 beacon &mdash; expanding the compromise across the network.</p>
+
+  <div class="callout note">
+    <strong>Context:</strong> At this point in the investigation, we have already confirmed that 10.0.7.129 is compromised with C2 beaconing to 166.184.36.101:4334. We are now investigating whether the attacker moved laterally to other hosts.
+  </div>
+
+  <h3>Step 1: Check for Outbound RDP from Compromised Host</h3>
+  <p>First question after confirming C2: "Did this host RDP to any other internal hosts?"</p>
+
+  <pre><code><span class="cm"># Hunt query: RDP connections FROM the compromised host</span>
+event.dataset: "zeek.rdp" AND source.ip: "10.0.7.129"
+
+<span class="cm"># Results: 4 RDP sessions found</span>
+<span class="cm"># ┌────────────────────┬──────────────┬──────────────┬───────────────────┬─────────────┐</span>
+<span class="cm"># │ Timestamp          │ Source IP    │ Dest IP      │ Security Protocol │ Cookie      │</span>
+<span class="cm"># ├────────────────────┼──────────────┼──────────────┼───────────────────┼─────────────┤</span>
+<span class="cm"># │ 10:28:14           │ 10.0.7.129   │ 10.0.7.130   │ HYBRID_EX         │ ACMEONION   │</span>
+<span class="cm"># │ 10:29:01           │ 10.0.7.129   │ 10.0.7.130   │ HYBRID_EX         │ ACMEONION   │</span>
+<span class="cm"># │ 10:30:22           │ 10.0.7.129   │ 10.0.7.130   │ HYBRID_EX         │ ACMEONION   │</span>
+<span class="cm"># │ 10:31:45           │ 10.0.7.129   │ 10.0.7.130   │ HYBRID_EX         │ ACMEONION   │</span>
+<span class="cm"># └────────────────────┴──────────────┴──────────────┴───────────────────┴─────────────┘</span></code></pre>
+
+  <div class="callout lab">
+    <strong>Analysis:</strong>
+    <ul>
+      <li><strong>4 RDP connections</strong> from .129 to .130 on port 3389</li>
+      <li><strong>HYBRID_EX</strong> security protocol = NLA enabled = valid domain credentials were used</li>
+      <li><strong>Cookie: ACMEONION</strong> = domain-authenticated session (confirms domain account, not local account)</li>
+      <li>Multiple connections suggest retry attempts or multiple sessions (attacker establishing reliable access)</li>
+    </ul>
+  </div>
+
+  <h3>Step 2: Confirm Active RDP Session on Destination Host</h3>
+  <p>A Zeek RDP log entry only proves a connection was made. We need to confirm the session was interactive:</p>
+
+  <pre><code><span class="cm"># Check for rdpclip.exe on 10.0.7.130 (confirms active interactive session)</span>
+event.module: "sysmon" AND event.code: "1" AND host.ip: "10.0.7.130"
+AND process.name: "rdpclip.exe"
+
+<span class="cm"># Result:</span>
+<span class="cm"># Timestamp: 10:31:48</span>
+<span class="cm"># Host: windows10-ws3 (10.0.7.130)</span>
+<span class="cm"># Process: rdpclip.exe</span>
+<span class="cm"># Parent: svchost.exe (Terminal Services)</span>
+<span class="cm"># User: ACMEONIONS\jaya.kearney</span>
+<span class="cm">#</span>
+<span class="cm"># → rdpclip.exe CONFIRMED on .130 = active interactive RDP session</span>
+<span class="cm"># → User: jaya.kearney = same compromised account from initial access</span></code></pre>
+
+  <h3>Step 3: Verify Kerberos Authentication</h3>
+  <p>Check Kerberos logs to confirm the authentication chain:</p>
+
+  <pre><code><span class="cm"># Kerberos TGS requests from the compromised account</span>
+event.dataset: "zeek.kerberos" AND kerberos.client: "*jaya.kearney*"
+AND kerberos.service: "TERMSRV*"
+
+<span class="cm"># Result:</span>
+<span class="cm"># Timestamp: 10:31:42</span>
+<span class="cm"># Client: jaya.kearney/ACMEONIONS.COM</span>
+<span class="cm"># Service: TERMSRV/windows10-ws3</span>
+<span class="cm"># Success: true</span>
+<span class="cm"># Encryption: aes256-cts-hmac-sha1-96</span>
+<span class="cm">#</span>
+<span class="cm"># → Kerberos TGS issued for RDP service on windows10-ws3</span>
+<span class="cm"># → windows10-ws3 resolves to 10.0.7.130</span>
+<span class="cm"># → This confirms domain authentication for the lateral movement hop</span></code></pre>
+
+  <h3>Step 4: Check for Malware Staging via SMB</h3>
+  <p>After establishing the RDP session, did the attacker stage files?</p>
+
+  <pre><code><span class="cm"># SMB file access involving .130</span>
+event.dataset: "zeek.smb_files" AND (source.ip: "10.0.7.129" OR source.ip: "10.0.7.130")
+AND file.name: *.exe
+
+<span class="cm"># Sysmon FileCreate on .130 — check for new executables</span>
+event.module: "sysmon" AND event.code: "11" AND host.ip: "10.0.7.130"
+AND file.name: *.exe
+
+<span class="cm"># Result:</span>
+<span class="cm"># Timestamp: 10:36:28</span>
+<span class="cm"># Host: windows10-ws3 (10.0.7.130)</span>
+<span class="cm"># Event: FileCreate (Sysmon EID11)</span>
+<span class="cm"># File: Z:\Windows-Endpoint-Pro_ver_89_003.exe</span>
+<span class="cm"># Process: explorer.exe</span>
+<span class="cm">#</span>
+<span class="cm"># → Malware staged to .130 via mapped Z:\ drive at 10:36:28</span>
+<span class="cm"># → Z:\ drive = network share mapped during RDP session</span>
+<span class="cm"># → Same malware filename seen in initial compromise on .129</span>
+<span class="cm"># → Attacker is deploying the SAME payload to the new host</span></code></pre>
+
+  <div class="callout warn">
+    <strong>Z:\Windows-Endpoint-Pro_ver_89_003.exe</strong> &mdash; this is the same malware binary used in the initial compromise. The attacker copied it via a mapped network share during the RDP session. The "Windows-Endpoint-Pro" name is a social engineering disguise &mdash; it looks like legitimate security software.
+  </div>
+
+  <h3>Step 5: Confirm C2 Beacon from New Host</h3>
+  <p>After malware execution on .130, check if it established C2:</p>
+
+  <pre><code><span class="cm"># Check .130 for outbound connections to the known C2 IP</span>
+event.dataset: "zeek.conn" AND source.ip: "10.0.7.130"
+AND destination.ip: "166.184.36.101" AND destination.port: 4334
+
+<span class="cm"># Result:</span>
+<span class="cm"># Timestamp: 10:37:05</span>
+<span class="cm"># Source: 10.0.7.130:49892</span>
+<span class="cm"># Destination: 166.184.36.101:4334</span>
+<span class="cm"># Duration: 287.4s (long-lived connection = C2 beacon)</span>
+<span class="cm"># Bytes: 1,247 → 4,891</span>
+<span class="cm">#</span>
+<span class="cm"># → .130 is NOW BEACONING to the SAME C2 server as .129</span>
+<span class="cm"># → Same port (4334), same destination IP</span>
+<span class="cm"># → Lateral movement CONFIRMED: .129 → .130 → C2</span></code></pre>
+
+  <h3>Complete Attack Timeline</h3>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Time</th><th>Event</th><th>Source</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr><td><strong>10:28:14</strong></td><td>First RDP attempt .129 &rarr; .130</td><td>zeek.rdp</td><td>HYBRID_EX, cookie=ACMEONION</td></tr>
+        <tr><td><strong>10:31:42</strong></td><td>Kerberos TGS for TERMSRV/windows10-ws3</td><td>zeek.kerberos</td><td>jaya.kearney, aes256, success=true</td></tr>
+        <tr><td><strong>10:31:45</strong></td><td>Successful RDP connection established</td><td>zeek.rdp</td><td>4th connection attempt succeeded</td></tr>
+        <tr><td><strong>10:31:48</strong></td><td>rdpclip.exe spawned on .130</td><td>sysmon EID1</td><td>Interactive session CONFIRMED</td></tr>
+        <tr><td><strong>10:36:28</strong></td><td>Malware staged via Z:\ drive on .130</td><td>sysmon EID11</td><td>Windows-Endpoint-Pro_ver_89_003.exe</td></tr>
+        <tr><td><strong>10:37:05</strong></td><td>.130 begins beaconing to C2</td><td>zeek.conn</td><td>166.184.36.101:4334, long-lived</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Pivot Chain Visualization</h3>
+
+  <pre><code>┌──────────────────┐   RDP (HYBRID_EX)   ┌──────────────────┐
+│   10.0.7.129     │ ──────────────────▶  │   10.0.7.130     │
+│   (compromised)  │   jaya.kearney       │   windows10-ws3  │
+│                  │                      │                  │
+│  C2 → 166.184.   │   Z:\ malware copy   │  C2 → 166.184.   │
+│  36.101:4334     │ ──────────────────▶  │  36.101:4334     │
+└──────────────────┘                      └──────────────────┘
+        │                                          │
+        │           Both hosts beaconing           │
+        │            to SAME C2 server             │
+        ▼                                          ▼
+┌──────────────────────────────────────────────────────────┐
+│              166.184.36.101:4334 (C2 Server)             │
+│              Attacker now controls BOTH hosts             │
+└──────────────────────────────────────────────────────────┘</code></pre>
+
+  <h3>Investigation Next Steps</h3>
+
+  <div class="callout lab">
+    <strong>After confirming the pivot chain, the investigation expands:</strong>
+    <ol>
+      <li><strong>Check .130 for further lateral movement</strong> &mdash; Did .130 RDP or SMB to any OTHER hosts? (<code>event.dataset: "zeek.rdp" AND source.ip: "10.0.7.130"</code>)</li>
+      <li><strong>Check for credential dumping on .130</strong> &mdash; Did the attacker dump LSASS on the new host? (<code>event.module: "sysmon" AND event.code: "10" AND host.ip: "10.0.7.130" AND process.target.name: "lsass.exe"</code>)</li>
+      <li><strong>Update host inventory</strong> &mdash; .130 is now CONFIRMED compromised. Add to containment list.</li>
+      <li><strong>Plan simultaneous containment</strong> &mdash; Both .129 AND .130 must be isolated at the same time to prevent the attacker from using the other host to re-establish access.</li>
+      <li><strong>Check for additional pivot targets</strong> &mdash; Review all Kerberos TGS requests from both compromised hosts for services on other hosts.</li>
+    </ol>
+  </div>
+
+  <div class="callout warn">
+    <strong>Do NOT isolate .129 without also isolating .130.</strong> If you only contain one host, the attacker still has full access through the other. Coordinate containment across ALL compromised hosts simultaneously.
+  </div>
+
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Lateral Movement Detection',
+  topics: [
+    { id: 'alert-recognition', badge: '01', label: 'Alert Recognition'           },
+    { id: 'picerl-steps',      badge: '02', label: 'PICERL Investigation Steps'  },
+    { id: 'rdp-lateral',       badge: '03', label: 'RDP Lateral Movement'        },
+    { id: 'smb-lateral',       badge: '04', label: 'SMB Lateral Movement'        },
+    { id: 'hunt-queries',      badge: '05', label: 'Hunt Queries'                },
+    { id: 'false-positives',   badge: '06', label: 'False Positive Patterns'     },
+    { id: 'worked-example',    badge: '07', label: 'Worked Example'              },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

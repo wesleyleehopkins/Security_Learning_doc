@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Playbook — Data Exfiltration Detection — SOC Notes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <button id="sb-toggle" class="nav-toggle" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="currentColor">
+      <rect width="15" height="2" rx="1"/>
+      <rect y="5" width="15" height="2" rx="1"/>
+      <rect y="10" width="15" height="2" rx="1"/>
+    </svg>
+  </button>
+  <a href="index.html" class="nav-brand"><span class="icon">⬡</span> SOC Notes</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="psaa.html">PSAA</a>
+    <a href="security-onion.html">Security Onion</a>
+    <a href="investigation-flow.html">Playbook</a>
+    <a href="splunk.html">Splunk</a>
+    <a href="elk.html">ELK Stack</a>
+    <a href="openvas.html">OpenVAS</a>
+    <a href="kali.html">Kali Linux</a>
+    <a href="metasploit.html">Metasploit</a>
+    <a href="yara.html">YARA</a>
+    <a href="zeek.html">Zeek</a>
+    <a href="clamav.html">ClamAV</a>
+    <a href="misp.html">MISP</a>
+    <a href="cuckoo.html">Cuckoo</a>
+    <a href="velociraptor.html">Velociraptor</a>
+    <a href="autopsy.html">Autopsy</a>
+    <a href="anyrun.html">ANY.RUN</a>
+    <a href="nmap.html">Nmap</a>
+    <a href="wireshark.html">Wireshark</a>
+    <a href="snort.html">Snort</a>
+    <a href="ossec.html">OSSEC</a>
+    <a href="log-sources.html">Log Sources</a>
+  </div>
+</nav>
+
+<div class="layout">
+
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Notebook</div>
+      <div class="sidebar-title">Data Exfiltration Detection</div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="content-wrap">
+      <div id="content-area">
+        <div class="welcome">
+          <div class="w-icon">📤</div>
+          <h2>Playbook — Data Exfiltration Detection</h2>
+          <p>Select a topic from the sidebar to begin.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<!-- ══════════════════════════ TOPIC 1: Alert Recognition ══════════════════════════ -->
+<template id="tpl-alert-recognition">
+<article class="topic">
+<h1>01 · Alert Recognition</h1>
+<hr class="divider">
+
+<p>Data exfiltration is one of the hardest attack phases to detect because it often mimics legitimate network activity. Unlike C2 beaconing (which has distinctive signatures), exfiltration may use standard protocols like FTP, HTTP, or DNS — and in many cases, <strong>no Suricata alert fires at all</strong>. Detection relies heavily on behavioral analysis and proactive threat hunting.</p>
+
+<h3>Suricata Alerts That May Indicate Exfiltration</h3>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Alert Pattern</th><th>What It Detects</th><th>Confidence Level</th></tr></thead>
+  <tbody>
+    <tr><td><strong>ET POLICY FTP Login</strong></td><td>FTP authentication to external server — unusual for most workstations</td><td>MEDIUM — FTP is legitimate but uncommon in modern environments</td></tr>
+    <tr><td><strong>ET POLICY FTP Data Transfer</strong></td><td>Active FTP data channel established — files being transferred</td><td>MEDIUM-HIGH — data is actively moving</td></tr>
+    <tr><td><strong>GPL FTP STOR command</strong></td><td>FTP STOR (upload) command detected — file being sent outbound</td><td>HIGH — confirmed outbound file transfer</td></tr>
+    <tr><td><strong>ET POLICY HTTP POST Large Body</strong></td><td>HTTP POST with body larger than threshold — potential data upload</td><td>MEDIUM — many legitimate uses (file sharing, cloud upload)</td></tr>
+    <tr><td><strong>ET POLICY DNS Query to .bit TLD</strong></td><td>DNS query to blockchain TLD — often used for DNS tunneling C2/exfil</td><td>HIGH — very few legitimate uses</td></tr>
+    <tr><td><strong>ET DNS Excessive NXDOMAIN Responses</strong></td><td>High rate of DNS failures — may indicate DNS tunneling attempts</td><td>MEDIUM — can also be misconfigured software</td></tr>
+    <tr><td><strong>ET HUNTING Possible DNS Tunneling</strong></td><td>Long DNS query names or high frequency — behavioral detection</td><td>MEDIUM — requires manual validation</td></tr>
+    <tr><td><strong>ET POLICY Outbound SMB</strong></td><td>SMB traffic to external IP — should never happen in most environments</td><td>HIGH — SMB to internet is almost always malicious</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Zeek Alerts and Notices for Exfiltration</h3>
+
+<pre><code><span class="cm"># Zeek notices relevant to exfiltration</span>
+FTP::Bruteforce            <span class="cm"># Multiple failed FTP logins — attacker testing credentials</span>
+FTP::Site_Exec_Success     <span class="cm"># FTP SITE EXEC command — potential command execution via FTP</span>
+Weird::Activity            <span class="cm"># Protocol anomalies in file transfer channels</span>
+DNS::External_Name         <span class="cm"># DNS query to non-standard domain — check for tunneling</span>
+Conn::Long_Connection      <span class="cm"># Extended connection — may be sustained exfil channel</span></code></pre>
+
+<div class="callout warn">
+  <strong>The silent exfiltration problem:</strong> In the majority of real-world data breaches, exfiltration generates ZERO Suricata alerts. The attacker uses standard protocols (HTTPS, FTP, DNS) that do not trigger signatures. You must hunt for exfiltration proactively using Zeek metadata — connection volumes, transfer sizes, unusual destinations, and timing patterns. Do not rely on alerts alone.
+</div>
+
+<h3>Key Zeek Datasets for Exfiltration Detection</h3>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Dataset</th><th>What It Reveals</th><th>Key Fields</th></tr></thead>
+  <tbody>
+    <tr><td><strong>zeek.ftp</strong></td><td>FTP commands, login attempts, file transfers</td><td>command, arg, user, data_channel.orig_h, fuid</td></tr>
+    <tr><td><strong>zeek.conn</strong></td><td>Connection metadata — bytes transferred, duration</td><td>orig_bytes, resp_bytes, duration, service</td></tr>
+    <tr><td><strong>zeek.http</strong></td><td>HTTP POST body sizes, upload destinations</td><td>request_body_len, method, host, uri</td></tr>
+    <tr><td><strong>zeek.dns</strong></td><td>DNS query patterns — tunneling detection</td><td>query, qtype_name, answers, query length</td></tr>
+    <tr><td><strong>zeek.files</strong></td><td>File metadata with hashes — what was transferred</td><td>filename, mime_type, total_bytes, md5, sha256, fuid</td></tr>
+    <tr><td><strong>zeek.ssl</strong></td><td>Encrypted exfil channel analysis</td><td>server_name, ja3.hash, certificate details</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Exfiltration vs. Normal Traffic — Quick Indicators</h3>
+
+<div class="callout note">
+  <strong>Suspicion triggers for exfiltration:</strong>
+  <ul>
+    <li><strong>Inverted byte ratio:</strong> orig_bytes &gt;&gt; resp_bytes on a connection to an external IP. Normal browsing downloads more than it uploads.</li>
+    <li><strong>FTP to external IPs from workstations:</strong> Most corporate workstations never use FTP. Any FTP to an external IP is worth investigating.</li>
+    <li><strong>Large HTTP POST requests:</strong> Especially to unfamiliar domains or IP addresses, outside of known cloud services.</li>
+    <li><strong>DNS queries with subdomains longer than 50 characters:</strong> Strong indicator of DNS tunneling (data encoded in subdomain).</li>
+    <li><strong>Connections at off-hours:</strong> Large outbound transfers at 3 AM from a workstation that is normally idle.</li>
+  </ul>
+</div>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 2: PICERL Investigation Steps ══════════════════════════ -->
+<template id="tpl-picerl-steps">
+<article class="topic">
+<h1>02 · PICERL Investigation Steps</h1>
+<hr class="divider">
+
+<p>Exfiltration PICERL differs fundamentally from C2 response because by the time you detect exfiltration, <strong>the breach has already progressed significantly</strong>. The attacker has achieved initial access, established persistence, moved laterally, and is now extracting data. Containment urgency is maximum.</p>
+
+<h3>Phase 1 — Preparation</h3>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Preparation Action</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td>Baseline normal outbound data volumes per host</td><td>Know what "normal" looks like so you can spot anomalies</td></tr>
+    <tr><td>Identify and document authorized FTP, SFTP, SCP servers</td><td>Any FTP to an unauthorized server is immediately suspicious</td></tr>
+    <tr><td>Deploy DLP (Data Loss Prevention) monitoring</td><td>Detect sensitive data patterns (SSN, credit card, PII) in transit</td></tr>
+    <tr><td>Pre-build exfil Hunt queries (see section 03)</td><td>Speed — every minute of exfil = more data lost</td></tr>
+    <tr><td>Maintain inventory of sensitive data locations</td><td>Quickly assess what was at risk on compromised hosts</td></tr>
+    <tr><td>Configure zeek to extract file hashes for all transfers</td><td>Enables post-incident analysis of exactly what files were taken</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Phase 2 — Identification</h3>
+
+<div class="callout lab">
+  <strong>Step-by-step Identification for Exfiltration:</strong>
+  <ol>
+    <li><strong>Confirm the exfiltration method</strong> — Is it FTP, HTTP POST, DNS tunneling, raw TCP, or encrypted channel? The protocol determines your analysis approach.</li>
+    <li><strong>Identify the destination</strong> — Where is the data going? External IP, cloud service, attacker-controlled server? Check IP reputation on VirusTotal.</li>
+    <li><strong>Determine the volume</strong> — How much data has been transferred? Sum orig_bytes for all connections from the source to the exfil destination. This is your initial damage estimate.</li>
+    <li><strong>Identify the source host(s)</strong> — Which internal hosts are sending data outbound? Check if multiple hosts are exfiltrating to the same destination.</li>
+    <li><strong>Correlate with C2 activity</strong> — Exfiltration almost always follows C2 establishment. Check the C2 playbook — is there an active C2 channel from the same hosts?</li>
+    <li><strong>Determine what data was accessed</strong> — Check file access logs, SMB file shares accessed, database queries run from the compromised hosts.</li>
+    <li><strong>Establish timeline</strong> — When did exfiltration start? When was the last transfer? Is it still active?</li>
+  </ol>
+</div>
+
+<h3>Phase 3 — Containment</h3>
+
+<div class="callout warn">
+  <strong>CONTAINMENT IS URGENT FOR EXFILTRATION.</strong> Every minute the exfil channel remains open, more data leaves. Unlike C2 where the attacker may just be maintaining access, active exfiltration means data is being stolen RIGHT NOW. Contain immediately.
+</div>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Containment Action</th><th>Priority</th><th>How</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Block the exfil destination IP at firewall</strong></td><td>IMMEDIATE</td><td>Deny rule for destination IP on all outbound traffic</td></tr>
+    <tr><td><strong>Network isolate the source host(s)</strong></td><td>IMMEDIATE</td><td>Quarantine VLAN or disable switch port</td></tr>
+    <tr><td><strong>Block the exfil protocol if non-standard</strong></td><td>FAST</td><td>If exfil uses FTP (port 21), block outbound FTP at perimeter</td></tr>
+    <tr><td><strong>Disable compromised user accounts</strong></td><td>FAST</td><td>Disable in Active Directory — prevents attacker reauth</td></tr>
+    <tr><td><strong>Block lateral movement paths</strong></td><td>IMPORTANT</td><td>If attacker accessed file shares, restrict share permissions</td></tr>
+    <tr><td><strong>Preserve evidence before wiping</strong></td><td>IMPORTANT</td><td>Image the disk, export PCAPs, save zeek logs before any cleanup</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Phase 4 — Eradication</h3>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Eradication Action</th><th>Details</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Remove the exfiltration tool</strong></td><td>Identify what tool the attacker used (built-in FTP, WinSCP, custom script, PowerShell). Remove it and any associated configs.</td></tr>
+    <tr><td><strong>Remove the C2 malware</strong></td><td>Exfil is usually a later phase of a C2 compromise. Follow the C2 eradication process (see C2 playbook).</td></tr>
+    <tr><td><strong>Revoke stolen credentials</strong></td><td>If the attacker exfiltrated credential files (passwdhash.log, SAM, NTDS.dit), assume all credentials are compromised. Force password resets org-wide.</td></tr>
+    <tr><td><strong>Patch the access vector</strong></td><td>Close the vulnerability or access method the attacker used for initial entry.</td></tr>
+    <tr><td><strong>Remove attacker accounts</strong></td><td>Check for any accounts the attacker created (like FTP accounts on external servers, or new local/domain accounts).</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Phase 5 — Recovery</h3>
+
+<ol>
+  <li><strong>Verify all exfil channels are closed</strong> — Confirm zero connections to the exfil destination in zeek.conn.</li>
+  <li><strong>Monitor for resumed exfiltration</strong> — The attacker may have backup exfil channels. Watch for new large outbound transfers from previously compromised hosts.</li>
+  <li><strong>Assess data breach impact</strong> — Catalog exactly what data was exfiltrated. This determines legal notification requirements (PII, PHI, financial data).</li>
+  <li><strong>Notify affected parties</strong> — If regulated data was stolen, legal and compliance teams must be informed for breach notification.</li>
+  <li><strong>Restore from clean backups</strong> — If the attacker modified data (not just copied it), restore from known-good backups.</li>
+</ol>
+
+<h3>Phase 6 — Lessons Learned</h3>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Question</th><th>Document</th></tr></thead>
+  <tbody>
+    <tr><td>What data was exfiltrated?</td><td>File names, sizes, types, sensitivity classification</td></tr>
+    <tr><td>How much data was taken?</td><td>Total bytes transferred — sum all orig_bytes to exfil destination</td></tr>
+    <tr><td>How long was exfiltration active?</td><td>First transfer timestamp to last transfer timestamp</td></tr>
+    <tr><td>Could DLP have caught it?</td><td>Was the data in a format that DLP could inspect? Was DLP deployed?</td></tr>
+    <tr><td>Was FTP outbound blocked?</td><td>If not, add outbound FTP blocking to firewall policy</td></tr>
+    <tr><td>Were file access logs sufficient?</td><td>Could you determine exactly which files were accessed and by whom?</td></tr>
+  </tbody>
+</table></div>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 3: Hunt Queries ══════════════════════════ -->
+<template id="tpl-hunt-queries">
+<article class="topic">
+<h1>03 · Hunt Queries</h1>
+<hr class="divider">
+
+<p>Since exfiltration frequently produces no alerts, these Hunt queries are your primary detection mechanism. Each query targets a different exfiltration channel. Run them proactively during threat hunts and reactively when investigating a compromised host.</p>
+
+<h3>FTP Exfiltration — zeek.ftp FTP_DATA Events</h3>
+<p>FTP_DATA events represent the actual data transfer channel (as opposed to the FTP control channel). Every file upload or download generates an FTP_DATA event.</p>
+
+<pre><code><span class="cm"># Security Onion Hunt — all FTP data transfers</span>
+event.dataset: "zeek.ftp"
+
+<span class="cm"># Filter to a specific source host</span>
+event.dataset: "zeek.ftp" AND source.ip: "192.168.56.129"
+
+<span class="cm"># Splunk SPL equivalent</span>
+index=zeek sourcetype=zeek:ftp
+| table _time src_ip dest_ip user command arg reply_code fuid
+| sort _time</code></pre>
+
+<h3>FTP Outbound Data — is_orig=true</h3>
+<p>The is_orig field tells you the direction of the data transfer. When is_orig is true, data is flowing FROM the internal host TO the external server — this is exfiltration.</p>
+
+<pre><code><span class="cm"># Security Onion Hunt — outbound FTP transfers only</span>
+event.dataset: "zeek.ftp" AND network.direction: "outbound"
+
+<span class="cm"># Alternative: filter by source IP being internal</span>
+event.dataset: "zeek.ftp" AND source.ip: 192.168.56.0/24
+  AND NOT destination.ip: 192.168.56.0/24
+
+<span class="cm"># Splunk SPL — outbound FTP with file details</span>
+index=zeek sourcetype=zeek:ftp src_ip="192.168.56.*" NOT dest_ip="192.168.56.*"
+| search command="STOR" OR command="RETR" OR command="LIST"
+| table _time src_ip dest_ip user command arg reply_code fuid
+| sort _time</code></pre>
+
+<h3>Large HTTP POST Requests</h3>
+<p>HTTP POST is a common exfiltration method because it blends with normal web traffic. Focus on unusually large POST bodies going to unfamiliar destinations.</p>
+
+<pre><code><span class="cm"># Security Onion Hunt — large HTTP POST requests</span>
+event.dataset: "zeek.http" AND http.request.method: "POST"
+  AND http.request.body.bytes: >= 10000
+  AND NOT destination.ip: 192.168.56.0/24
+
+<span class="cm"># Filter out known services</span>
+event.dataset: "zeek.http" AND http.request.method: "POST"
+  AND http.request.body.bytes: >= 10000
+  AND NOT url.domain: (*.microsoft.com OR *.google.com OR *.amazonaws.com
+    OR *.azure.com OR *.office365.com OR *.sharepoint.com)
+
+<span class="cm"># Splunk SPL equivalent</span>
+index=zeek sourcetype=zeek:http method="POST" request_body_len>10000
+  NOT dest_ip="192.168.56.*" NOT host="*.microsoft.com" NOT host="*.google.com"
+| stats sum(request_body_len) as total_bytes, count by src_ip, dest_ip, host
+| sort - total_bytes</code></pre>
+
+<h3>DNS Tunneling Detection — Long Query Names</h3>
+<p>DNS tunneling encodes data in DNS subdomain labels. Normal DNS queries average 15-25 characters. Queries over 50 characters are strong indicators of data exfiltration via DNS.</p>
+
+<pre><code><span class="cm"># Security Onion Hunt — DNS queries with long names</span>
+event.dataset: "zeek.dns" AND source.ip: 192.168.56.0/24
+
+<span class="cm"># In Hunt, add a column for dns.question.name and sort by length</span>
+<span class="cm"># Manually inspect for encoded-looking subdomains</span>
+<span class="cm"># Example suspicious query: aGVsbG8gd29ybGQ.evil.com (Base64 in subdomain)</span>
+
+<span class="cm"># Splunk SPL — find long DNS queries</span>
+index=zeek sourcetype=zeek:dns src_ip="192.168.56.*"
+| eval query_len=len(query)
+| where query_len > 50
+| stats count, avg(query_len) as avg_len by src_ip, query
+| sort - count
+
+<span class="cm"># Splunk SPL — DNS query frequency per domain (high freq = tunneling)</span>
+index=zeek sourcetype=zeek:dns src_ip="192.168.56.*"
+| rex field=query "(?&lt;subdomain&gt;[^.]+)\.(?&lt;domain&gt;[^.]+\.[^.]+)$"
+| stats count by src_ip, domain
+| where count > 100
+| sort - count</code></pre>
+
+<h3>High Outbound Byte Volume</h3>
+<p>Look for connections where the originator (internal host) sends significantly more data than it receives. This inverted ratio is uncharacteristic of normal browsing and suggests data upload.</p>
+
+<pre><code><span class="cm"># Security Onion Hunt — high orig_bytes to external IPs</span>
+event.dataset: "zeek.conn" AND source.ip: 192.168.56.0/24
+  AND NOT destination.ip: 192.168.56.0/24
+  AND network.bytes: >= 1000000
+
+<span class="cm"># Splunk SPL — top outbound data transfers</span>
+index=zeek sourcetype=zeek:conn src_ip="192.168.56.*"
+  NOT dest_ip="192.168.56.*" NOT dest_ip="10.*" NOT dest_ip="172.16.*"
+| stats sum(orig_bytes) as total_sent, sum(resp_bytes) as total_recv,
+    count as connections by src_ip, dest_ip, dest_port
+| eval ratio=round(total_sent/total_recv, 2)
+| where total_sent > 100000 AND ratio > 2
+| sort - total_sent
+
+<span class="cm"># Ratio > 2 means host sent 2x more than it received — upload-heavy</span>
+<span class="cm"># Ratio > 10 is very suspicious — almost pure outbound data flow</span></code></pre>
+
+<h3>File Transfers to External Destinations</h3>
+
+<pre><code><span class="cm"># Security Onion Hunt — all files transferred externally</span>
+event.dataset: "zeek.files" AND NOT destination.ip: 192.168.56.0/24
+
+<span class="cm"># With hash for VirusTotal lookup</span>
+event.dataset: "zeek.files" AND source.ip: "192.168.56.129"
+
+<span class="cm"># Splunk SPL equivalent</span>
+index=zeek sourcetype=zeek:files NOT rx_hosts="192.168.56.*"
+| table _time tx_hosts rx_hosts filename mime_type total_bytes md5 sha256
+| sort - total_bytes</code></pre>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 4: FTP Exfiltration Analysis ══════════════════════════ -->
+<template id="tpl-ftp-exfil">
+<article class="topic">
+<h1>04 · FTP Exfiltration Analysis</h1>
+<hr class="divider">
+
+<p>FTP is one of the most straightforward exfiltration methods because it is designed for file transfer. Despite being unencrypted and easily detectable, attackers still use it because it is reliable, fast, and available on most systems. The unencrypted nature actually works in the defender's favor — Zeek captures all FTP commands and file metadata in cleartext.</p>
+
+<h3>zeek.ftp Field Reference</h3>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Field</th><th>What It Contains</th><th>Exfil Relevance</th></tr></thead>
+  <tbody>
+    <tr><td><strong>user</strong></td><td>FTP username used for authentication</td><td>Attacker's FTP account — may reveal attacker identity or naming pattern</td></tr>
+    <tr><td><strong>command</strong></td><td>FTP command issued (STOR, RETR, LIST, CWD, etc.)</td><td>STOR = upload (exfil), RETR = download, LIST = directory listing (recon)</td></tr>
+    <tr><td><strong>arg</strong></td><td>Argument to the FTP command (filename, directory)</td><td>The actual filename being exfiltrated — critical evidence</td></tr>
+    <tr><td><strong>reply_code</strong></td><td>FTP server response code</td><td>226 = transfer complete, 550 = file not found, 530 = login failed</td></tr>
+    <tr><td><strong>reply_msg</strong></td><td>Human-readable FTP response</td><td>Confirms transfer success/failure</td></tr>
+    <tr><td><strong>data_channel.orig_h</strong></td><td>IP originating the data channel</td><td>Confirms direction — internal IP = outbound exfil</td></tr>
+    <tr><td><strong>fuid</strong></td><td>Zeek file unique ID — links to zeek.files</td><td>Use to find file hash, size, and MIME type in the files log</td></tr>
+    <tr><td><strong>file_size</strong></td><td>Size of the transferred file in bytes</td><td>Total data exfiltrated per file</td></tr>
+  </tbody>
+</table></div>
+
+<h3>FTP_DATA vs FTP Control</h3>
+
+<div class="callout note">
+  <strong>FTP uses two connections:</strong>
+  <ul>
+    <li><strong>Control channel (port 21):</strong> Carries commands (USER, PASS, STOR, RETR, LIST, CWD, QUIT). Logged in zeek.ftp. This is where you see WHAT is happening.</li>
+    <li><strong>Data channel (dynamic port):</strong> Carries the actual file content. Logged in zeek.conn and referenced by fuid in zeek.files. This is where you see HOW MUCH data moved.</li>
+  </ul>
+  <p>Always correlate both channels. The control channel tells you the filename and command; the data channel tells you the transfer volume.</p>
+</div>
+
+<h3>Determining Transfer Direction with is_orig</h3>
+
+<p>The <code>is_orig</code> field (or <code>network.direction</code> in Security Onion) tells you who initiated the data flow:</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>is_orig Value</th><th>Data Direction</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><strong>true</strong></td><td>Internal host → External server</td><td><strong>EXFILTRATION</strong> — data leaving the network</td></tr>
+    <tr><td><strong>false</strong></td><td>External server → Internal host</td><td>INGRESS — data coming in (could be tool download)</td></tr>
+  </tbody>
+</table></div>
+
+<pre><code><span class="cm"># Confirm outbound direction for FTP transfers</span>
+event.dataset: "zeek.ftp" AND source.ip: "192.168.56.129"
+  AND NOT destination.ip: 192.168.56.0/24
+
+<span class="cm"># Look for STOR commands specifically (file upload)</span>
+event.dataset: "zeek.ftp" AND source.ip: "192.168.56.129"
+  AND ftp.command: "STOR"</code></pre>
+
+<h3>File Hash Extraction via FUID</h3>
+
+<p>Each FTP file transfer in Zeek generates a unique <strong>FUID</strong> (File Unique ID). This FUID links the zeek.ftp entry to the zeek.files entry, where the file hash is stored.</p>
+
+<pre><code><span class="cm"># Step 1: Find the FUID in zeek.ftp</span>
+event.dataset: "zeek.ftp" AND source.ip: "192.168.56.129"
+<span class="cm"># Note the fuid value from each STOR event</span>
+
+<span class="cm"># Step 2: Look up the FUID in zeek.files</span>
+event.dataset: "zeek.files" AND zeek.files.fuid: "[fuid_value]"
+<span class="cm"># This gives you: file.hash.sha256, file.hash.md5, file.mime_type, file.size</span>
+
+<span class="cm"># Step 3: Submit hash to VirusTotal</span>
+<span class="cm"># If the file is a known malicious tool, VT will identify it</span>
+<span class="cm"># If the file is a data file (PDF, log, etc.), VT will show clean</span>
+<span class="cm"># Clean files being exfiltrated are still stolen data!</span></code></pre>
+
+<h3>PCAP Reconstruction Workflow</h3>
+
+<div class="callout lab">
+  <strong>Reconstructing exfiltrated files from PCAP:</strong>
+  <ol>
+    <li><strong>Export PCAP from Security Onion</strong> — In Hunt, find the zeek.conn entry for the FTP data channel. Click the PCAP icon to download the packet capture.</li>
+    <li><strong>Open in Wireshark</strong> — Load the PCAP file. Filter with <code>ftp-data</code> to see only the data transfer.</li>
+    <li><strong>Follow TCP Stream</strong> — Right-click a packet → Follow → TCP Stream. This shows the raw file content.</li>
+    <li><strong>Export the file</strong> — File → Export Objects → FTP-DATA. Wireshark reconstructs the transferred file. Save it.</li>
+    <li><strong>Verify the hash</strong> — Run <code>sha256sum [exported_file]</code> and compare against the zeek.files hash to confirm integrity.</li>
+    <li><strong>Analyze the content</strong> — Open the file to determine what data was stolen. This is critical for breach impact assessment.</li>
+  </ol>
+</div>
+
+<pre><code><span class="cm"># Wireshark FTP data filter</span>
+ftp-data
+
+<span class="cm"># Filter for specific FTP data transfer by port</span>
+tcp.port == 20 || ftp-data
+
+<span class="cm"># Reconstruct file from command line using tshark</span>
+tshark -r capture.pcap -Y "ftp-data" -T fields -e data > extracted_file.raw
+
+<span class="cm"># Verify hash</span>
+sha256sum extracted_file.raw
+<span class="cm"># Compare with zeek.files hash to confirm this is the right file</span></code></pre>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 5: Other Exfil Channels ══════════════════════════ -->
+<template id="tpl-other-channels">
+<article class="topic">
+<h1>05 · Other Exfil Channels</h1>
+<hr class="divider">
+
+<p>FTP is the most straightforward exfil method, but sophisticated attackers use channels that are harder to detect. Each channel requires different analysis techniques and Hunt queries.</p>
+
+<h3>DNS Tunneling</h3>
+<p>DNS tunneling encodes stolen data inside DNS queries, typically in the subdomain portion. The attacker controls a DNS authoritative server for a domain, and the compromised host sends data by making DNS queries with encoded subdomains.</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Indicator</th><th>Normal DNS</th><th>DNS Tunneling</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Query length</strong></td><td>15-40 characters</td><td>50-253 characters (max DNS label length)</td></tr>
+    <tr><td><strong>Query frequency</strong></td><td>Varies, bursty during browsing</td><td>Constant stream, often hundreds per minute</td></tr>
+    <tr><td><strong>Subdomain pattern</strong></td><td>Readable words (www, mail, api)</td><td>Random-looking Base32/Base64 encoded strings</td></tr>
+    <tr><td><strong>Query types</strong></td><td>A, AAAA records</td><td>TXT, NULL, or CNAME records (higher data capacity)</td></tr>
+    <tr><td><strong>Unique subdomains</strong></td><td>Few unique per domain</td><td>Hundreds/thousands of unique subdomains for one domain</td></tr>
+    <tr><td><strong>Response size</strong></td><td>Small (IP addresses)</td><td>Large TXT records (up to 4096 bytes)</td></tr>
+  </tbody>
+</table></div>
+
+<pre><code><span class="cm"># Detect DNS tunneling — high unique subdomain count per domain</span>
+<span class="cm"># Splunk SPL</span>
+index=zeek sourcetype=zeek:dns src_ip="192.168.56.*"
+| rex field=query "(?&lt;subdomain&gt;.+)\.(?&lt;base_domain&gt;[^.]+\.[^.]+)$"
+| stats dc(subdomain) as unique_subs, count as total_queries by src_ip, base_domain
+| where unique_subs > 50
+| sort - unique_subs
+
+<span class="cm"># Detect DNS tunneling — TXT record queries (high data capacity)</span>
+event.dataset: "zeek.dns" AND dns.question.type: "TXT"
+  AND source.ip: 192.168.56.0/24
+  AND NOT dns.question.name: (*.microsoft.com OR *.google.com OR *._domainkey.*)
+
+<span class="cm"># Detect DNS tunneling — NULL record queries (uncommon in legitimate traffic)</span>
+event.dataset: "zeek.dns" AND dns.question.type: "NULL"</code></pre>
+
+<div class="callout warn">
+  <strong>DNS tunneling throughput is low</strong> — typically 5-50 KB/s depending on encoding and query rate. Attackers use it for small high-value files (credentials, keys, config files) rather than bulk data. Low volume does not mean low impact.
+</div>
+
+<h3>HTTP POST Exfiltration</h3>
+<p>Attackers upload data via HTTP POST to web servers they control. This blends with normal web traffic, making detection difficult without baseline analysis.</p>
+
+<pre><code><span class="cm"># Hunt for large HTTP POST bodies to non-standard destinations</span>
+event.dataset: "zeek.http" AND http.request.method: "POST"
+  AND source.ip: 192.168.56.0/24
+  AND NOT destination.ip: 192.168.56.0/24
+
+<span class="cm"># Look at the host and URI — are they legitimate services?</span>
+<span class="cm"># Splunk SPL — top POST destinations by volume</span>
+index=zeek sourcetype=zeek:http method="POST" src_ip="192.168.56.*"
+  NOT dest_ip="192.168.56.*"
+| stats sum(request_body_len) as total_posted, count by src_ip, dest_ip, host, uri
+| where total_posted > 50000
+| sort - total_posted</code></pre>
+
+<h3>Raw TCP Exfiltration (No Protocol)</h3>
+<p>Some exfil tools open raw TCP connections on arbitrary ports and stream data without using a recognized protocol. Zeek logs these in conn with no service identifier.</p>
+
+<pre><code><span class="cm"># Connections with no detected protocol and high orig_bytes</span>
+event.dataset: "zeek.conn" AND NOT service: *
+  AND source.ip: 192.168.56.0/24
+  AND NOT destination.ip: 192.168.56.0/24
+  AND network.bytes: >= 100000
+
+<span class="cm"># Splunk SPL equivalent</span>
+index=zeek sourcetype=zeek:conn src_ip="192.168.56.*"
+  NOT dest_ip="192.168.56.*" service="-"
+| where orig_bytes > 100000
+| table _time src_ip dest_ip dest_port orig_bytes resp_bytes duration
+| sort - orig_bytes</code></pre>
+
+<h3>SMB to External IPs</h3>
+<p>SMB (Server Message Block) traffic should NEVER leave the internal network. Any SMB connection to an external IP is highly suspicious.</p>
+
+<pre><code><span class="cm"># SMB to non-internal destinations</span>
+event.dataset: "zeek.smb_files" AND NOT destination.ip: 192.168.56.0/24
+  AND NOT destination.ip: 10.0.0.0/8
+
+<span class="cm"># Or by port</span>
+event.dataset: "zeek.conn" AND destination.port: (445 OR 139)
+  AND NOT destination.ip: 192.168.56.0/24</code></pre>
+
+<h3>Encrypted Channel Exfiltration</h3>
+<p>The hardest exfil to detect. Attackers use HTTPS, SSH, or custom encrypted channels. You cannot inspect the content — focus on behavioral indicators.</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Behavioral Indicator</th><th>How to Detect</th></tr></thead>
+  <tbody>
+    <tr><td><strong>High volume HTTPS to unusual domain</strong></td><td>Large orig_bytes to IP/domain not in your baseline</td></tr>
+    <tr><td><strong>Self-signed cert on HTTPS</strong></td><td>zeek.ssl with issuer = subject (self-signed)</td></tr>
+    <tr><td><strong>SSH to external IP from workstation</strong></td><td>Workstations rarely SSH externally — any occurrence is unusual</td></tr>
+    <tr><td><strong>Long-duration single connection</strong></td><td>Sustained encrypted tunnel used for continuous exfil</td></tr>
+    <tr><td><strong>JA3 hash mismatch</strong></td><td>TLS client fingerprint does not match expected browser</td></tr>
+  </tbody>
+</table></div>
+
+<pre><code><span class="cm"># Encrypted exfil detection — self-signed certs with high data volume</span>
+event.dataset: "zeek.ssl" AND source.ip: 192.168.56.0/24
+  AND NOT destination.ip: 192.168.56.0/24
+
+<span class="cm"># Cross-reference with zeek.conn for byte volumes</span>
+event.dataset: "zeek.conn" AND destination.port: 443
+  AND source.ip: "192.168.56.129"
+  AND NOT destination.ip: 192.168.56.0/24
+<span class="cm"># Sort by orig_bytes descending — large uploads over HTTPS are suspicious</span></code></pre>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 6: False Positive Patterns ══════════════════════════ -->
+<template id="tpl-false-positives">
+<article class="topic">
+<h1>06 · False Positive Patterns</h1>
+<hr class="divider">
+
+<p>Exfiltration detection produces more false positives than almost any other alert category because legitimate business operations involve large outbound data transfers regularly. Learning to quickly distinguish real exfil from business-as-usual is an essential analyst skill.</p>
+
+<h3>Legitimate Large Transfers</h3>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>False Positive</th><th>What It Looks Like</th><th>How to Distinguish</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Cloud backup services</strong></td><td>Large, regular outbound HTTPS transfers to cloud IPs</td><td>Destination is known backup service (Backblaze, Carbonite, CrashPlan). Same schedule every day. Consistent byte volumes matching backup policy.</td></tr>
+    <tr><td><strong>OneDrive / Google Drive / Dropbox sync</strong></td><td>Continuous HTTPS uploads to cloud storage IPs</td><td>Destinations resolve to known cloud provider domains. Agent process is the known sync client (OneDrive.exe, googledrivesync.exe). Traffic corresponds to user file saves.</td></tr>
+    <tr><td><strong>Software deployment / SCCM</strong></td><td>Large file transfers between servers</td><td>Source is known management server. Destination is in known server IP range. Port matches deployment tool (SCCM uses 443, 8530, etc.).</td></tr>
+    <tr><td><strong>Video conferencing uploads</strong></td><td>Sustained high-bandwidth HTTPS during business hours</td><td>Destination is Zoom, Teams, WebEx IP range. Timing aligns with scheduled meetings. Both upload and download are high (symmetric).</td></tr>
+    <tr><td><strong>Email attachments</strong></td><td>HTTP/HTTPS POST with large body to mail servers</td><td>Destination is known mail server (Exchange, Gmail, O365). Size matches email attachment limits. User has legitimate email activity.</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Legitimate DNS Patterns That Mimic Tunneling</h3>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>False Positive</th><th>Why It Looks Like Tunneling</th><th>How to Distinguish</th></tr></thead>
+  <tbody>
+    <tr><td><strong>DKIM / SPF records</strong></td><td>Long TXT record queries with encoded-looking strings</td><td>Query contains <code>_dmarc.</code>, <code>_domainkey.</code>, or <code>v=spf1</code>. These are standard email authentication DNS records.</td></tr>
+    <tr><td><strong>CDN hostname resolution</strong></td><td>High-frequency DNS queries to same domain</td><td>Domain is a known CDN provider (akamaiedge.net, cloudfront.net). Normal for content-heavy sites.</td></tr>
+    <tr><td><strong>Active Directory DNS</strong></td><td>Extremely high DNS query volume from domain controllers</td><td>Source is a DC. Queries are for _ldap._tcp, _kerberos._tcp, _gc._tcp SRV records. Normal AD operations.</td></tr>
+    <tr><td><strong>Anti-spam / URL filtering lookups</strong></td><td>High-frequency DNS queries with hashed/encoded subdomains</td><td>Queries go to known security vendor domains (e.g., *.surbl.org, *.spamhaus.org). These are reputation lookup services.</td></tr>
+  </tbody>
+</table></div>
+
+<h3>CDN and Cloud Upload False Positives</h3>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>False Positive</th><th>What It Looks Like</th><th>How to Distinguish</th></tr></thead>
+  <tbody>
+    <tr><td><strong>CI/CD artifact uploads</strong></td><td>Large POST/PUT to cloud storage from build servers</td><td>Source is known CI/CD server. Destination is S3, Azure Blob, GCS. Timing aligns with build schedules.</td></tr>
+    <tr><td><strong>CRM/ERP data sync</strong></td><td>Regular HTTPS uploads to SaaS platforms</td><td>Destination is Salesforce, SAP, Workday IP ranges. Scheduled sync during business hours.</td></tr>
+    <tr><td><strong>Log shipping</strong></td><td>Constant outbound data to log aggregation service</td><td>Destination is Splunk Cloud, Elastic Cloud, Sumo Logic. Source is syslog forwarder or agent.</td></tr>
+  </tbody>
+</table></div>
+
+<h3>The Definitive Exfil FP vs. TP Checklist</h3>
+
+<div class="callout lab">
+  <strong>Decision checklist for potential exfiltration:</strong>
+  <ol>
+    <li><strong>Is the destination known?</strong> — Resolve the IP. Is it a recognized cloud service, SaaS provider, or business partner? Known = likely FP. Unknown = investigate.</li>
+    <li><strong>Is the protocol expected?</strong> — Does this host normally use FTP, or is this the first time? FTP from a workstation that has never used FTP = suspicious.</li>
+    <li><strong>Is the volume expected?</strong> — Compare against the host's baseline. 10 GB upload from a host that normally sends &lt;100 MB/day = suspicious.</li>
+    <li><strong>Is the timing expected?</strong> — Large transfers at 3 AM from a workstation normally idle at night = suspicious.</li>
+    <li><strong>Is there correlated C2 activity?</strong> — If the same host has C2 alerts, any large outbound transfer becomes HIGH confidence exfil.</li>
+    <li><strong>Is the user account legitimate?</strong> — For FTP: is the username a known employee? For HTTP: is the browser session associated with a real user?</li>
+    <li><strong>Was there prior file access?</strong> — Check if the host accessed sensitive file shares or databases before the outbound transfer.</li>
+    <li><strong>Can the user explain it?</strong> — Ask the user directly (via manager or HR, not by alerting the user if they are a suspect). Legitimate activity has a business reason.</li>
+  </ol>
+</div>
+
+<div class="callout warn">
+  <strong>The C2 correlation rule:</strong> If a host has BOTH confirmed C2 activity AND large outbound data transfers, the transfer is exfiltration until proven otherwise. C2 + large upload = data breach in progress.
+</div>
+
+</article>
+</template>
+
+<!-- ══════════════════════════ TOPIC 7: Worked Example ══════════════════════════ -->
+<template id="tpl-worked-example">
+<article class="topic">
+<h1>07 · Worked Example — ACMEONIONS Data Exfiltration</h1>
+<hr class="divider">
+
+<p>This is the complete walkthrough of the data exfiltration discovered during the ACMEONIONS investigation. This exfiltration was performed by the same attacker who established C2 via Revenge-RAT (see C2 playbook). The exfil phase used FTP to transfer stolen files from compromised hosts to an attacker-controlled server.</p>
+
+<h3>Discovery Context</h3>
+
+<div class="callout note">
+  <strong>How exfiltration was discovered:</strong> During the C2 investigation for Revenge-RAT (166.184.36.101:4334), Hunt queries revealed that the same source host (192.168.56.129) was also making FTP connections to a DIFFERENT IP in the same attacker subnet: <strong>166.184.36.100</strong>. The attacker used separate infrastructure for C2 and exfiltration.
+</div>
+
+<pre><code><span class="cm"># Discovery query — all traffic from compromised host to attacker subnet</span>
+source.ip: "192.168.56.129" AND destination.ip: 166.184.36.0/24
+
+<span class="cm"># Result: Two destination IPs discovered</span>
+<span class="cm">#   166.184.36.101:4334  → C2 (Revenge-RAT, already known)</span>
+<span class="cm">#   166.184.36.100:21    → FTP (NEW — exfiltration!)</span></code></pre>
+
+<h3>Step 1 — Confirm FTP Exfiltration</h3>
+
+<pre><code><span class="cm"># Query: All FTP activity from compromised host</span>
+event.dataset: "zeek.ftp" AND source.ip: "192.168.56.129"
+
+<span class="cm"># Results: 3 FTP sessions to 166.184.36.100</span>
+<span class="cm"># Attacker FTP username: le_cheat</span>
+<span class="cm"># FTP commands observed: USER, PASS, LIST, CWD, STOR, QUIT</span></code></pre>
+
+<p>The attacker authenticated to an external FTP server at 166.184.36.100 using the username <strong>le_cheat</strong>. The username itself is an indicator — it is clearly not a legitimate corporate account. The FTP server is attacker-controlled infrastructure.</p>
+
+<h3>Step 2 — Identify Exfiltrated Files</h3>
+
+<pre><code><span class="cm"># Query: FTP STOR commands (file uploads from .129)</span>
+event.dataset: "zeek.ftp" AND source.ip: "192.168.56.129"
+  AND ftp.command: "STOR"
+
+<span class="cm"># Results — 3 files uploaded:</span>
+
+<span class="cm"># Transfer 1: passwdhash.log</span>
+<span class="cm"># Command: STOR passwdhash.log</span>
+<span class="cm"># Reply: 226 Transfer complete</span>
+<span class="cm"># Size: 84,000 bytes (approximately 84 KB)</span>
+
+<span class="cm"># Transfer 2: File1.pdf</span>
+<span class="cm"># Command: STOR File1.pdf</span>
+<span class="cm"># Reply: 226 Transfer complete</span>
+<span class="cm"># Size: 34,486 bytes</span>
+
+<span class="cm"># Transfer 3: [additional file from directory listing]</span>
+<span class="cm"># Confirmed via LIST command output</span></code></pre>
+
+<div class="callout warn">
+  <strong>CRITICAL FINDING: passwdhash.log exfiltrated!</strong><br>
+  The file <strong>passwdhash.log</strong> (84 KB) contains password hashes. This means the attacker now has credential material that can be cracked offline. All accounts whose hashes appear in this file must be considered compromised. Immediate password resets are required for all affected accounts.
+</div>
+
+<h3>Step 3 — Analyze the FTP Session in Detail</h3>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>FTP Command</th><th>Argument</th><th>Reply Code</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>USER</td><td>le_cheat</td><td>331</td><td>Username accepted, password required</td></tr>
+    <tr><td>PASS</td><td>[password]</td><td>230</td><td>Login successful</td></tr>
+    <tr><td>LIST</td><td></td><td>226</td><td>Directory listing retrieved — attacker checking server contents</td></tr>
+    <tr><td>CWD</td><td>/uploads</td><td>250</td><td>Changed to uploads directory — organized staging area</td></tr>
+    <tr><td>STOR</td><td>passwdhash.log</td><td>226</td><td>Upload complete — password hashes exfiltrated</td></tr>
+    <tr><td>STOR</td><td>File1.pdf</td><td>226</td><td>Upload complete — PDF document exfiltrated</td></tr>
+    <tr><td>QUIT</td><td></td><td>221</td><td>Session closed</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Step 4 — Confirm Transfer Direction</h3>
+
+<pre><code><span class="cm"># Verify is_orig = true (outbound from .129)</span>
+event.dataset: "zeek.ftp" AND source.ip: "192.168.56.129"
+  AND destination.ip: "166.184.36.100"
+
+<span class="cm"># Check data_channel.orig_h — should be 192.168.56.129</span>
+<span class="cm"># This confirms data flowed FROM the compromised host TO the attacker</span>
+
+<span class="cm"># Also verify in zeek.conn</span>
+event.dataset: "zeek.conn" AND source.ip: "192.168.56.129"
+  AND destination.ip: "166.184.36.100"
+
+<span class="cm"># Result: orig_bytes > resp_bytes confirms outbound data flow</span>
+<span class="cm"># The internal host sent MORE data than it received = upload/exfil</span></code></pre>
+
+<h3>Step 5 — Check DC Share Access (Lateral Movement Context)</h3>
+
+<div class="callout note">
+  <strong>Secondary risk: File1.pdf origin.</strong> Investigation revealed that <strong>File1.pdf</strong> was originally stored on a domain controller file share. The attacker accessed the DC share from the compromised host .129, copied File1.pdf locally, then exfiltrated it via FTP. This means the attacker had domain-level access.
+</div>
+
+<pre><code><span class="cm"># Check SMB file access from compromised host</span>
+event.dataset: "zeek.smb_files" AND source.ip: "192.168.56.129"
+
+<span class="cm"># Result: .129 accessed files on the DC share including:</span>
+<span class="cm"># - File1.pdf (subsequently exfiltrated)</span>
+<span class="cm"># - WinSCP portable executable (file transfer tool)</span></code></pre>
+
+<div class="callout warn">
+  <strong>WinSCP on DC share.</strong> The attacker also accessed <strong>WinSCP</strong> (a graphical SCP/SFTP/FTP client) from the domain controller share. This is a secondary risk — WinSCP could have been used for additional exfiltration via SFTP or SCP that would be encrypted and harder to detect than plain FTP. Check for any SFTP/SCP connections from .129 and .130.
+</div>
+
+<h3>Step 6 — PCAP Evidence</h3>
+
+<pre><code><span class="cm"># Export PCAP for the FTP sessions</span>
+<span class="cm"># In Security Onion Hunt, find the zeek.conn entries for:</span>
+<span class="cm"># 192.168.56.129 → 166.184.36.100:21 (FTP control)</span>
+<span class="cm"># 192.168.56.129 → 166.184.36.100:[data port] (FTP data)</span>
+
+<span class="cm"># The PCAP contains:</span>
+<span class="cm"># 1. Full FTP command/response dialogue in cleartext</span>
+<span class="cm"># 2. Directory listing output from LIST command</span>
+<span class="cm">#    - Shows what was already on the attacker's FTP server</span>
+<span class="cm">#    - May reveal other victims' data</span>
+<span class="cm"># 3. Complete file contents for each STOR transfer</span>
+<span class="cm">#    - passwdhash.log can be fully reconstructed</span>
+<span class="cm">#    - File1.pdf can be fully reconstructed</span>
+
+<span class="cm"># Reconstruct in Wireshark:</span>
+<span class="cm"># File → Export Objects → FTP-DATA</span>
+<span class="cm"># Select each file and save to disk</span>
+<span class="cm"># Verify SHA256 hash matches zeek.files entry</span></code></pre>
+
+<h3>Step 7 — Total Exfiltration Volume Calculation</h3>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>File</th><th>Size (bytes)</th><th>Size (Human)</th><th>Sensitivity</th></tr></thead>
+  <tbody>
+    <tr><td><strong>passwdhash.log</strong></td><td>~84,000</td><td>~84 KB</td><td>CRITICAL — credential hashes, enable offline cracking</td></tr>
+    <tr><td><strong>File1.pdf</strong></td><td>34,486</td><td>~34 KB</td><td>HIGH — document from DC share, content unknown until reconstructed</td></tr>
+    <tr><td><strong>FTP overhead</strong></td><td>~2,000</td><td>~2 KB</td><td>N/A — protocol commands and responses</td></tr>
+  </tbody>
+</table></div>
+
+<pre><code><span class="cm"># Total exfiltration volume</span>
+<span class="cm"># passwdhash.log:    84,000 bytes</span>
+<span class="cm"># File1.pdf:         34,486 bytes</span>
+<span class="cm"># ─────────────────────────────</span>
+<span class="cm"># Total confirmed:  118,486 bytes (~118 KB)</span>
+<span class="cm">#</span>
+<span class="cm"># While the volume is small, the IMPACT is severe:</span>
+<span class="cm"># - Password hashes enable further attacks (pass-the-hash, offline cracking)</span>
+<span class="cm"># - Document from DC share may contain sensitive business data</span>
+<span class="cm"># - WinSCP access suggests additional undetected exfil may have occurred</span></code></pre>
+
+<h3>Step 8 — Complete Exfiltration IOC Summary</h3>
+
+<pre><code><span class="cm">## Network IOCs — Exfiltration</span>
+Exfil Server IP:      166.184.36.100
+Exfil Port:           21/tcp (FTP)
+Exfil Protocol:       FTP (cleartext)
+Attacker Username:    le_cheat
+FTP Server Path:      /uploads
+
+<span class="cm">## Exfiltrated Files</span>
+File 1:  passwdhash.log  (~84 KB)  — credential hashes
+File 2:  File1.pdf       (34,486 bytes) — DC share document
+
+<span class="cm">## Related C2 IOCs (same attacker)</span>
+C2 Server IP:         166.184.36.101
+C2 Port:              4334/tcp
+Malware:              Revenge-RAT (MSIL)
+
+<span class="cm">## Affected Hosts</span>
+192.168.56.129   — Confirmed FTP exfil to 166.184.36.100
+192.168.56.130   — Confirmed C2 beacon, check for exfil activity
+
+<span class="cm">## Secondary Risks</span>
+WinSCP accessed from DC share — potential encrypted exfil channel
+DC file share accessed — scope of data access may be larger than exfil</code></pre>
+
+<h3>Investigation Timeline (Exfiltration Phase)</h3>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Timestamp</th><th>Event</th><th>Evidence Source</th></tr></thead>
+  <tbody>
+    <tr><td>T+??</td><td>Attacker accesses DC file share from .129 — copies File1.pdf and WinSCP</td><td>zeek.smb_files</td></tr>
+    <tr><td>T+??</td><td>Attacker generates/obtains passwdhash.log on .129</td><td>Endpoint logs (hash dump tool)</td></tr>
+    <tr><td>T+??</td><td>FTP connection: .129 → 166.184.36.100:21 — USER le_cheat</td><td>zeek.ftp</td></tr>
+    <tr><td>T+??</td><td>LIST command — attacker checks FTP server contents</td><td>zeek.ftp</td></tr>
+    <tr><td>T+??</td><td>STOR passwdhash.log — 84 KB credential hashes exfiltrated</td><td>zeek.ftp, zeek.files</td></tr>
+    <tr><td>T+??</td><td>STOR File1.pdf — 34,486 bytes DC document exfiltrated</td><td>zeek.ftp, zeek.files</td></tr>
+    <tr><td>T+??</td><td>FTP QUIT — exfil session closes</td><td>zeek.ftp</td></tr>
+  </tbody>
+</table></div>
+
+<div class="callout lab">
+  <strong>Key takeaways from this exfiltration:</strong>
+  <ol>
+    <li><strong>No Suricata alert fired for the FTP exfil itself.</strong> It was discovered through proactive Hunt queries during the C2 investigation. This is why Hunt-based detection is essential.</li>
+    <li><strong>The attacker used separate infrastructure for C2 and exfil:</strong> 166.184.36.101 for C2 and 166.184.36.100 for FTP exfil. Blocking only the C2 IP would have left the exfil channel open.</li>
+    <li><strong>Small volume, high impact:</strong> Only ~118 KB was exfiltrated, but it included credential hashes that could compromise the entire domain.</li>
+    <li><strong>FTP cleartext was the defender's advantage:</strong> Because FTP is unencrypted, Zeek captured all commands, filenames, and file contents. If the attacker had used WinSCP (SFTP), we would only see encrypted traffic and would not know what files were taken.</li>
+    <li><strong>Always check the entire attacker subnet:</strong> The C2 IP was .101 and the exfil IP was .100. Querying the full /24 revealed infrastructure that a single-IP query would have missed.</li>
+  </ol>
+</div>
+
+</article>
+</template>
+
+<script>
+window.NOTEBOOK = {
+  title: 'Data Exfiltration Detection',
+  topics: [
+    { id: 'alert-recognition', badge: '01', label: 'Alert Recognition'          },
+    { id: 'picerl-steps',      badge: '02', label: 'PICERL Investigation Steps' },
+    { id: 'hunt-queries',      badge: '03', label: 'Hunt Queries'               },
+    { id: 'ftp-exfil',         badge: '04', label: 'FTP Exfiltration Analysis'  },
+    { id: 'other-channels',    badge: '05', label: 'Other Exfil Channels'       },
+    { id: 'false-positives',   badge: '06', label: 'False Positive Patterns'    },
+    { id: 'worked-example',    badge: '07', label: 'Worked Example'             },
+  ]
+};
+</script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -10,6 +10,7 @@
 
   function init() {
     markActiveNavLink();
+    buildGlobalNav();
     if (window.NOTEBOOK) initNotebook();
     initNotes();
   }
@@ -170,6 +171,297 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+     GLOBAL NAV DRAWER — right-side slide-out with grouped topics
+     ══════════════════════════════════════════════════════════════ */
+
+  var GNAV_GROUPS = [
+    { id: 'psaa', icon: '📘', label: 'PSAA Study Guide',
+      items: [
+        { label: 'SOC Fundamentals',             href: 'psaa.html#01-soc-fundamentals'  },
+        { label: 'Phishing Analysis',            href: 'psaa.html#02-phishing'           },
+        { label: 'Network Security Monitoring',  href: 'psaa.html#03-nsm'               },
+        { label: 'Wireshark & tcpdump',          href: 'psaa.html#04-wireshark'          },
+        { label: 'Endpoint Security Monitoring', href: 'psaa.html#05-endpoint'           },
+        { label: 'Endpoint Detection & Response',href: 'psaa.html#06-edr'               },
+        { label: 'Log Analysis & Management',    href: 'psaa.html#07-log-analysis'       },
+        { label: 'SIEM',                         href: 'psaa.html#08-siem'              },
+        { label: 'Threat Intelligence',          href: 'psaa.html#09-threat-intel'       },
+        { label: 'Digital Forensics',            href: 'psaa.html#10-digital-forensics'  },
+        { label: 'Incident Response',            href: 'psaa.html#11-incident-response'  },
+        { label: 'Windows Investigation',        href: 'psaa.html#12-windows'           },
+        { label: 'Encoding & CyberChef',         href: 'psaa.html#13-encoding'           },
+        { label: 'Tools & Resources',            href: 'psaa.html#ref-tools'            },
+      ]
+    },
+    { id: 'so', icon: '🧅', label: 'Security Onion',
+      items: [
+        { label: 'Overview & Tool Stack',   href: 'security-onion.html#overview'    },
+        { label: 'Setup & Deployment',      href: 'security-onion.html#setup'       },
+        { label: 'Alert Triage',            href: 'security-onion.html#alerts'      },
+        { label: 'Dashboards',              href: 'security-onion.html#dashboards'  },
+        { label: 'Hunt & KQL Queries',      href: 'security-onion.html#hunt'        },
+        { label: 'Suricata IDS',            href: 'security-onion.html#suricata'    },
+        { label: 'Zeek Logs',               href: 'security-onion.html#zeek'        },
+        { label: 'PCAP Analysis',           href: 'security-onion.html#pcap'        },
+        { label: 'Cases & Evidence',        href: 'security-onion.html#cases'       },
+        { label: 'CLI & so-* Commands',     href: 'security-onion.html#cli'         },
+        { label: 'Investigation Lab',       href: 'security-onion.html#lab'         },
+      ]
+    },
+    { id: 'playbook', icon: '🔍', label: 'SOC Playbook',
+      items: [
+        { label: 'PICERL Framework',         href: 'investigation-flow.html#picerl-overview'      },
+        { label: 'Shift Start Checklist',    href: 'investigation-flow.html#shift-start'           },
+        { label: 'Alert Triage Workflow',    href: 'investigation-flow.html#alert-triage'          },
+        { label: 'Process Validation',       href: 'investigation-flow.html#process-validation'    },
+        { label: 'Zeek Dataset Reference',   href: 'investigation-flow.html#zeek-reference'        },
+        { label: 'Sysmon Event ID Reference',href: 'investigation-flow.html#sysmon-reference'      },
+        { label: 'IOC Collection Standard',  href: 'investigation-flow.html#ioc-collection'        },
+        { label: 'Containment Decision',     href: 'investigation-flow.html#containment-decision'  },
+        { label: 'Initial Access',           href: 'playbook-initial-access.html'                  },
+        { label: 'Persistence',              href: 'playbook-persistence.html'                     },
+        { label: 'Lateral Movement',         href: 'playbook-lateral.html'                         },
+        { label: 'C2 / Command & Control',   href: 'playbook-c2.html'                              },
+        { label: 'Exfiltration',             href: 'playbook-exfil.html'                           },
+        { label: 'Credential Access',        href: 'playbook-credential.html'                      },
+      ]
+    },
+    { id: 'splunk', icon: '🔍', label: 'Splunk',
+      items: [
+        { label: 'Overview',                    href: 'splunk.html'               },
+        { label: 'SPL Basics',                  href: 'splunk-spl-basics.html'    },
+        { label: 'Stats & Count',               href: 'splunk-stats-count.html'   },
+        { label: 'Visualizations',              href: 'splunk-visualizations.html'},
+        { label: 'Alerts & Enterprise Security',href: 'splunk-alerts.html'        },
+        { label: 'Universal Forwarders',        href: 'splunk-forwarders.html'    },
+        { label: 'Threat Hunting',              href: 'splunk-threat-hunting.html'},
+        { label: 'Lab: Brute Force',            href: 'splunk-lab.html'           },
+      ]
+    },
+    { id: 'elk', icon: '🦌', label: 'ELK Stack',
+      items: [
+        { label: 'Overview & Architecture', href: 'elk.html#overview'      },
+        { label: 'Elasticsearch',           href: 'elk.html#elasticsearch'  },
+        { label: 'Logstash Pipelines',      href: 'elk.html#logstash'       },
+        { label: 'Kibana Interface',        href: 'elk.html#kibana'         },
+        { label: 'Beats Agents',            href: 'elk.html#beats'          },
+        { label: 'KQL & Lucene Queries',    href: 'elk.html#kql'            },
+        { label: 'Index Management & ILM',  href: 'elk.html#ilm'            },
+        { label: 'Elastic SIEM',            href: 'elk.html#siem'           },
+        { label: 'Alerting & Watcher',      href: 'elk.html#alerting'       },
+        { label: 'Tuning & Deployment',     href: 'elk.html#tuning'         },
+        { label: 'Investigation Lab',       href: 'elk.html#lab'            },
+      ]
+    },
+    { id: 'nmap', icon: '🔭', label: 'Nmap',
+      items: [
+        { label: 'Overview',        href: 'nmap.html'                  },
+        { label: 'Scan Types',      href: 'nmap-scan-types.html'       },
+        { label: 'Host Discovery',  href: 'nmap-host-discovery.html'   },
+        { label: 'Service Detection',href:'nmap-service-detection.html' },
+        { label: 'NSE Scripts',     href: 'nmap-nse.html'              },
+        { label: 'Output Formats',  href: 'nmap-output.html'           },
+        { label: 'Lab',             href: 'nmap-lab.html'              },
+      ]
+    },
+    { id: 'wireshark', icon: '🦈', label: 'Wireshark',
+      items: [
+        { label: 'Overview',          href: 'wireshark.html'                    },
+        { label: 'Display Filters',   href: 'wireshark-filters.html'            },
+        { label: 'Capture Filters',   href: 'wireshark-capture-filters.html'    },
+        { label: 'Protocol Analysis', href: 'wireshark-protocol-analysis.html'  },
+        { label: 'Follow Streams',    href: 'wireshark-streams.html'            },
+        { label: 'Statistics',        href: 'wireshark-statistics.html'         },
+        { label: 'Lab: C2 PCAP',      href: 'wireshark-lab.html'               },
+      ]
+    },
+    { id: 'snort', icon: '🚨', label: 'Snort',
+      items: [
+        { label: 'Overview',         href: 'snort.html'       },
+        { label: 'Rule Syntax',      href: 'snort-rules.html' },
+        { label: 'Operating Modes',  href: 'snort-modes.html' },
+        { label: 'Configuration',    href: 'snort-config.html'},
+        { label: 'Alert Output',     href: 'snort-alerts.html'},
+        { label: 'Lab',              href: 'snort-lab.html'   },
+      ]
+    },
+    { id: 'ossec', icon: '🛡️', label: 'OSSEC / Wazuh',
+      items: [
+        { label: 'Overview',                  href: 'ossec.html'                 },
+        { label: 'File Integrity Monitoring', href: 'ossec-fim.html'             },
+        { label: 'Rules & Decoders',          href: 'ossec-rules.html'           },
+        { label: 'Active Response',           href: 'ossec-active-response.html' },
+        { label: 'Manager Setup',             href: 'ossec-manager.html'         },
+        { label: 'Lab',                       href: 'ossec-lab.html'             },
+      ]
+    },
+    { id: 'openvas',      icon: '🔬', label: 'OpenVAS',        items: [{ label: 'OpenVAS Reference',      href: 'openvas.html'      }] },
+    { id: 'kali',         icon: '🐉', label: 'Kali Linux',     items: [{ label: 'Kali Linux Reference',   href: 'kali.html'         }] },
+    { id: 'metasploit',   icon: '💀', label: 'Metasploit',     items: [{ label: 'Metasploit Reference',   href: 'metasploit.html'   }] },
+    { id: 'yara',         icon: '🎯', label: 'YARA',           items: [{ label: 'YARA Reference',         href: 'yara.html'         }] },
+    { id: 'zeek',         icon: '🌊', label: 'Zeek',           items: [{ label: 'Zeek Reference',         href: 'zeek.html'         }] },
+    { id: 'clamav',       icon: '🦠', label: 'ClamAV',         items: [{ label: 'ClamAV Reference',       href: 'clamav.html'       }] },
+    { id: 'misp',         icon: '🔗', label: 'MISP',           items: [{ label: 'MISP Reference',         href: 'misp.html'         }] },
+    { id: 'cuckoo',       icon: '🥚', label: 'Cuckoo Sandbox', items: [{ label: 'Cuckoo Reference',       href: 'cuckoo.html'       }] },
+    { id: 'velociraptor', icon: '🦖', label: 'Velociraptor',   items: [{ label: 'Velociraptor Reference', href: 'velociraptor.html' }] },
+    { id: 'autopsy',      icon: '🩺', label: 'Autopsy',        items: [{ label: 'Autopsy Reference',      href: 'autopsy.html'      }] },
+    { id: 'anyrun',       icon: '🧪', label: 'ANY.RUN',        items: [{ label: 'ANY.RUN Reference',      href: 'anyrun.html'       }] },
+    { id: 'logsources',   icon: '📋', label: 'Log Sources',    items: [{ label: 'SOC Log Cheat Sheet',    href: 'log-sources.html'  }] },
+    { id: 'redteam',      icon: '⚔️', label: 'Red Team Lab',  items: [{ label: 'Red Team Correlation Lab',href:'redteam-correlation.html'}] },
+  ];
+
+  function buildGlobalNav() {
+    var navbar = document.querySelector('.navbar');
+    if (!navbar) return;
+
+    // Current page filename for active detection
+    var curPage = location.pathname.split('/').pop() || 'index.html';
+    var curHash = location.hash.replace('#', '');
+
+    // ── Inject the trigger button ──
+    var btn = document.createElement('button');
+    btn.className = 'gnav-btn';
+    btn.id = 'gnav-btn';
+    btn.setAttribute('aria-label', 'Open navigation');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.innerHTML =
+      '<svg width="14" height="11" viewBox="0 0 14 11" fill="currentColor">' +
+        '<rect width="14" height="2" rx="1"/>' +
+        '<rect y="4.5" width="14" height="2" rx="1"/>' +
+        '<rect y="9" width="14" height="2" rx="1"/>' +
+      '</svg> Navigate';
+    navbar.appendChild(btn);
+
+    // ── Overlay ──
+    var overlay = document.createElement('div');
+    overlay.className = 'gnav-overlay';
+    overlay.id = 'gnav-overlay';
+    document.body.appendChild(overlay);
+
+    // ── Drawer ──
+    var drawer = document.createElement('div');
+    drawer.className = 'gnav-drawer';
+    drawer.id = 'gnav-drawer';
+    drawer.setAttribute('aria-hidden', 'true');
+
+    // Header
+    var header = document.createElement('div');
+    header.className = 'gnav-header';
+    var title = document.createElement('span');
+    title.className = 'gnav-title';
+    title.textContent = 'Navigate';
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'gnav-close';
+    closeBtn.setAttribute('aria-label', 'Close navigation');
+    closeBtn.textContent = '✕';
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    drawer.appendChild(header);
+
+    // Body
+    var body = document.createElement('div');
+    body.className = 'gnav-body';
+
+    // Home link
+    var homeLink = document.createElement('a');
+    homeLink.className = 'gnav-home' + (curPage === 'index.html' ? ' active' : '');
+    homeLink.href = 'index.html';
+    homeLink.textContent = '⬡  Home';
+    body.appendChild(homeLink);
+
+    // Build groups
+    GNAV_GROUPS.forEach(function(grp) {
+      var isSingle = grp.items.length === 1;
+
+      // Determine if this group contains the active page
+      var groupActive = grp.items.some(function(item) {
+        var hrefPage = item.href.split('#')[0].split('/').pop();
+        return hrefPage === curPage;
+      });
+
+      var groupEl = document.createElement('div');
+      groupEl.className = 'gnav-group';
+
+      if (isSingle) {
+        // Render as a direct anchor, no chevron
+        var hdr = document.createElement('a');
+        hdr.className = 'gnav-group-hdr' + (groupActive ? ' active-group' : '');
+        hdr.href = grp.items[0].href;
+        hdr.innerHTML =
+          '<span class="gnav-group-icon">' + grp.icon + '</span>' +
+          '<span class="gnav-group-label">' + esc(grp.label) + '</span>';
+        groupEl.appendChild(hdr);
+      } else {
+        // Collapsible group
+        var hdr = document.createElement('button');
+        hdr.className = 'gnav-group-hdr' + (groupActive ? ' active-group' : '');
+        var expanded = groupActive; // auto-expand if current page is inside
+        hdr.setAttribute('aria-expanded', String(expanded));
+        hdr.innerHTML =
+          '<span class="gnav-group-icon">' + grp.icon + '</span>' +
+          '<span class="gnav-group-label">' + esc(grp.label) + '</span>' +
+          '<span class="gnav-chevron">›</span>';
+
+        var itemList = document.createElement('div');
+        itemList.className = 'gnav-group-items';
+        if (!expanded) itemList.hidden = true;
+
+        grp.items.forEach(function(item) {
+          var itemPage = item.href.split('#')[0].split('/').pop();
+          var itemHash = item.href.split('#')[1] || '';
+          var isActive = itemPage === curPage && (!itemHash || itemHash === curHash);
+
+          var a = document.createElement('a');
+          a.className = 'gnav-item' + (isActive ? ' active' : '');
+          a.href = item.href;
+          a.textContent = item.label;
+          itemList.appendChild(a);
+        });
+
+        hdr.addEventListener('click', function() {
+          var nowExpanded = hdr.getAttribute('aria-expanded') === 'true';
+          hdr.setAttribute('aria-expanded', String(!nowExpanded));
+          itemList.hidden = nowExpanded;
+        });
+
+        groupEl.appendChild(hdr);
+        groupEl.appendChild(itemList);
+      }
+
+      body.appendChild(groupEl);
+    });
+
+    drawer.appendChild(body);
+    document.body.appendChild(drawer);
+
+    // ── Open / close logic ──
+    function openDrawer() {
+      drawer.classList.add('open');
+      overlay.classList.add('open');
+      btn.setAttribute('aria-expanded', 'true');
+      drawer.setAttribute('aria-hidden', 'false');
+    }
+    function closeDrawer() {
+      drawer.classList.remove('open');
+      overlay.classList.remove('open');
+      btn.setAttribute('aria-expanded', 'false');
+      drawer.setAttribute('aria-hidden', 'true');
+    }
+
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      drawer.classList.contains('open') ? closeDrawer() : openDrawer();
+    });
+    closeBtn.addEventListener('click', closeDrawer);
+    overlay.addEventListener('click', closeDrawer);
+
+    // Close on Escape key
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && drawer.classList.contains('open')) closeDrawer();
+    });
   }
 
   /* ── Per-page notes with localStorage ── */
